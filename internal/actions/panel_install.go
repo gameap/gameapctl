@@ -3,6 +3,7 @@ package actions
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -11,14 +12,25 @@ import (
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
+	"github.com/sethvargo/go-password/password"
 
 	"github.com/urfave/cli/v2"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
 var errEmptyWebServer = errors.New("empty web server")
+
+type databaseCredentials struct {
+	Host     string
+	Port     string
+	Name     string
+	Username string
+	Password string
+}
 
 //nolint:funlen,gocognit
 func PanelInstall(cliCtx *cli.Context) error {
@@ -29,8 +41,15 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	host := cliCtx.String("host")
 	path := cliCtx.String("path")
-	database := cliCtx.String("database")
 	webServer := cliCtx.String("web-server")
+	database := cliCtx.String("database")
+	dbCreds := databaseCredentials{
+		Host:     cliCtx.String("database-host"),
+		Port:     cliCtx.String("database-port"),
+		Name:     cliCtx.String("database-name"),
+		Username: cliCtx.String("database-username"),
+		Password: cliCtx.String("database-password"),
+	}
 
 	// nolint:nestif
 	if !nonInteractive {
@@ -126,6 +145,13 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if pm.Install(cliCtx.Context, packagemanager.PHPPackage) != nil {
 			return errors.WithMessage(err, "failed to install php")
 		}
+	}
+
+	if database == "mysql" {
+		err = installMySQL(cliCtx.Context, pm, dbCreds, nonInteractive)
+	}
+	if err != nil {
+		return err
 	}
 
 	err = installGameAP(cliCtx.Context, path)
@@ -257,6 +283,33 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	}
 
 	return result, nil
+}
+
+func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds databaseCredentials, nonInteractive bool) error {
+	fmt.Println("Installing MySQL...")
+
+	var err error
+
+	if dbCreds.Host == "" {
+		if isAvailable := utils.IsCommandAvailable("mysqld"); !isAvailable {
+			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
+				return errors.WithMessage(err, "failed to install MySQL")
+			}
+		} else {
+			fmt.Println("MySQL already installed")
+		}
+	}
+
+	if dbCreds.Password == "" {
+		dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
+	}
+
+	_, err = sql.Open(
+		"mysql",
+		fmt.Sprintf("%s:%s@/%s", dbCreds.Username, dbCreds.Password, dbCreds.Name),
+	)
+
+	return err
 }
 
 func installGameAP(ctx context.Context, path string) error {

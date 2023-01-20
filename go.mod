@@ -3,10 +3,12 @@ module github.com/gameap/gameapctl
 go 1.17
 
 require (
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/hashicorp/go-getter v1.6.2
 	github.com/matishsiao/goInfo v0.0.0-20210923090445-da2e3fa8d45f
 	github.com/otiai10/copy v1.9.0
 	github.com/pkg/errors v0.9.1
+	github.com/sethvargo/go-password v0.2.0
 	github.com/urfave/cli/v2 v2.23.7
 )
 

@@ -15,19 +15,7 @@ import (
 
 // nolint:funlen
 func Run(args []string) {
-	if _, err := os.Stat("/var/log/gameapctl/"); errors.Is(err, fs.ErrNotExist) {
-		err := os.Mkdir("/var/log/gameapctl/", 0755)
-		if err != nil {
-			log.Fatalf("Error creating log directory: %s", err)
-		}
-	}
-	logname := fmt.Sprintf("%s.log", time.Now().Format("2006-01-02_15-04-05"))
-	logFile, err := os.OpenFile("/var/log/gameapctl/"+logname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-
-	log.SetOutput(logFile)
+	logfilepath := ""
 
 	app := &cli.App{
 		Name:      "gameapctl",
@@ -60,7 +48,11 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install daemon",
 						Usage:       "Install daemon",
-						Action:      actions.DaemonInstall,
+						Before: func(context *cli.Context) error {
+							logfilepath = initLogFile("daemon_install")
+							return nil
+						},
+						Action: actions.DaemonInstall,
 					},
 					{
 						Name:        "upgrade",
@@ -103,10 +95,15 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install panel",
 						Usage:       "Install panel",
-						Action:      actions.PanelInstall,
+						Before: func(context *cli.Context) error {
+							logfilepath = initLogFile("panel_install")
+							return nil
+						},
+						Action: actions.PanelInstall,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
-								Name: "path",
+								Name:  "path",
+								Usage: "Path to GameAP root directory",
 							},
 							&cli.StringFlag{
 								Name: "host",
@@ -114,14 +111,32 @@ func Run(args []string) {
 							&cli.StringFlag{
 								Name: "web-server",
 							},
+							&cli.BoolFlag{
+								Name:  "develop",
+								Usage: "Install develop version of panel.",
+							},
+							&cli.BoolFlag{
+								Name:  "github",
+								Usage: "Install gameap from GitHub.",
+							},
 							&cli.StringFlag{
-								Name: "database",
+								Name:  "database",
+								Usage: "Database type. Available: mysql, sqlite. ",
 							},
-							&cli.BoolFlag{
-								Name: "develop",
+							&cli.StringFlag{
+								Name: "database-host",
 							},
-							&cli.BoolFlag{
-								Name: "github",
+							&cli.StringFlag{
+								Name: "database-port",
+							},
+							&cli.StringFlag{
+								Name: "database-name",
+							},
+							&cli.StringFlag{
+								Name: "database-username",
+							},
+							&cli.StringFlag{
+								Name: "database-password",
 							},
 						},
 					},
@@ -130,10 +145,38 @@ func Run(args []string) {
 		},
 	}
 
-	err = app.Run(args)
+	err := app.Run(args)
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("See details in log file: /var/log/gameapctl/" + logname)
+
+		if logfilepath != "" {
+			fmt.Println("See details in log file: " + logfilepath)
+		}
+
 		log.Fatal(err)
 	}
+}
+
+func initLogFile(command string) string {
+	logname := fmt.Sprintf("command_%s.log", command, time.Now().Format("2006-01-02_15-04-05"))
+
+	logpath := "/var/log/gameapctl/"
+
+	if _, err := os.Stat(logpath); errors.Is(err, fs.ErrNotExist) {
+		err = os.Mkdir(logpath, 0755)
+		if err != nil {
+			logpath, err = os.MkdirTemp("", "gameapctl-log")
+			if err != nil {
+				log.Fatalf("Failed to init log: %s", err)
+			}
+		}
+	}
+
+	f, err := os.OpenFile(logpath+"/"+logname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	log.SetOutput(f)
+
+	return logpath + "/" + logname
 }
