@@ -45,10 +45,10 @@ jobs:
   integration_test:
     strategy:
       matrix:
-        go-version: [ 1.19.x ]
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'debian:bullseye' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
+        go-version: [ 1.19.x ]
     runs-on: ubuntu-latest
     container:
       image:  ${{ matrix.distro }}

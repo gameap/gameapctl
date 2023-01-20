@@ -2,6 +2,7 @@ package actions
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -127,29 +128,9 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	tempDir, err := os.MkdirTemp("", "gameap")
+	err = installGameAP(cliCtx.Context, path)
 	if err != nil {
-		return errors.WithMessage(err, "failed to create temp dir")
-	}
-	defer func(path string) {
-		_ = os.RemoveAll(path)
-	}(tempDir)
-
-	fmt.Println("Downloading GameAP...")
-	err = utils.Download(cliCtx.Context, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to download gameap")
-	}
-
-	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
-	if err != nil {
-		return errors.WithMessage(err, "failed to move gameap")
-	}
-
-	fmt.Println("Installing GameAP...")
-	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
-	if err != nil {
-		return errors.WithMessage(err, "failed to copy .env.example")
+		return err
 	}
 
 	return nil
@@ -276,4 +257,33 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	}
 
 	return result, nil
+}
+
+func installGameAP(ctx context.Context, path string) error {
+	tempDir, err := os.MkdirTemp("", "gameap")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temp dir")
+	}
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir)
+
+	fmt.Println("Downloading GameAP...")
+	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
+	if err != nil {
+		return errors.WithMessage(err, "failed to download gameap")
+	}
+
+	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to move gameap")
+	}
+
+	fmt.Println("Installing GameAP...")
+	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
+	if err != nil {
+		return errors.WithMessage(err, "failed to copy .env.example")
+	}
+
+	return nil
 }
