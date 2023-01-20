@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gameapctl/internal/app"
+	"github.com/gameap/gameapctl/internal/app"
 )
 
 func main() {

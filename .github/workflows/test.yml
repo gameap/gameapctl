@@ -1,0 +1,146 @@
+name: Test
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go-version: [1.19.x]
+        os: [ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          stable: false
+          go-version: ${{ matrix.go-version }}
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up dependencies
+        run: go mod download
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.50.1
+
+      - name: Unit Tests
+        run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=unit.out
+
+      - name: Merge coverage profile
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+          gocovmerge unit.out functional.out > coverage.out
+
+      - name: Send coverage
+        uses: shogo82148/actions-goveralls@v1
+        with:
+          path-to-profile: coverage.out
+          flag-name: Go-${{ matrix.go }}
+          parallel: true
+
+  integration_test:
+    strategy:
+      matrix:
+        go-version: [ 1.19.x ]
+        os: [ ubuntu-20.04, ubuntu-22.04 ]
+        database: [mysql, sqlite]
+        web-server: [nginx, apache]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          stable: false
+          go-version: ${{ matrix.go-version }}
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up dependencies
+        run: go mod download
+
+      - name: Tests
+        run: |
+          cd cmd/gameapctl/
+          go build .
+          ./gameapctl --non-interactive panel install --host=127.0.0.1 --web-server={matrix.web-server} --database={matrix.database}
+
+  cross_compile:
+    strategy:
+      matrix:
+        targets:
+          - "linux/amd64"
+    env:
+      go: 1.16.x
+      GOPROXY: https://proxy.golang.org
+
+    runs-on: ubuntu-latest
+
+    name: Cross Compile for ${{ matrix.targets }}
+
+    steps:
+      - name: Set up Go ${{ env.go }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.go }}
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install gox
+        run: |
+          go get github.com/mitchellh/gox
+      - name: Cross-compile with gox for ${{ matrix.targets }}
+        env:
+          GOFLAGS: "-trimpath"
+          GOX_ARCHS: "${{ matrix.targets }}"
+        run: |
+          mkdir build-output
+          gox -verbose -osarch "$GOX_ARCHS" -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}" ./cmd/gameap-daemon
+          gox -verbose -osarch "$GOX_ARCHS" -tags debug -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}_debug" ./cmd/gameap-daemon
+
+
+  test-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          # In order:
+          # * Module download cache
+          # * Build cache (Linux)
+          # * Build cache (Mac)
+          # * Build cache (Windows)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            %LocalAppData%\go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Unit Tests
+        run: go test -race -v $(go list ./... | grep -v /test/)
+      - name: Functional Tests
+        run: go test -list -race ./test/functional/...
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shogo82148/actions-goveralls@v1
+        with:
+          parallel-finished: true
