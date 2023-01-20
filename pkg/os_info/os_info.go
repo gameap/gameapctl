@@ -44,10 +44,12 @@ func GetOSInfo() (Info, error) {
 			return result, err
 		}
 		result.Distribution = info.Name
-		result.DistributionVersion = info.VersionCodename
+		result.DistributionVersion = info.Version
+		result.DistributionCodename = info.VersionCodename
 	} else {
 		result.Distribution = gi.OS
 		result.DistributionVersion = gi.Kernel
+		result.DistributionCodename = gi.Kernel
 	}
 
 	return result, nil
@@ -56,6 +58,7 @@ func GetOSInfo() (Info, error) {
 //nolint:unused
 type distInfo struct {
 	Name            string
+	Version         string
 	VersionCodename string
 }
 
