@@ -38,7 +38,7 @@ func GetOSInfo() (Info, error) {
 		CPUs:     gi.CPUs,
 	}
 
-	if gi.OS == "linux" {
+	if gi.OS == "GNU/Linux" {
 		info, err := detectLinuxDist()
 		if err != nil {
 			return result, err
