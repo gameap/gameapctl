@@ -141,7 +141,6 @@ func PanelInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to download gameap")
 	}
 
-	fmt.Println("Extracting GameAP...")
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to move gameap")
