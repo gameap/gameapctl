@@ -39,6 +39,7 @@ func GetOSInfo() (Info, error) {
 	}, nil
 }
 
+//nolint:unused
 type osInfo struct {
 	OS   string
 	Dist string
@@ -164,6 +165,7 @@ func detectOS() (osInfo, error) {
 	return result, nil
 }
 
+//nolint:unused
 func extractField(data []byte, key string) string {
 	regex := regexp.MustCompile(fmt.Sprintf(`(?m)^%s=([^\s]+)`, key))
 	matches := regex.FindStringSubmatch(string(data))

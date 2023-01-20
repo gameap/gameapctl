@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/pkg/errors"
 )
 
 // https://github.com/arduino/go-apt-client/blob/master/apt.go
@@ -17,9 +17,14 @@ import (
 type APT struct{}
 
 // Search list packages available in the system that match the search
-// pattern
-func (_ *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
-	cmd := exec.Command("dpkg-query", "-W", "-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\t${Installed-Size}\t${Binary:summary}\n", pattern)
+// pattern.
+func (apt *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
+	cmd := exec.Command(
+		"dpkg-query",
+		"-W",
+		"-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\t${Installed-Size}\t${Binary:summary}\n",
+		pattern,
+	)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -27,7 +32,7 @@ func (_ *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
 		if bytes.Contains(out, []byte("no packages found matching")) {
 			return []*Package{}, nil
 		}
-		return nil, fmt.Errorf("running dpkg-query: %s - %s", err, out)
+		return nil, errors.WithMessage(err, "failed to run dpkg-query")
 	}
 
 	return parseDpkgQueryOutput(out), nil
@@ -56,14 +61,14 @@ func parseDpkgQueryOutput(out []byte) []*Package {
 }
 
 // CheckForUpdates runs an apt update to retrieve new packages available
-// from the repositories
-func (_ *APT) CheckForUpdates(_ context.Context) (output []byte, err error) {
+// from the repositories.
+func (apt *APT) CheckForUpdates(_ context.Context) (output []byte, err error) {
 	cmd := exec.Command("apt-get", "update", "-q")
 	return cmd.CombinedOutput()
 }
 
-// Install installs a set of packages
-func (_ *APT) Install(_ context.Context, packs ...string) (output []byte, err error) {
+// Install installs a set of packages.
+func (apt *APT) Install(_ context.Context, packs ...string) (output []byte, err error) {
 	args := []string{"install", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -75,8 +80,8 @@ func (_ *APT) Install(_ context.Context, packs ...string) (output []byte, err er
 	return cmd.CombinedOutput()
 }
 
-// Remove removes a set of packages
-func (_ *APT) Remove(_ context.Context, packs ...string) (output []byte, err error) {
+// Remove removes a set of packages.
+func (apt *APT) Remove(_ context.Context, packs ...string) (output []byte, err error) {
 	args := []string{"remove", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -184,8 +189,10 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 	return replacedPacks
 }
 
+// nolint
 func (e *ExtendedAPT) preInstallationSteps(_ context.Context, packs ...string) error {
 	for _, pack := range packs {
+		// nolint
 		if pack == PHPPackage {
 			//return e.apt.Search(ctx, "software-properties-common")
 		}

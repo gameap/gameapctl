@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// nolint:funlen
 func Run(args []string) {
 	app := &cli.App{
 		Name:      "gameapctl",

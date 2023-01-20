@@ -18,15 +18,16 @@ var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
 var errEmptyWebServer = errors.New("empty web server")
 
+//nolint:funlen,gocognit
 func PanelInstall(cliCtx *cli.Context) error {
 	nonInteractive := cliCtx.Bool("non-interactive")
 
-	//var gameapPath = ctx.
 	host := cliCtx.String("host")
 	path := cliCtx.String("path")
 	database := cliCtx.String("database")
 	webServer := cliCtx.String("web-server")
 
+	// nolint:nestif
 	if !nonInteractive {
 		needToAsk := make(map[string]struct{}, 4)
 		if host == "" {
@@ -140,7 +141,14 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to move gameap")
+	}
+
 	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
+	if err != nil {
+		return errors.WithMessage(err, "failed to copy .env.example")
+	}
 
 	return nil
 }
@@ -152,6 +160,7 @@ type askedParams struct {
 	webServer string
 }
 
+//nolint:funlen,gocognit
 func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	var err error
 	result := askedParams{}
