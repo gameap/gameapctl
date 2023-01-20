@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"log"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ func (apt *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
 	)
 
 	out, err := cmd.CombinedOutput()
+	log.Print(string(out))
 	if err != nil {
 		// Avoid returning an error if the list is empty
 		if bytes.Contains(out, []byte("no packages found matching")) {
@@ -62,13 +64,16 @@ func parseDpkgQueryOutput(out []byte) []*Package {
 
 // CheckForUpdates runs an apt update to retrieve new packages available
 // from the repositories.
-func (apt *APT) CheckForUpdates(_ context.Context) (output []byte, err error) {
+func (apt *APT) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
-	return cmd.CombinedOutput()
+	log.Println(cmd.String())
+	cmd.Stderr = log.Writer()
+	cmd.Stdout = log.Writer()
+	return cmd.Run()
 }
 
 // Install installs a set of packages.
-func (apt *APT) Install(_ context.Context, packs ...string) (output []byte, err error) {
+func (apt *APT) Install(_ context.Context, packs ...string) error {
 	args := []string{"install", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -77,11 +82,14 @@ func (apt *APT) Install(_ context.Context, packs ...string) (output []byte, err 
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
-	return cmd.CombinedOutput()
+	log.Println(cmd.String())
+	cmd.Stderr = log.Writer()
+	cmd.Stdout = log.Writer()
+	return cmd.Run()
 }
 
 // Remove removes a set of packages.
-func (apt *APT) Remove(_ context.Context, packs ...string) (output []byte, err error) {
+func (apt *APT) Remove(_ context.Context, packs ...string) error {
 	args := []string{"remove", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -90,7 +98,10 @@ func (apt *APT) Remove(_ context.Context, packs ...string) (output []byte, err e
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
-	return cmd.CombinedOutput()
+	log.Println(cmd.String())
+	cmd.Stderr = log.Writer()
+	cmd.Stdout = log.Writer()
+	return cmd.Run()
 }
 
 type ExtendedAPT struct {
@@ -107,24 +118,24 @@ func (e *ExtendedAPT) Search(ctx context.Context, name string) ([]*Package, erro
 	return e.apt.Search(ctx, name)
 }
 
-func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) ([]byte, error) {
+func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) error {
 	// apt.Install(ctx, "software-properties-common", "apt-transport-https")
 
 	packs = e.replaceAliases(ctx, packs)
 
 	err := e.preInstallationSteps(ctx, packs...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	return e.apt.Install(ctx, packs...)
 }
 
-func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) (output []byte, err error) {
+func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) error {
 	return e.apt.CheckForUpdates(ctx)
 }
 
-func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) (output []byte, err error) {
+func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
 	packs = e.replaceAliases(ctx, packs)
 	return e.apt.Remove(ctx, packs...)
 }

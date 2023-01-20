@@ -98,8 +98,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Checking for updates...")
-	_, err = pm.CheckForUpdates(cliCtx.Context)
-	if err != nil {
+	if pm.CheckForUpdates(cliCtx.Context) != nil {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
@@ -107,8 +106,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	isAvailable := utils.IsCommandAvailable("curl")
 	if !isAvailable {
 		fmt.Println("Installing curl...")
-		_, err = pm.Install(cliCtx.Context, packagemanager.CurlPackage)
-		if err != nil {
+		if pm.Install(cliCtx.Context, packagemanager.CurlPackage) != nil {
 			return errors.WithMessage(err, "failed to install curl")
 		}
 	}
@@ -116,8 +114,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	isAvailable = utils.IsCommandAvailable("gpg")
 	if !isAvailable {
 		fmt.Println("Installing gpg...")
-		_, err = pm.Install(cliCtx.Context, packagemanager.GnuPGPackage)
-		if err != nil {
+		if pm.Install(cliCtx.Context, packagemanager.GnuPGPackage) != nil {
 			return errors.WithMessage(err, "failed to install gpg")
 		}
 	}
@@ -125,8 +122,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	isAvailable = utils.IsCommandAvailable("php")
 	if !isAvailable {
 		fmt.Println("Installing php...")
-		_, err = pm.Install(cliCtx.Context, packagemanager.PHPPackage)
-		if err != nil {
+		if pm.Install(cliCtx.Context, packagemanager.PHPPackage) != nil {
 			return errors.WithMessage(err, "failed to install php")
 		}
 	}

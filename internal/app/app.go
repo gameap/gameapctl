@@ -1,15 +1,34 @@
 package app
 
 import (
+	"fmt"
+	"io/fs"
 	"log"
+	"os"
+	"time"
 
 	"github.com/gameap/gameapctl/internal/actions"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
 
 // nolint:funlen
 func Run(args []string) {
+	if _, err := os.Stat("/var/log/gameapctl/"); errors.Is(err, fs.ErrNotExist) {
+		err := os.Mkdir("/var/log/gameapctl/", 0755)
+		if err != nil {
+			log.Fatalf("Error creating log directory: %s", err)
+		}
+	}
+	logname := fmt.Sprintf("panel-install-%s.log", time.Now().Format("2006-01-02 15-04-05"))
+	logFile, err := os.OpenFile("/var/log/gameapctl/"+logname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+
+	log.SetOutput(logFile)
+
 	app := &cli.App{
 		Name:      "gameapctl",
 		Usage:     "GameAP Control",
@@ -111,8 +130,10 @@ func Run(args []string) {
 		},
 	}
 
-	err := app.Run(args)
+	err = app.Run(args)
 	if err != nil {
+		fmt.Println(err)
+		fmt.Println("See details in log file: /var/log/gameapctl/" + logname)
 		log.Fatal(err)
 	}
 }

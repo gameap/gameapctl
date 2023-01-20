@@ -17,9 +17,9 @@ type Package struct {
 
 type PackageManager interface {
 	Search(ctx context.Context, name string) ([]*Package, error)
-	Install(ctx context.Context, packs ...string) (output []byte, err error)
-	CheckForUpdates(ctx context.Context) (output []byte, err error)
-	Remove(ctx context.Context, packs ...string) (output []byte, err error)
+	Install(ctx context.Context, packs ...string) error
+	CheckForUpdates(ctx context.Context) error
+	Remove(ctx context.Context, packs ...string) error
 }
 
 func Load(ctx context.Context) (PackageManager, error) {

@@ -68,6 +68,13 @@ jobs:
           go build .
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs
+          path: /var/log/gameapctl/
+          retention-days: 5
+
   cross_compile:
     strategy:
       matrix:
