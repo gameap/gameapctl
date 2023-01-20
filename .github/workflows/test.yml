@@ -24,7 +24,10 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Set up dependencies
-        run: go mod download
+        run: |
+          pwd
+          ls -al ./
+          go mod download
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
