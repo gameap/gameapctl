@@ -45,7 +45,7 @@ jobs:
     strategy:
       matrix:
         go-version: [ 1.19.x ]
-        distro: [ ubuntu:20.04, ubuntu:22.04 ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
     runs-on: ubuntu-latest
