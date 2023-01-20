@@ -135,16 +135,19 @@ func PanelInstall(cliCtx *cli.Context) error {
 		_ = os.RemoveAll(path)
 	}(tempDir)
 
-	err = utils.Download(cliCtx.Context, "http://packages.gameap.ru/gameap/latest", tempDir)
+	fmt.Println("Downloading GameAP...")
+	err = utils.Download(cliCtx.Context, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
 	}
 
+	fmt.Println("Extracting GameAP...")
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to move gameap")
 	}
 
+	fmt.Println("Installing GameAP...")
 	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
 	if err != nil {
 		return errors.WithMessage(err, "failed to copy .env.example")
