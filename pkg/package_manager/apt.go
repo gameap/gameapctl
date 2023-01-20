@@ -26,6 +26,7 @@ func (apt *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
 		"-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\t${Installed-Size}\t${Binary:summary}\n",
 		pattern,
 	)
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 
 	out, err := cmd.CombinedOutput()
 	log.Print(string(out))
@@ -66,6 +67,8 @@ func parseDpkgQueryOutput(out []byte) []*Package {
 // from the repositories.
 func (apt *APT) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+
 	log.Println(cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
@@ -82,6 +85,7 @@ func (apt *APT) Install(_ context.Context, packs ...string) error {
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 	log.Println(cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
@@ -98,6 +102,7 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 	log.Println(cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
