@@ -56,6 +56,12 @@ jobs:
       volumes:
         - /usr/local/share/ca-certificates:/usr/local/share/ca-certificates
     steps:
+      - name: Container preparation
+        run: |
+          apt -y update
+          apt-get install ca-certificates -y
+          update-ca-certificates
+
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -64,9 +70,6 @@ jobs:
         with:
           stable: false
           go-version: ${{ matrix.go-version }}
-
-      - name: Update CA certificates
-        run: update-ca-certificates
 
       - name: Set up dependencies
         run: go mod download
