@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	contextInternal "github.com/gameap/gameapctl/internal/context"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -20,6 +21,9 @@ var errEmptyWebServer = errors.New("empty web server")
 
 //nolint:funlen,gocognit
 func PanelInstall(cliCtx *cli.Context) error {
+	osInfo := contextInternal.OSInfoFromContext(cliCtx.Context)
+	fmt.Println("Detected operating system as %s/%s.", osInfo.Distribution, osInfo.DistributionCodename)
+
 	nonInteractive := cliCtx.Bool("non-interactive")
 
 	host := cliCtx.String("host")

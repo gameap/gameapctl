@@ -29,30 +29,44 @@ func GetOSInfo() (Info, error) {
 		return Info{}, err
 	}
 
-	return Info{
+	result := Info{
 		Kernel:   gi.Kernel,
 		Core:     gi.Core,
 		Platform: gi.Platform,
 		OS:       gi.OS,
 		Hostname: gi.Hostname,
 		CPUs:     gi.CPUs,
-	}, nil
+	}
+
+	if gi.OS == "linux" {
+		info, err := detectLinuxDist()
+		if err != nil {
+			return result, err
+		}
+		result.Distribution = info.Name
+		result.DistributionVersion = info.VersionCodename
+	} else {
+		result.Distribution = gi.OS
+		result.DistributionVersion = gi.Kernel
+	}
+
+	return result, nil
 }
 
 //nolint:unused
-type osInfo struct {
-	OS   string
-	Dist string
+type distInfo struct {
+	Name            string
+	VersionCodename string
 }
 
 // nolint
-func detectOS() (osInfo, error) {
+func detectLinuxDist() (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"
 		etcOsRelease  = "/etc/os-release"
 	)
 
-	result := osInfo{}
+	result := distInfo{}
 
 	if _, err := os.Stat(etcLsbRelease); !os.IsNotExist(err) {
 		// /etc/lsb-release exists, read it
@@ -67,14 +81,14 @@ func detectOS() (osInfo, error) {
 
 		if id == "raspbian" {
 			// raspbian
-			result.OS = id
-			result.Dist = versionID
+			result.Name = id
+			result.VersionCodename = versionID
 		} else {
 			// debian
-			result.OS = extractField(data, "DISTRIB_ID")
-			result.Dist = extractField(data, "DISTRIB_CODENAME")
-			if result.Dist == "" {
-				result.Dist = extractField(data, "DISTRIB_RELEASE")
+			result.Name = extractField(data, "DISTRIB_ID")
+			result.VersionCodename = extractField(data, "DISTRIB_CODENAME")
+			if result.VersionCodename == "" {
+				result.VersionCodename = extractField(data, "DISTRIB_RELEASE")
 			}
 		}
 	} else if _, err := os.Stat(etcOsRelease); !os.IsNotExist(err) {
@@ -90,17 +104,17 @@ func detectOS() (osInfo, error) {
 
 		if id == "" {
 			// fallback to /etc/lsb-release
-			result.OS = extractField(data, "DISTRIB_ID")
-			result.Dist = extractField(data, "DISTRIB_CODENAME")
-			if result.Dist == "" {
-				result.Dist = extractField(data, "DISTRIB_RELEASE")
+			result.Name = extractField(data, "DISTRIB_ID")
+			result.VersionCodename = extractField(data, "DISTRIB_CODENAME")
+			if result.VersionCodename == "" {
+				result.VersionCodename = extractField(data, "DISTRIB_RELEASE")
 			}
 		} else {
-			result.OS = id
+			result.Name = id
 			if versionCodename != "" {
-				result.Dist = versionCodename
+				result.VersionCodename = versionCodename
 			} else {
-				result.Dist = extractField(data, "VERSION_ID")
+				result.VersionCodename = extractField(data, "VERSION_ID")
 			}
 		}
 	} else if _, err := exec.LookPath("lsb_release"); err == nil {
@@ -112,8 +126,8 @@ func detectOS() (osInfo, error) {
 		if err != nil {
 			panic(err)
 		}
-		result.Dist = strings.Split(string(out), ":")[1]
-		result.Dist = strings.TrimSpace(result.Dist)
+		result.VersionCodename = strings.Split(string(out), ":")[1]
+		result.VersionCodename = strings.TrimSpace(result.VersionCodename)
 
 		// extract os from lsb_release -i
 		cmd = exec.Command("lsb_release", "-i")
@@ -122,13 +136,13 @@ func detectOS() (osInfo, error) {
 		if err != nil {
 			panic(err)
 		}
-		result.OS = strings.Split(string(out), ":")[1]
-		result.OS = strings.TrimSpace(result.OS)
-		result.OS = strings.ToLower(result.OS)
+		result.Name = strings.Split(string(out), ":")[1]
+		result.Name = strings.TrimSpace(result.Name)
+		result.Name = strings.ToLower(result.Name)
 	}
 
 	_, debianVersionErr := os.Stat("/etc/debian_version")
-	if result.Dist == "" && !errors.Is(debianVersionErr, os.ErrNotExist) {
+	if result.VersionCodename == "" && !errors.Is(debianVersionErr, os.ErrNotExist) {
 
 		// /etc/debian_version exists
 		// extract os from /etc/issue
@@ -136,31 +150,31 @@ func detectOS() (osInfo, error) {
 		if err != nil {
 			panic(err)
 		}
-		result.OS = strings.Split(string(data), " ")[0]
-		result.OS = strings.TrimSpace(result.OS)
-		result.OS = strings.ToLower(result.OS)
+		result.Name = strings.Split(string(data), " ")[0]
+		result.Name = strings.TrimSpace(result.Name)
+		result.Name = strings.ToLower(result.Name)
 
 		// extract dist from /etc/debian_version
 		data, err = os.ReadFile("/etc/debian_version")
 		if err != nil {
 			panic(err)
 		}
-		result.Dist = strings.Split(string(data), "/")[0]
-		result.Dist = strings.TrimSpace(result.Dist)
+		result.VersionCodename = strings.Split(string(data), "/")[0]
+		result.VersionCodename = strings.TrimSpace(result.VersionCodename)
 	}
 
-	if result.Dist == "" {
+	if result.VersionCodename == "" {
 		// unknown os
 		panic("unknown operating system")
 	}
 
 	// cleanup
-	result.OS = strings.ReplaceAll(result.OS, " ", "")
-	result.Dist = strings.ReplaceAll(result.Dist, " ", "")
+	result.Name = strings.ReplaceAll(result.Name, " ", "")
+	result.VersionCodename = strings.ReplaceAll(result.VersionCodename, " ", "")
 
 	// lowercase
-	result.OS = strings.ToLower(result.OS)
-	result.Dist = strings.ToLower(result.Dist)
+	result.Name = strings.ToLower(result.Name)
+	result.VersionCodename = strings.ToLower(result.VersionCodename)
 
 	return result, nil
 }
