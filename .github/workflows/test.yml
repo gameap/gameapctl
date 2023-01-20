@@ -14,14 +14,14 @@ jobs:
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           stable: false
           go-version: ${{ matrix.go-version }}
-
-      - name: Checkout code
-        uses: actions/checkout@v2
 
       - name: Set up dependencies
         run: go mod download
@@ -53,14 +53,14 @@ jobs:
       image:  ${{ matrix.distro }}
       options: --user root
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           stable: false
           go-version: ${{ matrix.go-version }}
-
-      - name: Checkout code
-        uses: actions/checkout@v2
 
       - name: Set up dependencies
         run: go mod download
