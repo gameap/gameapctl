@@ -32,12 +32,7 @@ jobs:
           version: v1.50.1
 
       - name: Unit Tests
-        run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=unit.out
-
-      - name: Merge coverage profile
-        run: |
-          go install github.com/wadey/gocovmerge@latest
-          gocovmerge unit.out functional.out > coverage.out
+        run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=coverage.out
 
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1
