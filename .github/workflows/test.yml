@@ -52,8 +52,6 @@ jobs:
     container:
       image:  ${{ matrix.distro }}
       options: --user root
-      volumes:
-        - $(pwd):/host_mount
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -66,7 +64,7 @@ jobs:
 
       - name: Copy cert to trust local registry
         shell: bash
-        run: /host_mount/cert.sh
+        run: /github/home/cert.sh
 
       - name: Set up dependencies
         run: go mod download
