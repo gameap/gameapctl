@@ -159,6 +159,10 @@ func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) error {
 
 func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
 	packs = e.replaceAliases(ctx, packs)
+	err := e.preRemovingSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed preRemovingSteps")
+	}
 	return e.apt.Remove(ctx, packs...)
 }
 
@@ -233,6 +237,25 @@ func (e *ExtendedAPT) preInstallationSteps(_ context.Context, packs ...string) e
 		// nolint
 		if pack == PHPPackage {
 			//return e.apt.Search(ctx, "software-properties-common")
+		}
+	}
+
+	return nil
+}
+
+// nolint
+func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) error {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	for _, pack := range packs {
+		if pack == MySQLServerPackage &&
+			osInfo.Distribution == "ubuntu" &&
+			osInfo.DistributionCodename == "jammy" {
+
+			err := e.Purge(ctx, "mysql-server-8.0")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
