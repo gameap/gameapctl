@@ -178,13 +178,16 @@ var packageAliases = map[string]map[string]map[string]string{
 	},
 	"ubuntu": {
 		"jammy": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			MySQLServerPackage: "default-mysql-server",
+			Lib32GCCPackage:    "lib32gcc-s1",
 		},
 		"kinetic": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			MySQLServerPackage: "default-mysql-server",
+			Lib32GCCPackage:    "lib32gcc-s1",
 		},
 		"lunar": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			MySQLServerPackage: "default-mysql-server",
+			Lib32GCCPackage:    "lib32gcc-s1",
 		},
 	},
 }

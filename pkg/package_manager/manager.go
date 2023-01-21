@@ -4,6 +4,7 @@ import (
 	"context"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/pkg/errors"
 )
 
 type Package struct {
@@ -29,5 +30,6 @@ func Load(ctx context.Context) (PackageManager, error) {
 	case "debian", "ubuntu":
 		return NewExtendedAPT(&APT{}), nil
 	}
-	return nil, nil
+
+	return nil, errors.New("unsupported distribution")
 }

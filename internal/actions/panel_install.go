@@ -1,12 +1,10 @@
 package actions
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
@@ -173,17 +171,16 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	var err error
 	result := askedParams{}
 
-	reader := bufio.NewReader(os.Stdin)
-
 	if _, ok := needToAsk["path"]; ok {
 		if result.path == "" {
-			fmt.Println("")
-			fmt.Print("Enter gameap installation path (Example: /var/www/gameap): ")
-			result.path, err = reader.ReadString('\n')
+			result.path, err = utils.Ask(
+				"Enter gameap installation path (Example: /var/www/gameap): ",
+				true,
+				nil,
+			)
 			if err != nil {
-				return result, errors.WithMessage(err, "failed to read path")
+				return result, err
 			}
-			result.path = strings.TrimSpace(result.path)
 		}
 
 		if result.path == "" {
@@ -192,15 +189,11 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	}
 
 	if _, ok := needToAsk["host"]; ok {
-		for result.host == "" {
-			fmt.Println("")
-			fmt.Print("Enter gameap host (example.com): ")
-			result.host, err = reader.ReadString('\n')
-			if err != nil {
-				return result, err
-			}
-			result.host = strings.TrimSpace(result.host)
-		}
+		result.host, err = utils.Ask(
+			"Enter gameap host (Example: example.com): ",
+			false,
+			nil,
+		)
 	}
 
 	if _, ok := needToAsk["database"]; ok {
@@ -209,19 +202,20 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 		fmt.Println("1) MySQL")
 		fmt.Println("2) SQLite")
 		fmt.Println("3) None. Do not install a database")
-		fmt.Println("")
 
 		for {
 			num := ""
-			fmt.Print("Enter number: ")
-			num, err = reader.ReadString('\n')
-			if err != nil {
-				fmt.Println()
-				fmt.Println("Please answer 1-3.")
-				continue
-			}
+			num, err = utils.Ask(
+				"Enter number: ",
+				true,
+				func(s string) (bool, string) {
+					if s != "1" && s != "2" && s != "3" {
+						return false, "Please answer 1-3."
+					}
 
-			num = strings.TrimSpace(num)
+					return true, ""
+				},
+			)
 
 			switch num {
 			case "1":
@@ -251,17 +245,19 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 			fmt.Println("1) Nginx (Recommended)")
 			fmt.Println("2) Apache")
 			fmt.Println("3) None. Do not install a Web Server")
-			fmt.Println()
-			for {
-				fmt.Print("Enter number: ")
-				num, err = reader.ReadString('\n')
-				if err != nil {
-					fmt.Println()
-					fmt.Println("Please answer 1-3.")
-					continue
-				}
 
-				num = strings.TrimSpace(num)
+			for {
+				num, err = utils.Ask(
+					"Enter number: ",
+					true,
+					func(s string) (bool, string) {
+						if s != "1" && s != "2" && s != "3" {
+							return false, "Please answer 1-3."
+						}
+
+						return true, ""
+					},
+				)
 
 				switch num {
 				case "1":
@@ -269,6 +265,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 					fmt.Println("Okay! Will try to install Nginx...")
 				case "2":
 					result.webServer = "apache"
+					fmt.Println("Okay! Will try to install Apache...")
 				case "3":
 					result.webServer = "none"
 					fmt.Println("Okay! ...")
