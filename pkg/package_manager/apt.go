@@ -158,15 +158,19 @@ func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) error {
 }
 
 func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
-	packs = e.replaceAliases(ctx, packs)
 	err := e.preRemovingSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed preRemovingSteps")
 	}
+	packs = e.replaceAliases(ctx, packs)
 	return e.apt.Remove(ctx, packs...)
 }
 
 func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
+	err := e.preRemovingSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed preRemovingSteps")
+	}
 	packs = e.replaceAliases(ctx, packs)
 	return e.apt.Purge(ctx, packs...)
 }
