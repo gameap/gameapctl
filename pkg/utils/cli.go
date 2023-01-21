@@ -38,5 +38,4 @@ func Ask(question string, allowEmpty bool, validate func(string) (bool, string))
 			return result, nil
 		}
 	}
-
 }

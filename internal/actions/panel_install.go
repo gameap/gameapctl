@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -12,8 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
 	"github.com/urfave/cli/v2"
-
-	_ "github.com/go-sql-driver/mysql"
 )
 
 var errEmptyPath = errors.New("empty path")
@@ -194,6 +193,9 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 			false,
 			nil,
 		)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	if _, ok := needToAsk["database"]; ok {
@@ -216,6 +218,9 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 					return true, ""
 				},
 			)
+			if err != nil {
+				return result, err
+			}
 
 			switch num {
 			case "1":
@@ -235,6 +240,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 		}
 	}
 
+	//nolint:nestif
 	if _, ok := needToAsk["webServer"]; ok {
 		if result.webServer == "" {
 			num := ""
@@ -258,6 +264,9 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 						return true, ""
 					},
 				)
+				if err != nil {
+					return result, err
+				}
 
 				switch num {
 				case "1":
@@ -286,14 +295,31 @@ func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds
 
 	var err error
 
+	//nolint:nestif
 	if dbCreds.Host == "" {
 		if isAvailable := utils.IsCommandAvailable("mysqld"); !isAvailable {
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
-				return errors.WithMessage(err, "failed to install MySQL")
+				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB...")
+				log.Println(err)
+				log.Println("Failed to install MySQL server. Trying to replace by MariaDB")
+
+				fmt.Println("Removing MySQL server...")
+				err = pm.Remove(ctx, packagemanager.MySQLServerPackage)
+				if err != nil {
+					return errors.WithMessage(err, "failed to remove MySQL server")
+				}
+
+				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
+				if err != nil {
+					return errors.WithMessage(err, "failed to install MariaDB server")
+				}
 			}
 
 			if dbCreds.Password == "" {
 				dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
+				if err != nil {
+					return errors.WithMessage(err, "failed to generate password")
+				}
 			}
 
 			if dbCreds.Username == "" {
