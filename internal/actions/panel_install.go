@@ -13,7 +13,6 @@ import (
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-
 	"github.com/urfave/cli/v2"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -285,7 +284,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	return result, nil
 }
 
-func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds databaseCredentials, nonInteractive bool) error {
+func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds databaseCredentials, _ bool) error {
 	fmt.Println("Installing MySQL...")
 
 	var err error
@@ -295,13 +294,21 @@ func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
 				return errors.WithMessage(err, "failed to install MySQL")
 			}
+
+			if dbCreds.Password == "" {
+				dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
+			}
+
+			if dbCreds.Username == "" {
+				dbCreds.Username = "gameap"
+			}
+
+			if dbCreds.Name == "" {
+				dbCreds.Name = "gameap"
+			}
 		} else {
 			fmt.Println("MySQL already installed")
 		}
-	}
-
-	if dbCreds.Password == "" {
-		dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
 	}
 
 	_, err = sql.Open(
