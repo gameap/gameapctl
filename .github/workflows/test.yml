@@ -85,7 +85,7 @@ jobs:
         if: failure()
         with:
           name: logs
-          path: /var/log/gameapctl/
+          path: /var/log/
           retention-days: 5
 
   test-cache:
