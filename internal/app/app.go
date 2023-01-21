@@ -158,7 +158,7 @@ func Run(args []string) {
 }
 
 func initLogFile(command string) string {
-	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05"))
+	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05_000"))
 
 	logpath := "/var/log/gameapctl/"
 
