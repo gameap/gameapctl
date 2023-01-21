@@ -7,17 +7,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Package struct {
-	Name             string
-	Status           string
-	Architecture     string
-	Version          string
-	ShortDescription string
-	InstalledSizeKB  int
+type PackageInfo struct {
+	Name            string
+	Architecture    string
+	Version         string
+	Size            string
+	Description     string
+	InstalledSizeKB int
 }
 
 type PackageManager interface {
-	Search(ctx context.Context, name string) ([]*Package, error)
+	Search(ctx context.Context, name string) ([]PackageInfo, error)
 	Install(ctx context.Context, packs ...string) error
 	CheckForUpdates(ctx context.Context) error
 	Remove(ctx context.Context, packs ...string) error

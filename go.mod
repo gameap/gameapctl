@@ -1,6 +1,6 @@
 module github.com/gameap/gameapctl
 
-go 1.17
+go 1.19
 
 require (
 	github.com/go-sql-driver/mysql v1.7.0

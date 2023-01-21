@@ -309,6 +309,7 @@ func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds
 					return errors.WithMessage(err, "failed to remove MySQL server")
 				}
 
+				fmt.Println("Installing MariaDB server...")
 				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
 				if err != nil {
 					return errors.WithMessage(err, "failed to install MariaDB server")

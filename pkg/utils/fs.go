@@ -2,6 +2,7 @@ package utils
 
 import (
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -25,4 +26,24 @@ func Move(src string, dst string) error {
 
 func Copy(src string, dst string) error {
 	return copy.Copy(src, dst)
+}
+
+func WriteContentsToFile(contents []byte, path string) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(file)
+
+	_, err = file.Write(contents)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

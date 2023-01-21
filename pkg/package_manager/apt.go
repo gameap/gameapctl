@@ -4,27 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
-
-// https://github.com/arduino/go-apt-client/blob/master/apt.go
 
 type APT struct{}
 
 // Search list packages available in the system that match the search
 // pattern.
-func (apt *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
+func (apt *APT) Search(_ context.Context, packName string) ([]PackageInfo, error) {
 	cmd := exec.Command(
-		"dpkg-query",
-		"-W",
-		"-f=${Package}\t${Architecture}\t${db:Status-Status}\t${Version}\t${Installed-Size}\t${Binary:summary}\n",
-		pattern,
+		"apt-cache",
+		"show",
+		packName,
 	)
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 
@@ -32,35 +31,54 @@ func (apt *APT) Search(_ context.Context, pattern string) ([]*Package, error) {
 	log.Print(string(out))
 	if err != nil {
 		// Avoid returning an error if the list is empty
-		if bytes.Contains(out, []byte("no packages found matching")) {
-			return []*Package{}, nil
+		if bytes.Contains(out, []byte("E: No packages found")) {
+			return []PackageInfo{}, nil
 		}
 		return nil, errors.WithMessage(err, "failed to run dpkg-query")
 	}
 
-	return parseDpkgQueryOutput(out), nil
+	return parseAPTCacheShowOutput(out), nil
 }
 
-func parseDpkgQueryOutput(out []byte) []*Package {
-	res := []*Package{}
+func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 	scanner := bufio.NewScanner(bytes.NewReader(out))
+
+	var packageInfos []PackageInfo
+
+	info := PackageInfo{}
 	for scanner.Scan() {
-		data := strings.Split(scanner.Text(), "\t")
-		size, err := strconv.Atoi(data[4])
-		if err != nil {
-			// Ignore error
-			size = 0
+		parts := strings.SplitN(scanner.Text(), ":", 2)
+		if len(parts) < 2 {
+			continue
 		}
-		res = append(res, &Package{
-			Name:             data[0],
-			Architecture:     data[1],
-			Status:           data[2],
-			Version:          data[3],
-			InstalledSizeKB:  size,
-			ShortDescription: data[5],
-		})
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "PackageInfo":
+			info.Name = value
+		case "Architecture":
+			info.Architecture = value
+		case "Version":
+			info.Version = value
+		case "Size":
+			info.Size = value
+		case "Description":
+			info.Description = value
+		case "Installed-Size":
+			size, err := strconv.Atoi(value)
+			if err != nil {
+				// Ignore error
+				size = 0
+			}
+			info.InstalledSizeKB = size
+		}
+
+		packageInfos = append(packageInfos, info)
 	}
-	return res
+
+	return packageInfos
 }
 
 // CheckForUpdates runs an apt update to retrieve new packages available
@@ -69,7 +87,7 @@ func (apt *APT) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 
-	log.Println(cmd.String())
+	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	return cmd.Run()
@@ -86,7 +104,7 @@ func (apt *APT) Install(_ context.Context, packs ...string) error {
 	}
 	cmd := exec.Command("apt-get", args...)
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
-	log.Println(cmd.String())
+	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	return cmd.Run()
@@ -103,7 +121,7 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 	}
 	cmd := exec.Command("apt-get", args...)
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
-	log.Println(cmd.String())
+	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	return cmd.Run()
@@ -120,7 +138,7 @@ func (apt *APT) Purge(_ context.Context, packs ...string) error {
 	}
 	cmd := exec.Command("apt-get", args...)
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
-	log.Println(cmd.String())
+	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	return cmd.Run()
@@ -136,16 +154,15 @@ func NewExtendedAPT(apt *APT) *ExtendedAPT {
 	}
 }
 
-func (e *ExtendedAPT) Search(ctx context.Context, name string) ([]*Package, error) {
+func (e *ExtendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, error) {
 	return e.apt.Search(ctx, name)
 }
 
 func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) error {
-	// apt.Install(ctx, "software-properties-common", "apt-transport-https")
-
+	var err error
 	packs = e.replaceAliases(ctx, packs)
 
-	err := e.preInstallationSteps(ctx, packs...)
+	packs, err = e.preInstallationSteps(ctx, packs...)
 	if err != nil {
 		return err
 	}
@@ -175,46 +192,48 @@ func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
 	return e.apt.Purge(ctx, packs...)
 }
 
-var packageAliases = map[string]map[string]map[string]string{
+type distVersionPackagesMap map[string]map[string]map[string][]string
+
+var packageAliases = distVersionPackagesMap{
 	"debian": {
 		"squeeze": {
-			MySQLServerPackage: "mysql-server",
-			Lib32GCCPackage:    "lib32gcc1",
+			MySQLServerPackage: {"mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc1"},
 		},
 		"wheezy": {
-			MySQLServerPackage: "mysql-server",
-			Lib32GCCPackage:    "lib32gcc1",
+			MySQLServerPackage: {"mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc1"},
 		},
 		"jessie": {
-			MySQLServerPackage: "mysql-server",
-			Lib32GCCPackage:    "lib32gcc1",
+			MySQLServerPackage: {"mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc1"},
 		},
 		"stretch": {
-			MySQLServerPackage: "default-mysql-server",
-			Lib32GCCPackage:    "lib32gcc1",
+			MySQLServerPackage: {"default-mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc1"},
 		},
 		"buster": {
-			MySQLServerPackage: "default-mysql-server",
-			Lib32GCCPackage:    "lib32gcc1",
+			MySQLServerPackage: {"default-mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc1"},
 		},
 		"bullseye": {
-			MySQLServerPackage: "default-mysql-server",
-			Lib32GCCPackage:    "lib32gcc-s1",
+			MySQLServerPackage: {"default-mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc-s1"},
 		},
 		"sid": {
-			MySQLServerPackage: "default-mysql-server",
-			Lib32GCCPackage:    "lib32gcc-s1",
+			MySQLServerPackage: {"default-mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc-s1"},
 		},
 	},
 	"ubuntu": {
 		"jammy": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			Lib32GCCPackage: {"lib32gcc-s1"},
 		},
 		"kinetic": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			Lib32GCCPackage: {"lib32gcc-s1"},
 		},
 		"lunar": {
-			Lib32GCCPackage: "lib32gcc-s1",
+			Lib32GCCPackage: {"lib32gcc-s1"},
 		},
 	},
 }
@@ -225,8 +244,8 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	for _, pack := range packs {
-		if alias, exists := packageAliases[osInfo.Distribution][osInfo.DistributionCodename][pack]; exists {
-			replacedPacks = append(replacedPacks, alias)
+		if aliases, exists := packageAliases[osInfo.Distribution][osInfo.DistributionCodename][pack]; exists {
+			replacedPacks = append(replacedPacks, aliases...)
 		} else {
 			replacedPacks = append(replacedPacks, pack)
 		}
@@ -236,15 +255,29 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 }
 
 // nolint
-func (e *ExtendedAPT) preInstallationSteps(_ context.Context, packs ...string) error {
+func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
+	updatedPacks := make([]string, 0, len(packs))
+
 	for _, pack := range packs {
 		// nolint
 		if pack == PHPPackage {
-			//return e.apt.Search(ctx, "software-properties-common")
+			err := e.installAPTRepositoriesDependencies(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			packages, err := e.findPHPPackages(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			updatedPacks = append(updatedPacks, packages...)
+		} else {
+			updatedPacks = append(updatedPacks, pack)
 		}
 	}
 
-	return nil
+	return updatedPacks, nil
 }
 
 // nolint
@@ -254,7 +287,7 @@ func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) err
 	for _, pack := range packs {
 		if pack == MySQLServerPackage &&
 			osInfo.Distribution == "ubuntu" &&
-			osInfo.DistributionCodename == "jammy" {
+			utils.Contains([]string{"focal", "jammy", "kinetic", "lunar"}, osInfo.DistributionCodename) {
 
 			err := e.Purge(ctx, "mysql-server-8.0")
 			if err != nil {
@@ -264,4 +297,165 @@ func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) err
 	}
 
 	return nil
+}
+
+func (e *ExtendedAPT) installAPTRepositoriesDependencies(ctx context.Context) error {
+	installPackages := make([]string, 0, 2)
+
+	pk, err := e.apt.Search(ctx, "software-properties-common")
+	if err != nil {
+		return err
+	}
+	if len(pk) > 0 {
+		installPackages = append(installPackages, "software-properties-common")
+	}
+
+	pk, err = e.apt.Search(ctx, "apt-transport-https")
+	if err != nil {
+		return err
+	}
+	if len(pk) > 0 {
+		installPackages = append(installPackages, "apt-transport-https")
+	}
+
+	err = e.apt.Install(ctx, installPackages...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//nolint:funlen
+func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
+	var versionAvailable string
+	log.Println("Searching for PHP packages...")
+
+	for {
+		log.Println("Checking for PHP 8.2 version available...")
+		pk, err := e.apt.Search(ctx, "php8.2")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "8.2"
+			log.Println("PHP 8.2 version found")
+			break
+		} else {
+			log.Println("PHP 8.2 version not found")
+		}
+
+		log.Println("Checking for PHP 8.1 version available...")
+		pk, err = e.apt.Search(ctx, "php8.1")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "8.1"
+			log.Println("PHP 8.1 version found")
+			break
+		} else {
+			log.Println("PHP 8.1 version not found")
+		}
+
+		pk, err = e.apt.Search(ctx, "php8.0")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "8.0"
+			log.Println("PHP 8.0 version found")
+			break
+		} else {
+			log.Println("PHP 8.0 version not found")
+		}
+
+		pk, err = e.apt.Search(ctx, "php7.4")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "7.4"
+			log.Println("PHP 7.4 version found")
+			break
+		} else {
+			log.Println("PHP 7.4 version not found")
+		}
+
+		pk, err = e.apt.Search(ctx, "php7.3")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "7.3"
+			log.Println("PHP 7.3 version found")
+			break
+		} else {
+			log.Println("PHP 7.3 version not found")
+		}
+
+		added, err := e.addPHPRepositories(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !added {
+			break
+		}
+	}
+
+	packages := []string{
+		"php" + versionAvailable + "-bcmath",
+		"php" + versionAvailable + "-bz2",
+		"php" + versionAvailable + "-cli",
+		"php" + versionAvailable + "-curl",
+		"php" + versionAvailable + "-fpm",
+		"php" + versionAvailable + "-gd",
+		"php" + versionAvailable + "-gmp",
+		"php" + versionAvailable + "-intl",
+		"php" + versionAvailable + "-json",
+		"php" + versionAvailable + "-mbstring",
+		"php" + versionAvailable + "-mysql",
+		"php" + versionAvailable + "-opcache",
+		"php" + versionAvailable + "-pgsql",
+		"php" + versionAvailable + "-readline",
+		"php" + versionAvailable + "-xml",
+		"php" + versionAvailable + "-zip",
+	}
+
+	return packages, nil
+}
+
+func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	if osInfo.Distribution == "ubuntu" {
+		cmd := exec.Command("add-apt-repository", "ppa:ondrej/php")
+		cmd.Env = append(cmd.Env, "LC_ALL=C.UTF-8")
+		cmd.Stderr = log.Writer()
+		cmd.Stdout = log.Writer()
+		err := cmd.Run()
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if osInfo.Distribution == "debian" {
+		err := utils.WriteContentsToFile(
+			[]byte(fmt.Sprintf("deb https://packages.sury.org/php/ %s main", osInfo.DistributionCodename)),
+			"/etc/apt/sources.list.d/php.list",
+		)
+		if err != nil {
+			return false, err
+		}
+
+		err = utils.Download(ctx, "https://packages.sury.org/php/apt.gpg", "/etc/apt/trusted.gpg.d/php.gpg")
+		if err != nil {
+			return false, err
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
