@@ -109,6 +109,23 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 	return cmd.Run()
 }
 
+// Remove removes a set of packages.
+func (apt *APT) Purge(_ context.Context, packs ...string) error {
+	args := []string{"purge", "-y"}
+	for _, pack := range packs {
+		if pack == "" || pack == " " {
+			continue
+		}
+		args = append(args, pack)
+	}
+	cmd := exec.Command("apt-get", args...)
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	log.Println(cmd.String())
+	cmd.Stderr = log.Writer()
+	cmd.Stdout = log.Writer()
+	return cmd.Run()
+}
+
 type ExtendedAPT struct {
 	apt *APT
 }
@@ -143,6 +160,11 @@ func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) error {
 func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
 	packs = e.replaceAliases(ctx, packs)
 	return e.apt.Remove(ctx, packs...)
+}
+
+func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
+	packs = e.replaceAliases(ctx, packs)
+	return e.apt.Purge(ctx, packs...)
 }
 
 var packageAliases = map[string]map[string]map[string]string{

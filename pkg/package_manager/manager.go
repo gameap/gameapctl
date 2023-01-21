@@ -21,6 +21,7 @@ type PackageManager interface {
 	Install(ctx context.Context, packs ...string) error
 	CheckForUpdates(ctx context.Context) error
 	Remove(ctx context.Context, packs ...string) error
+	Purge(ctx context.Context, packs ...string) error
 }
 
 func Load(ctx context.Context) (PackageManager, error) {
