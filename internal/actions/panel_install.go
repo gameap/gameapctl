@@ -538,11 +538,13 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		}
 	}(db)
 
+	fmt.Println("Creating database...")
 	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS ?", dbCreds.DatabaseName)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("Creating user...")
 	_, err = db.Exec(
 		"CREATE USER IF NOT EXISTS ?@'%' IDENTIFIED BY ?",
 		dbCreds.Username,
@@ -551,6 +553,8 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("Granting privileges...")
 	_, err = db.Exec("GRANT SELECT ON *.* TO ?@'%'", dbCreds.Username)
 	if err != nil {
 		return err
