@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -242,6 +243,18 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if err != nil {
 			return errors.WithMessage(err, "failed to install apache")
 		}
+	}
+
+	fmt.Println("Updating files permissions...")
+	err = utils.ExecCommand("chown -R www-data:www-data " + state.Path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to change owner")
+	}
+
+	err = configureCron(cliCtx.Context, state)
+	if err != nil {
+		log.Println("Failed to configure cron: ", err)
+		fmt.Println("Failed to configure cron: ", err.Error())
 	}
 
 	fmt.Println("---------------------------------")
@@ -626,7 +639,10 @@ func installGameAP(ctx context.Context, path string) error {
 		return errors.WithMessage(err, "failed to create temp dir")
 	}
 	defer func(path string) {
-		_ = os.RemoveAll(path)
+		err := os.RemoveAll(path)
+		if err != nil {
+			log.Println(err)
+		}
 	}(tempDir)
 
 	fmt.Println("Downloading GameAP...")
@@ -665,7 +681,7 @@ func generateEncryptionKey(dir string) error {
 }
 
 func runMigration(state panelInstallState) error {
-	fmt.Println("Generating encryption key...")
+	fmt.Println("Running migration...")
 	var cmd *exec.Cmd
 	if state.DatabaseWasInstalled {
 		cmd = exec.Command("php", "artisan", "migrate", "--seed")
@@ -782,4 +798,51 @@ func installApache(
 	}
 
 	return state, nil
+}
+
+func configureCron(_ context.Context, state panelInstallState) error {
+	fmt.Println("Configuring cron...")
+
+	if isAvailable := utils.IsCommandAvailable("crontab"); !isAvailable {
+		fmt.Println("Crontab is not available. Skip cron configuration")
+		return nil
+	}
+
+	cmd := exec.Command("crontab", "-l")
+	log.Println('\n', cmd.String())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.WithMessage(err, "failed to get crontab")
+	}
+
+	buf := bytes.NewBuffer(out)
+	buf.Write([]byte(fmt.Sprintf("* * * * * cd %s && php artisan schedule:run >> /dev/null 2>&1\n", state.Path)))
+
+	tmpDir, err := os.MkdirTemp("", "gameap_cron")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temp dir")
+	}
+	defer func() {
+		err := os.RemoveAll(tmpDir)
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
+	err = os.WriteFile(tmpDir+"/crontab", buf.Bytes(), 0600)
+	if err != nil {
+		return errors.WithMessage(err, "failed to write crontab")
+	}
+
+	cmd = exec.Command("crontab", "crontab")
+	cmd.Dir = tmpDir
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+	log.Println('\n', cmd.String())
+	err = cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to update crontab")
+	}
+
+	return nil
 }

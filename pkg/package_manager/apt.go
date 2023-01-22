@@ -515,7 +515,7 @@ func (e *ExtendedAPT) apachePackageProcess(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to define php version")
 	}
 
-	err = e.apt.Install(ctx, ApachePackage, "libapache2-mod-php-"+phpVersion)
+	err = e.apt.Install(ctx, ApachePackage, "libapache2-mod-php"+phpVersion)
 	if err != nil {
 		return err
 	}
