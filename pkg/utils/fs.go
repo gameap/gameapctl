@@ -52,7 +52,7 @@ func WriteContentsToFile(contents []byte, path string) error {
 }
 
 //nolint:funlen,gocognit
-func FindLineAndReplace(_ context.Context, path string, replaceMap map[string]string) error {
+func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -76,34 +76,10 @@ func FindLineAndReplace(_ context.Context, path string, replaceMap map[string]st
 	}(tmpFile)
 
 	reader := bufio.NewReader(file)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil && err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
 
-		for needle, replacement := range replaceMap {
-			needleLen := len(needle)
-			if len(line) >= needleLen {
-				continue
-			}
-			if line[:needleLen] == needle {
-				line = replacement
-				continue
-			}
-		}
-
-		_, err = tmpFile.WriteString(line)
-		if err != nil {
-			return err
-		}
-		_, err = tmpFile.Write([]byte{'\n'})
-		if err != nil {
-			return err
-		}
+	err = findLineAndReplace(ctx, reader, tmpFile, replaceMap)
+	if err != nil {
+		return err
 	}
 
 	err = file.Close()
@@ -120,4 +96,36 @@ func FindLineAndReplace(_ context.Context, path string, replaceMap map[string]st
 	}
 
 	return nil
+}
+
+func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap map[string]string) error {
+	reader := bufio.NewReader(r)
+	writer := bufio.NewWriter(w)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		for needle, replacement := range replaceMap {
+			needleLen := len(needle)
+			if len(line) <= needleLen {
+				continue
+			}
+			if line[:needleLen] == needle {
+				line = replacement + "\n"
+				continue
+			}
+		}
+
+		_, err = writer.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+
+	return writer.Flush()
 }
