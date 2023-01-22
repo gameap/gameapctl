@@ -419,12 +419,14 @@ func installMySQL(
 	}
 
 	if needToCreateDababaseAndUser {
+		fmt.Println("Configuring MySQL...")
 		err = configureMysql(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
 	}
 
+	fmt.Println("Checking MySQL connection...")
 	db, err := sql.Open(
 		"mysql",
 		fmt.Sprintf(
