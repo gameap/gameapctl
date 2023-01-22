@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -467,7 +468,7 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 			return false, err
 		}
 
-		err = utils.Download(ctx, "https://packages.sury.org/php/apt.gpg", "/etc/apt/trusted.gpg.d/php.gpg")
+		err = utils.DownloadFile(ctx, "https://packages.sury.org/php/apt.gpg", "/etc/apt/trusted.gpg.d/php.gpg")
 		if err != nil {
 			return false, err
 		}
@@ -481,9 +482,28 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	err := utils.Download(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/php.gpg")
+	err := utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
 	if err != nil {
 		return err
+	}
+
+	// gpg --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
+	// gpg --export ABF5BD827BD9BF62 > /etc/apt/trusted.gpg.d/nginx.gpg
+
+	err = utils.ExecCommand("gpg", "--keyserver", "keyserver.ubuntu.com", "--recv-keys", "ABF5BD827BD9BF62")
+	if err != nil {
+		return errors.WithMessage(err, "failed to receive nginx gpg key")
+	}
+
+	cmd := exec.Command("gpg", "--export", "ABF5BD827BD9BF62")
+	log.Println('\n', cmd.String())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.WithMessage(err, "failed to export nginx gpg key")
+	}
+	err = os.WriteFile("/etc/apt/trusted.gpg.d/nginx.gpg", out, 0600)
+	if err != nil {
+		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
 	if osInfo.Distribution == "ubuntu" {
