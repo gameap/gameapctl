@@ -472,14 +472,14 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 	}
 
 	if dbCreds.Password == "" {
-		dbCreds.Password, err = passwordGenerator.Generate(16, 12, 4, false, false)
+		dbCreds.Password, err = passwordGenerator.Generate(16, 6, 2, false, false)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
 	}
 
 	if dbCreds.RootPassword == "" {
-		dbCreds.RootPassword, err = passwordGenerator.Generate(16, 8, 8, false, false)
+		dbCreds.RootPassword, err = passwordGenerator.Generate(16, 6, 2, false, false)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
