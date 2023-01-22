@@ -559,7 +559,7 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	}
 
 	fmt.Println("Creating user...")
-	_, err = db.Exec("CREATE USER IF NOT EXISTS " + dbCreds.Username + "@'%' IDENTIFIED BY " + dbCreds.Password)
+	_, err = db.Exec("CREATE USER IF NOT EXISTS " + dbCreds.Username + "@'%' IDENTIFIED BY '" + dbCreds.Password + "'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
@@ -570,9 +570,8 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		return err
 	}
 	_, err = db.Exec(
-		"GRANT ALL PRIVILEGES ON ?.* TO ?@'%'",
+		"GRANT ALL PRIVILEGES ON ?.* TO "+dbCreds.Username+"@'%'",
 		dbCreds.DatabaseName,
-		dbCreds.Username,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant privileges")
