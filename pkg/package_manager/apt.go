@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -491,9 +492,16 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to receive nginx gpg key")
 	}
 
-	err = utils.ExecCommand("sh", "-c", "gpg --export ABF5BD827BD9BF62 > /etc/apt/trusted.gpg.d/nginx.gpg")
+	cmd := exec.Command("gpg", "--export", "ABF5BD827BD9BF62")
+	log.Println('\n', cmd.String())
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.WithMessage(err, "failed to export nginx gpg key")
+	}
+	//nolint:gosec
+	err = os.WriteFile("/etc/apt/trusted.gpg.d/nginx.gpg", out, 0644)
+	if err != nil {
+		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
 	if osInfo.Distribution == "ubuntu" {
