@@ -44,7 +44,7 @@ type databaseCredentials struct {
 	RootPassword string
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,gocyclo
 func PanelInstall(cliCtx *cli.Context) error {
 	state := panelInstallState{}
 
@@ -169,12 +169,14 @@ func PanelInstall(cliCtx *cli.Context) error {
 		return err
 	}
 
-	if state.Database == "mysql" {
+	switch state.Database {
+	case "mysql":
 		state, err = installMySQL(cliCtx.Context, pm, state)
 		if err != nil {
 			return err
 		}
 
+		fmt.Println("Updating .env")
 		err = utils.FindLineAndReplace(cliCtx.Context, state.Path+"/.env", map[string]string{
 			"DB_CONNECTION=": "DB_CONNECTION=mysql",
 			"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
@@ -182,6 +184,20 @@ func PanelInstall(cliCtx *cli.Context) error {
 			"DB_DATABASE=":   "DB_DATABASE=" + state.DBCreds.DatabaseName,
 			"DB_USERNAME=":   "DB_USERNAME=" + state.DBCreds.Username,
 			"DB_PASSWORD=":   "DB_PASSWORD=" + state.DBCreds.Password,
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update .env file")
+		}
+	case "sqlite":
+		state, err = installSqlite(cliCtx.Context, state)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Updating .env")
+		err = utils.FindLineAndReplace(cliCtx.Context, state.Path+"/.env", map[string]string{
+			"DB_CONNECTION=": "DB_CONNECTION=sqlite",
+			"DB_DATABASE=":   "DB_DATABASE=database.sqlite",
 		})
 		if err != nil {
 			return errors.WithMessage(err, "failed to update .env file")
@@ -543,6 +559,19 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	}
 
 	return nil
+}
+
+func installSqlite(_ context.Context, state panelInstallState) (panelInstallState, error) {
+	f, err := os.Create(state.Path + "/database.sqlite")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to database.sqlite")
+	}
+	err = f.Close()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to close database.sqlite")
+	}
+
+	return state, nil
 }
 
 func installGameAP(ctx context.Context, path string) error {

@@ -21,12 +21,13 @@ func Test_findLineAndReplace(t *testing.T) {
 
 	err := findLineAndReplace(context.Background(), r, w, map[string]string{
 		"SOME_VAR2=": "SOME_VAR2=changed_value",
+		"SOME_VAR3=": "SOME_VAR3=changed_value3",
 	})
 
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		"SOME_VAR1=some_value\nSOME_VAR2=changed_value\nSOME_VAR3=some_value3\n",
+		"SOME_VAR1=some_value\nSOME_VAR2=changed_value\nSOME_VAR3=changed_value3\n",
 		w.String(),
 	)
 }
