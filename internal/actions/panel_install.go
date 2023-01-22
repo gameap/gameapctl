@@ -17,6 +17,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	mysqlDatabase  = "mysql"
+	sqliteDatabase = "sqlite"
+)
+
 var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
@@ -170,7 +175,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	switch state.Database {
-	case "mysql":
+	case mysqlDatabase:
 		state, err = installMySQL(cliCtx.Context, pm, state)
 		if err != nil {
 			return err
@@ -188,7 +193,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if err != nil {
 			return errors.WithMessage(err, "failed to update .env file")
 		}
-	case "sqlite":
+	case sqliteDatabase:
 		state, err = installSqlite(cliCtx.Context, state)
 		if err != nil {
 			return err
@@ -219,12 +224,20 @@ func PanelInstall(cliCtx *cli.Context) error {
 	fmt.Println()
 	fmt.Println("GameAP file path:", state.Path)
 	fmt.Println()
-	fmt.Println("Database name:", state.DBCreds.DatabaseName)
-	if state.DBCreds.RootPassword != "" {
-		fmt.Println("Database root password:", state.DBCreds.RootPassword)
+
+	if state.Database == mysqlDatabase {
+		fmt.Println("Database name:", state.DBCreds.DatabaseName)
+		if state.DBCreds.RootPassword != "" {
+			fmt.Println("Database root password:", state.DBCreds.RootPassword)
+		}
+		fmt.Println("Database user name:", state.DBCreds.Username)
+		fmt.Println("Database user password:", state.DBCreds.Password)
 	}
-	fmt.Println("Database user name:", state.DBCreds.Username)
-	fmt.Println("Database user password:", state.DBCreds.Password)
+
+	if state.Database == sqliteDatabase {
+		fmt.Println("Database file path:", state.Path+"/database.sqlite")
+	}
+
 	fmt.Println()
 	fmt.Println("Administrator credentials")
 	fmt.Println("Login: admin")
@@ -303,10 +316,10 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 
 			switch num {
 			case "1":
-				result.database = "mysql"
+				result.database = mysqlDatabase
 				fmt.Println("Okay! Will try install MySQL...")
 			case "2":
-				result.database = "sqlite"
+				result.database = sqliteDatabase
 				fmt.Println("Okay! Will try install SQLite...")
 			case "3":
 				result.database = "none"
@@ -428,7 +441,7 @@ func installMySQL(
 
 	fmt.Println("Checking MySQL connection...")
 	db, err := sql.Open(
-		"mysql",
+		mysqlDatabase,
 		fmt.Sprintf(
 			"%s:%s@tcp(%s:%s)/%s",
 			state.DBCreds.Username,
@@ -439,7 +452,7 @@ func installMySQL(
 		),
 	)
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to connect to MySQL")
+		return state, errors.WithMessage(err, "failed to open MySQL")
 	}
 	defer func(db *sql.DB) {
 		err := db.Close()
@@ -447,10 +460,15 @@ func installMySQL(
 			log.Println(err)
 		}
 	}(db)
+	err = db.Ping()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to connect to MySQL")
+	}
 
 	return state, err
 }
 
+//nolint:funlen
 func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
@@ -518,7 +536,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 
 func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	db, err := sql.Open(
-		"mysql",
+		mysqlDatabase,
 		fmt.Sprintf(
 			"%s:%s@tcp(%s:%s)/%s",
 			"root",
@@ -529,7 +547,7 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		),
 	)
 	if err != nil {
-		return errors.WithMessage(err, "failed to connect to MySQL")
+		return errors.WithMessage(err, "failed to open MySQL")
 	}
 	defer func(db *sql.DB) {
 		err := db.Close()
@@ -537,11 +555,15 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 			log.Println(err)
 		}
 	}(db)
+	err = db.Ping()
+	if err != nil {
+		return errors.WithMessage(err, "failed to connect to MySQL")
+	}
 
 	fmt.Println("Creating database...")
 	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS ?", dbCreds.DatabaseName)
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to create database")
 	}
 
 	fmt.Println("Creating user...")
@@ -551,7 +573,7 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		dbCreds.Password,
 	)
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to create user")
 	}
 
 	fmt.Println("Granting privileges...")
@@ -565,11 +587,11 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		dbCreds.Username,
 	)
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to grant privileges")
 	}
 	_, err = db.Exec("FLUSH PRIVILEGES")
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to flush privileges")
 	}
 
 	return nil
