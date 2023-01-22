@@ -435,7 +435,9 @@ func installMySQL(
 	fmt.Println("Starting MySQL server...")
 	if err = service.Start(ctx, "mysql"); err != nil {
 		if err = service.Start(ctx, "mysqld"); err != nil {
-			return state, errors.WithMessage(err, "failed to start MySQL server")
+			if err = service.Start(ctx, "mariadb"); err != nil {
+				return state, errors.WithMessage(err, "failed to start MySQL server")
+			}
 		}
 	}
 
@@ -651,8 +653,8 @@ func generateEncryptionKey(dir string) error {
 	fmt.Println("Generating encryption key...")
 	cmd := exec.Command("php", "artisan", "key:generate", "--force")
 	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
 	err := cmd.Run()
 	log.Println('\n', cmd.String())
 	if err != nil {
@@ -672,8 +674,8 @@ func runMigration(state panelInstallState) error {
 	}
 
 	cmd.Dir = state.Path
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
 	log.Println('\n', cmd.String())
 	err := cmd.Run()
 	if err != nil {
