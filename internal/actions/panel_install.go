@@ -468,7 +468,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 		err := utils.ExecCommand(
 			"sh",
 			"-c",
-			fmt.Sprintf(`echo debconf "mysql-server/root_password password %s" | debconf-set-selections`, dbCreds.RootPassword),
+			fmt.Sprintf(`echo debconf mysql-server/root_password password %s | debconf-set-selections`, dbCreds.RootPassword),
 		)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to set debconf")
@@ -478,7 +478,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`echo debconf "mysql-server/root_password_again password %s" | debconf-set-selections`,
+				`echo debconf mysql-server/root_password_again password %s" | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
