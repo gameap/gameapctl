@@ -479,9 +479,7 @@ func installMySQL(
 }
 
 //nolint:funlen
-func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
+func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
 	if dbCreds.Username == "" {
 		dbCreds.Username = "gameap"
 	}
@@ -515,81 +513,41 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 		}
 	}
 
-	if osInfo.Distribution == "debian" || osInfo.Distribution == "ubuntu" {
-		err := utils.ExecCommand(
-			"sh",
-			"-c",
-			fmt.Sprintf(
-				`echo debconf mysql-server/root_password password %s | debconf-set-selections`,
-				dbCreds.RootPassword,
-			),
-		)
-		if err != nil {
-			return dbCreds, errors.WithMessage(err, "failed to set debconf")
-		}
-
-		err = utils.ExecCommand(
-			"sh",
-			"-c",
-			fmt.Sprintf(
-				`echo debconf mysql-server/root_password_again password %s | debconf-set-selections`,
-				dbCreds.RootPassword,
-			),
-		)
-		if err != nil {
-			return dbCreds, errors.WithMessage(err, "failed to set debconf")
-		}
-
-		err = utils.ExecCommand(
-			"sh",
-			"-c",
-			fmt.Sprintf(
-				`echo mariadb-server mysql-server/root_password password %s | debconf-set-selections`,
-				dbCreds.RootPassword,
-			),
-		)
-		if err != nil {
-			return dbCreds, errors.WithMessage(err, "failed to set debconf")
-		}
-
-		err = utils.ExecCommand(
-			"sh",
-			"-c",
-			fmt.Sprintf(
-				`echo mariadb-server mysql-server/root_password_again password %s | debconf-set-selections`,
-				dbCreds.RootPassword,
-			),
-		)
-		if err != nil {
-			return dbCreds, errors.WithMessage(err, "failed to set debconf")
-		}
-	}
-
 	return dbCreds, nil
 }
 
+//nolint:funlen
 func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
-	db, err := sql.Open(
-		mysqlDatabase,
+	dsns := []string{
+		"root@unix(/var/run/mysqld/mysqld.sock)/mysql",
 		fmt.Sprintf(
-			"%s:%s@tcp(%s:%s)/%s",
-			"root",
-			dbCreds.RootPassword,
+			"root:%s@tcp(%s:%s)/%s",
+			dbCreds.Password,
 			dbCreds.Host,
 			dbCreds.Port,
-			"mysql",
+			dbCreds.DatabaseName,
 		),
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to open MySQL")
 	}
-	defer func(db *sql.DB) {
-		err := db.Close()
+
+	var err error
+	var db *sql.DB
+	for _, dsn := range dsns {
+		db, err = sql.Open("mysql", dsn)
 		if err != nil {
-			log.Println(err)
+			continue
 		}
-	}(db)
-	err = db.Ping()
+		defer func(db *sql.DB) {
+			err := db.Close()
+			if err != nil {
+				log.Println(err)
+			}
+		}(db)
+		err = db.Ping()
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
 		return errors.WithMessage(err, "failed to connect to MySQL")
 	}
