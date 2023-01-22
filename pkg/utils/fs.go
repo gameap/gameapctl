@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
@@ -115,8 +116,18 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 			if len(line) <= needleLen {
 				continue
 			}
-			if line[:needleLen] == needle {
-				line = replacement + "\n"
+			trimmedLine := strings.TrimSpace(line)
+			if trimmedLine[:needleLen] == needle {
+				fi := strings.Index(line, trimmedLine)
+				li := strings.LastIndex(line, trimmedLine)
+
+				b := strings.Builder{}
+				b.Grow(len(line) + len(replacement))
+				b.WriteString(line[:fi])
+				b.WriteString(replacement)
+				b.WriteString(line[li+len(trimmedLine):])
+
+				line = b.String()
 				continue
 			}
 		}

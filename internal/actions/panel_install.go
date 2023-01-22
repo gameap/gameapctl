@@ -23,6 +23,11 @@ const (
 	sqliteDatabase = "sqlite"
 )
 
+const (
+	nginxWebServer  = "nginx"
+	apacheWebServer = "apache"
+)
+
 var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
@@ -31,6 +36,7 @@ var errEmptyWebServer = errors.New("empty web server")
 type panelInstallState struct {
 	NonInteractive bool
 	Host           string
+	Port           string
 	Path           string
 	WebServer      string
 	Database       string
@@ -56,6 +62,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	state.NonInteractive = cliCtx.Bool("non-interactive")
 	state.Host = cliCtx.String("host")
+	state.Port = cliCtx.String("port")
 	state.Path = cliCtx.String("path")
 	state.WebServer = cliCtx.String("web-server")
 	state.Database = cliCtx.String("database")
@@ -125,6 +132,10 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	if state.WebServer == "" {
 		return errEmptyWebServer
+	}
+
+	if state.Port == "" {
+		state.Port = "80"
 	}
 
 	fmt.Println()
@@ -218,6 +229,19 @@ func PanelInstall(cliCtx *cli.Context) error {
 	err = runMigration(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run migration")
+	}
+
+	switch state.WebServer {
+	case nginxWebServer:
+		state, err = installNginx(cliCtx.Context, pm, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install nginx")
+		}
+	case apacheWebServer:
+		state, err = installApache(cliCtx.Context, pm, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install apache")
+		}
 	}
 
 	fmt.Println("---------------------------------")
@@ -659,4 +683,103 @@ func runMigration(state panelInstallState) error {
 	}
 
 	return nil
+}
+
+func installNginx(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
+	err := pm.Install(ctx, packagemanager.NginxPackage)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install nginx")
+	}
+
+	err = utils.Download(
+		ctx,
+		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/nginx-no-ssl.conf",
+		"/etc/nginx/conf.d/gameap.conf",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to download nginx config")
+	}
+
+	phpVersion, err := packagemanager.DefinePHPVersion()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to define php version")
+	}
+
+	fpmUnixSocket := fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVersion)
+
+	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
+		"server_name":                  fmt.Sprintf("server_name       %s;", state.Host),
+		"listen":                       fmt.Sprintf("listen       %s;", state.Port),
+		"root /var/www/gameap/public;": fmt.Sprintf("root       %s/public;", state.Path),
+		"fastcgi_pass    unix":         fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
+	})
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to update nginx config")
+	}
+
+	err = service.Start(ctx, "nginx")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start nginx")
+	}
+	err = service.Start(ctx, "php"+phpVersion+"-fpm")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start php-fpm")
+	}
+
+	return state, nil
+}
+
+func installApache(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
+	err := pm.Install(ctx, packagemanager.ApachePackage)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install apache")
+	}
+
+	err = utils.Download(
+		ctx,
+		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/apache-no-ssl.conf",
+		"/etc/apache2/sites-available/gameap.conf",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to download apache config")
+	}
+
+	err = utils.FindLineAndReplace(ctx, "/etc/apache2/sites-available/gameap.conf", map[string]string{
+		"ServerName":                         fmt.Sprintf("ServerName %s", state.Host),
+		"DocumentRoot":                       fmt.Sprintf("DocumentRoot %s/public", state.Path),
+		"<VirtualHost":                       fmt.Sprintf("<VirtualHost *:%s>", state.Port),
+		"<Directory /var/www/gameap/public>": fmt.Sprintf("<Directory %s/public>", state.Path),
+	})
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to update apache config")
+	}
+
+	if state.Port != "80" {
+		err = utils.FindLineAndReplace(ctx, "/etc/apache2/ports.conf", map[string]string{
+			"# Listen 80": fmt.Sprintf("Listen %s", state.Port),
+		})
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to update apache ports config")
+		}
+	}
+
+	err = utils.ExecCommand("a2enmod", "rewrite")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to enable apache rewrite module")
+	}
+
+	err = service.Start(ctx, "apache2")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start apache")
+	}
+
+	return state, nil
 }

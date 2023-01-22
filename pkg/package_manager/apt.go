@@ -260,7 +260,8 @@ func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 
 	for _, pack := range packs {
 		// nolint
-		if pack == PHPPackage {
+		switch pack {
+		case PHPPackage:
 			err := e.installAPTRepositoriesDependencies(ctx)
 			if err != nil {
 				return nil, err
@@ -272,7 +273,24 @@ func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 			}
 
 			updatedPacks = append(updatedPacks, packages...)
-		} else {
+		case NginxPackage:
+			err := e.addNginxRepositories(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			err = e.apt.CheckForUpdates(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			updatedPacks = append(updatedPacks, pack)
+		case ApachePackage:
+			err := e.apachePackageProcess(ctx)
+			if err != nil {
+				return nil, errors.WithMessage(err, "failed to process apache packages")
+			}
+		default:
 			updatedPacks = append(updatedPacks, pack)
 		}
 	}
@@ -440,7 +458,7 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if osInfo.Distribution == "debian" {
+	if osInfo.Distribution == DistributinionDebian {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb https://packages.sury.org/php/ %s main", osInfo.DistributionCodename)),
 			"/etc/apt/sources.list.d/php.list",
@@ -458,4 +476,49 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	err := utils.Download(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/php.gpg")
+	if err != nil {
+		return err
+	}
+
+	if osInfo.Distribution == "ubuntu" {
+		err := utils.WriteContentsToFile(
+			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
+			"/etc/apt/sources.list.d/php.list",
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	if osInfo.Distribution == "debian" {
+		err := utils.WriteContentsToFile(
+			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
+			"/etc/apt/sources.list.d/php.list",
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e *ExtendedAPT) apachePackageProcess(ctx context.Context) error {
+	phpVersion, err := DefinePHPVersion()
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php version")
+	}
+
+	err = e.apt.Install(ctx, ApachePackage, "libapache2-mod-php-"+phpVersion)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
