@@ -565,16 +565,17 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	}
 
 	fmt.Println("Granting privileges...")
-	_, err = db.Exec("GRANT SELECT ON *.* TO ?@'%'", dbCreds.Username)
+	//nolint:gosec
+	_, err = db.Exec("GRANT SELECT ON *.* TO '" + dbCreds.Username + "'@'%'")
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to grant select privileges")
 	}
 	_, err = db.Exec(
 		"GRANT ALL PRIVILEGES ON ?.* TO "+dbCreds.Username+"@'%'",
 		dbCreds.DatabaseName,
 	)
 	if err != nil {
-		return errors.WithMessage(err, "failed to grant privileges")
+		return errors.WithMessage(err, "failed to grant all privileges")
 	}
 	_, err = db.Exec("FLUSH PRIVILEGES")
 	if err != nil {
