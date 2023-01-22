@@ -11,6 +11,7 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
@@ -428,6 +429,13 @@ func installMySQL(
 			state.DatabaseWasInstalled = true
 		} else {
 			fmt.Println("MySQL already installed")
+		}
+	}
+
+	fmt.Println("Starting MySQL server...")
+	if err = service.Start(ctx, "mysql"); err != nil {
+		if err = service.Start(ctx, "mysqld"); err != nil {
+			return state, errors.WithMessage(err, "failed to start MySQL server")
 		}
 	}
 
