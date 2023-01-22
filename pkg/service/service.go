@@ -49,15 +49,15 @@ func Load(ctx context.Context) (srv Service, err error) {
 	once.Do(func() {
 		switch osInfo.Distribution {
 		case "debian", "ubuntu", "centos":
-			_, err := exec.LookPath("systemctl")
-			if err == nil {
-				service = NewSystemd()
-				return
-			}
-
 			_, err = exec.LookPath("service")
 			if err == nil {
 				service = NewBasic()
+				return
+			}
+
+			_, err := exec.LookPath("systemctl")
+			if err == nil {
+				service = NewSystemd()
 				return
 			}
 		default:
