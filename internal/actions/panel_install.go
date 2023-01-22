@@ -520,7 +520,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`debconf-set-selections <<< debconf mysql-server/root_password password %s`,
+				`echo debconf mysql-server/root_password password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
@@ -532,7 +532,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`debconf-set-selections <<< debconf mysql-server/root_password_again password %s`,
+				`echo debconf mysql-server/root_password_again password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
@@ -544,7 +544,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`debconf-set-selections <<< mariadb-server mysql-server/root_password password %s`,
+				`echo mariadb-server mysql-server/root_password password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
@@ -556,7 +556,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`debconf-set-selections <<< mariadb-server mysql-server/root_password_again password %s`,
+				`mariadb-server mysql-server/root_password_again password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
