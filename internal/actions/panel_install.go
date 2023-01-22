@@ -246,7 +246,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Updating files permissions...")
-	err = utils.ExecCommand("chown -R www-data:www-data " + state.Path)
+	err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to change owner")
 	}
