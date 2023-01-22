@@ -464,6 +464,13 @@ func installMySQL(
 					return state, errors.WithMessage(err, "failed to remove MySQL server")
 				}
 
+				if state.OSInfo.OS == "GNU/Linux" {
+					err := os.RemoveAll("/var/lib/mysql")
+					if err != nil {
+						return state, errors.WithMessage(err, "failed to remove MySQL data directory")
+					}
+				}
+
 				fmt.Println("Installing MariaDB server...")
 				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
 				if err != nil {
