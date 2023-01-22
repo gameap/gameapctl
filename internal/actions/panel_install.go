@@ -452,8 +452,6 @@ func installMySQL(
 func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	var err error
-
 	if dbCreds.Username == "" {
 		dbCreds.Username = "gameap"
 	}
@@ -466,15 +464,22 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 		dbCreds.Host = "localhost"
 	}
 
+	passwordGenerator, err := password.NewGenerator(&password.GeneratorInput{
+		Symbols: "_-+=",
+	})
+	if err != nil {
+		return dbCreds, errors.WithMessage(err, "failed to create password generator")
+	}
+
 	if dbCreds.Password == "" {
-		dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
+		dbCreds.Password, err = passwordGenerator.Generate(16, 8, 8, false, false)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
 	}
 
 	if dbCreds.RootPassword == "" {
-		dbCreds.RootPassword, err = password.Generate(16, 8, 8, false, false)
+		dbCreds.RootPassword, err = passwordGenerator.Generate(16, 8, 8, false, false)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
