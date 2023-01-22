@@ -570,10 +570,8 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant select privileges")
 	}
-	_, err = db.Exec(
-		"GRANT ALL PRIVILEGES ON ?.* TO "+dbCreds.Username+"@'%'",
-		dbCreds.DatabaseName,
-	)
+	//nolint:gosec
+	_, err = db.Exec("GRANT ALL PRIVILEGES ON '" + dbCreds.DatabaseName + "'.* TO " + dbCreds.Username + "@'%'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant all privileges")
 	}
