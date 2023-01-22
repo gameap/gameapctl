@@ -86,7 +86,7 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 	if err != nil {
 		return err
 	}
-	err = file.Close()
+	err = tmpFile.Close()
 	if err != nil {
 		return err
 	}
