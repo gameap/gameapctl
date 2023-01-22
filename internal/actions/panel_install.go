@@ -711,7 +711,7 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to install nginx")
 	}
 
-	err = utils.Download(
+	err = utils.DownloadFile(
 		ctx,
 		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/nginx-no-ssl.conf",
 		"/etc/nginx/conf.d/gameap.conf",
@@ -759,7 +759,7 @@ func installApache(
 		return state, errors.WithMessage(err, "failed to install apache")
 	}
 
-	err = utils.Download(
+	err = utils.DownloadFile(
 		ctx,
 		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/apache-no-ssl.conf",
 		"/etc/apache2/sites-available/gameap.conf",
