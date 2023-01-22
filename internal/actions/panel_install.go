@@ -581,6 +581,7 @@ func generateEncryptionKey(dir string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
+	log.Println('\n', cmd.String())
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute key generate command")
 	}
@@ -600,6 +601,7 @@ func runMigration(state panelInstallState) error {
 	cmd.Dir = state.Path
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println('\n', cmd.String())
 	err := cmd.Run()
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute key generate command")
