@@ -490,7 +490,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`echo "debconf mysql-server/root_password password %s | debconf-set-selections`,
+				`echo debconf mysql-server/root_password password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
