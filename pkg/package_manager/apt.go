@@ -416,6 +416,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		"php" + versionAvailable + "-mysql",
 		"php" + versionAvailable + "-opcache",
 		"php" + versionAvailable + "-pgsql",
+		"php" + versionAvailable + "-sqlite",
 		"php" + versionAvailable + "-readline",
 		"php" + versionAvailable + "-xml",
 		"php" + versionAvailable + "-zip",

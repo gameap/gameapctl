@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -20,46 +22,65 @@ var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
 var errEmptyWebServer = errors.New("empty web server")
 
+type panelInstallState struct {
+	NonInteractive bool
+	Host           string
+	Path           string
+	WebServer      string
+	Database       string
+	DBCreds        databaseCredentials
+	OSInfo         osinfo.Info
+
+	// Installation variables
+	DatabaseWasInstalled bool
+}
+
 type databaseCredentials struct {
-	Host     string
-	Port     string
-	Name     string
-	Username string
-	Password string
+	Host         string
+	Port         string
+	DatabaseName string
+	Username     string
+	Password     string
+	RootPassword string
 }
 
 //nolint:funlen,gocognit
 func PanelInstall(cliCtx *cli.Context) error {
-	osInfo := contextInternal.OSInfoFromContext(cliCtx.Context)
-	fmt.Printf("Detected operating system as %s/%s.\n", osInfo.Distribution, osInfo.DistributionCodename)
+	state := panelInstallState{}
 
-	nonInteractive := cliCtx.Bool("non-interactive")
-
-	host := cliCtx.String("host")
-	path := cliCtx.String("path")
-	webServer := cliCtx.String("web-server")
-	database := cliCtx.String("database")
-	dbCreds := databaseCredentials{
-		Host:     cliCtx.String("database-host"),
-		Port:     cliCtx.String("database-port"),
-		Name:     cliCtx.String("database-name"),
-		Username: cliCtx.String("database-username"),
-		Password: cliCtx.String("database-password"),
+	state.NonInteractive = cliCtx.Bool("non-interactive")
+	state.Host = cliCtx.String("host")
+	state.Path = cliCtx.String("path")
+	state.WebServer = cliCtx.String("web-server")
+	state.Database = cliCtx.String("database")
+	state.DBCreds = databaseCredentials{
+		Host:         cliCtx.String("database-host"),
+		Port:         cliCtx.String("database-port"),
+		DatabaseName: cliCtx.String("database-name"),
+		Username:     cliCtx.String("database-username"),
+		Password:     cliCtx.String("database-password"),
 	}
+	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
+
+	fmt.Printf(
+		"Detected operating system as %s/%s.\n",
+		state.OSInfo.Distribution,
+		state.OSInfo.DistributionCodename,
+	)
 
 	// nolint:nestif
-	if !nonInteractive {
+	if !state.NonInteractive {
 		needToAsk := make(map[string]struct{}, 4)
-		if host == "" {
+		if state.Host == "" {
 			needToAsk["host"] = struct{}{}
 		}
-		if path == "" {
+		if state.Path == "" {
 			needToAsk["path"] = struct{}{}
 		}
-		if database == "" {
+		if state.Database == "" {
 			needToAsk["database"] = struct{}{}
 		}
-		if webServer == "" {
+		if state.WebServer == "" {
 			needToAsk["webServer"] = struct{}{}
 		}
 		answers, err := askUser(needToAsk)
@@ -68,43 +89,43 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 
 		if _, ok := needToAsk["path"]; ok {
-			path = answers.path
+			state.Path = answers.path
 		}
 
 		if _, ok := needToAsk["host"]; ok {
-			host = answers.host
+			state.Host = answers.host
 		}
 
 		if _, ok := needToAsk["database"]; ok {
-			database = answers.database
+			state.Database = answers.database
 		}
 
 		if _, ok := needToAsk["webServer"]; ok {
-			webServer = answers.webServer
+			state.WebServer = answers.webServer
 		}
 	}
 
-	if path == "" {
+	if state.Path == "" {
 		return errEmptyPath
 	}
 
-	if host == "" {
+	if state.Host == "" {
 		return errEmptyHost
 	}
 
-	if database == "" {
+	if state.Database == "" {
 		return errEmptyDatabase
 	}
 
-	if webServer == "" {
+	if state.WebServer == "" {
 		return errEmptyWebServer
 	}
 
 	fmt.Println()
-	fmt.Println("Path:", path)
-	fmt.Println("Host:", host)
-	fmt.Println("Database:", database)
-	fmt.Println("Web server:", webServer)
+	fmt.Println("Path:", state.Path)
+	fmt.Println("Host:", state.Host)
+	fmt.Println("Database:", state.Database)
+	fmt.Println("Web server:", state.WebServer)
 	fmt.Println("Develop:", cliCtx.Bool("develop"))
 	fmt.Println()
 
@@ -143,17 +164,59 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	if database == "mysql" {
-		err = installMySQL(cliCtx.Context, pm, dbCreds, nonInteractive)
-	}
+	err = installGameAP(cliCtx.Context, state.Path)
 	if err != nil {
 		return err
 	}
 
-	err = installGameAP(cliCtx.Context, path)
-	if err != nil {
-		return err
+	if state.Database == "mysql" {
+		state, err = installMySQL(cliCtx.Context, pm, state)
+		if err != nil {
+			return err
+		}
+
+		err = utils.FindLineAndReplace(cliCtx.Context, state.Path+"/.env", map[string]string{
+			"DB_CONNECTION=": "DB_CONNECTION=mysql",
+			"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
+			"DB_PORT=":       "DB_PORT=" + state.DBCreds.Port,
+			"DB_DATABASE=":   "DB_DATABASE=" + state.DBCreds.DatabaseName,
+			"DB_USERNAME=":   "DB_USERNAME=" + state.DBCreds.Username,
+			"DB_PASSWORD=":   "DB_PASSWORD=" + state.DBCreds.Password,
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update .env file")
+		}
 	}
+
+	err = generateEncryptionKey(state.Path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to generate encryption key")
+	}
+
+	err = runMigration(state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run migration")
+	}
+
+	fmt.Println("---------------------------------")
+	fmt.Println("DONE!")
+	fmt.Println()
+	fmt.Println("GameAP file path:", state.Path)
+	fmt.Println()
+	fmt.Println("Database name:", state.DBCreds.DatabaseName)
+	if state.DBCreds.RootPassword != "" {
+		fmt.Println("Database root password:", state.DBCreds.RootPassword)
+	}
+	fmt.Println("Database user name:", state.DBCreds.Username)
+	fmt.Println("Database user password:", state.DBCreds.Password)
+	fmt.Println()
+	fmt.Println("Administrator credentials")
+	fmt.Println("Login: admin")
+	// fmt.Println("Password: admin")
+	fmt.Println()
+	fmt.Println("Host: http://", state.Host)
+	fmt.Println()
+	fmt.Println("---------------------------------")
 
 	return nil
 }
@@ -290,14 +353,31 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	return result, nil
 }
 
-func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds databaseCredentials, _ bool) error {
+//nolint:funlen
+func installMySQL(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
 	fmt.Println("Installing MySQL...")
 
 	var err error
 
+	if state.DBCreds.Port == "" {
+		state.DBCreds.Port = "3306"
+	}
+
+	var needToCreateDababaseAndUser bool
+
 	//nolint:nestif
-	if dbCreds.Host == "" {
+	if state.DBCreds.Host == "" {
 		if isAvailable := utils.IsCommandAvailable("mysqld"); !isAvailable {
+			needToCreateDababaseAndUser = true
+			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			if err != nil {
+				return state, err
+			}
+
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
 				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB...")
 				log.Println(err)
@@ -306,41 +386,163 @@ func installMySQL(ctx context.Context, pm packagemanager.PackageManager, dbCreds
 				fmt.Println("Removing MySQL server...")
 				err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
 				if err != nil {
-					return errors.WithMessage(err, "failed to remove MySQL server")
+					return state, errors.WithMessage(err, "failed to remove MySQL server")
 				}
 
 				fmt.Println("Installing MariaDB server...")
 				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
 				if err != nil {
-					return errors.WithMessage(err, "failed to install MariaDB server")
+					return state, errors.WithMessage(err, "failed to install MariaDB server")
 				}
 			}
 
-			if dbCreds.Password == "" {
-				dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
-				if err != nil {
-					return errors.WithMessage(err, "failed to generate password")
-				}
-			}
-
-			if dbCreds.Username == "" {
-				dbCreds.Username = "gameap"
-			}
-
-			if dbCreds.Name == "" {
-				dbCreds.Name = "gameap"
-			}
+			state.DatabaseWasInstalled = true
 		} else {
 			fmt.Println("MySQL already installed")
 		}
 	}
 
-	_, err = sql.Open(
-		"mysql",
-		fmt.Sprintf("%s:%s@/%s", dbCreds.Username, dbCreds.Password, dbCreds.Name),
-	)
+	if needToCreateDababaseAndUser {
+		err = configureMysql(ctx, state.DBCreds)
+		if err != nil {
+			return state, err
+		}
+	}
 
-	return err
+	db, err := sql.Open(
+		"mysql",
+		fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s",
+			state.DBCreds.Username,
+			state.DBCreds.Password,
+			state.DBCreds.Host,
+			state.DBCreds.Port,
+			state.DBCreds.DatabaseName,
+		),
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to connect to MySQL")
+	}
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(db)
+
+	return state, err
+}
+
+func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	var err error
+
+	if dbCreds.Username == "" {
+		dbCreds.Username = "gameap"
+	}
+
+	if dbCreds.DatabaseName == "" {
+		dbCreds.DatabaseName = "gameap"
+	}
+
+	if dbCreds.Host == "" {
+		dbCreds.Host = "localhost"
+	}
+
+	if dbCreds.Password == "" {
+		dbCreds.Password, err = password.Generate(16, 8, 8, false, false)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to generate password")
+		}
+	}
+
+	if dbCreds.RootPassword == "" {
+		dbCreds.RootPassword, err = password.Generate(16, 8, 8, false, false)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to generate password")
+		}
+	}
+
+	if osInfo.Distribution == "debian" || osInfo.Distribution == "ubuntu" {
+		err := utils.ExecCommand(
+			"sh",
+			"-c",
+			fmt.Sprintf(`echo debconf "mysql-server/root_password password %s" | debconf-set-selections`, dbCreds.RootPassword),
+		)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to set debconf")
+		}
+
+		err = utils.ExecCommand(
+			"sh",
+			"-c",
+			fmt.Sprintf(
+				`echo debconf "mysql-server/root_password_again password %s" | debconf-set-selections`,
+				dbCreds.RootPassword,
+			),
+		)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to set debconf")
+		}
+	}
+
+	return dbCreds, nil
+}
+
+func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
+	db, err := sql.Open(
+		"mysql",
+		fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s",
+			"root",
+			dbCreds.RootPassword,
+			dbCreds.Host,
+			dbCreds.Port,
+			"mysql",
+		),
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to connect to MySQL")
+	}
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(db)
+
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS ?", dbCreds.DatabaseName)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(
+		"CREATE USER IF NOT EXISTS ?@'%' IDENTIFIED BY ?",
+		dbCreds.Username,
+		dbCreds.Password,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("GRANT SELECT ON *.* TO ?@'%'", dbCreds.Username)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		"GRANT ALL PRIVILEGES ON ?.* TO ?@'%'",
+		dbCreds.DatabaseName,
+		dbCreds.Username,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("FLUSH PRIVILEGES")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func installGameAP(ctx context.Context, path string) error {
@@ -367,6 +569,40 @@ func installGameAP(ctx context.Context, path string) error {
 	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
 	if err != nil {
 		return errors.WithMessage(err, "failed to copy .env.example")
+	}
+
+	return nil
+}
+
+func generateEncryptionKey(dir string) error {
+	fmt.Println("Generating encryption key...")
+	cmd := exec.Command("php", "artisan", "key:generate", "--force")
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute key generate command")
+	}
+
+	return nil
+}
+
+func runMigration(state panelInstallState) error {
+	fmt.Println("Generating encryption key...")
+	var cmd *exec.Cmd
+	if state.DatabaseWasInstalled {
+		cmd = exec.Command("php", "artisan", "migrate", "--seed")
+	} else {
+		cmd = exec.Command("php", "artisan", "migrate")
+	}
+
+	cmd.Dir = state.Path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute key generate command")
 	}
 
 	return nil

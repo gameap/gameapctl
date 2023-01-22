@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"bufio"
+	"context"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -41,6 +44,77 @@ func WriteContentsToFile(contents []byte, path string) error {
 	}(file)
 
 	_, err = file.Write(contents)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//nolint:funlen,gocognit
+func FindLineAndReplace(_ context.Context, path string, replaceMap map[string]string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil && !errors.Is(err, fs.ErrClosed) {
+			log.Println(err)
+		}
+	}(file)
+
+	tmpFile, err := os.CreateTemp("", "find-and-replace")
+	if err != nil {
+		return err
+	}
+	defer func(tmpFile *os.File) {
+		err := tmpFile.Close()
+		if err != nil && !errors.Is(err, fs.ErrClosed) {
+			log.Println(err)
+		}
+	}(tmpFile)
+
+	reader := bufio.NewReader(file)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		for needle, replacement := range replaceMap {
+			needleLen := len(needle)
+			if len(line) >= needleLen {
+				continue
+			}
+			if line[:needleLen] == needle {
+				line = replacement
+				continue
+			}
+		}
+
+		_, err = tmpFile.WriteString(line)
+		if err != nil {
+			return err
+		}
+		_, err = tmpFile.Write([]byte{'\n'})
+		if err != nil {
+			return err
+		}
+	}
+
+	err = file.Close()
+	if err != nil {
+		return err
+	}
+	err = file.Close()
+	if err != nil {
+		return err
+	}
+	err = os.Rename(tmpFile.Name(), path)
 	if err != nil {
 		return err
 	}
