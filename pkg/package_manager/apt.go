@@ -487,9 +487,6 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 		return err
 	}
 
-	// gpg --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
-	// gpg --export ABF5BD827BD9BF62 > /etc/apt/trusted.gpg.d/nginx.gpg
-
 	err = utils.ExecCommand("gpg", "--keyserver", "keyserver.ubuntu.com", "--recv-keys", "ABF5BD827BD9BF62")
 	if err != nil {
 		return errors.WithMessage(err, "failed to receive nginx gpg key")
@@ -509,7 +506,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	if osInfo.Distribution == "ubuntu" {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
-			"/etc/apt/sources.list.d/php.list",
+			"/etc/apt/sources.list.d/nginx.list",
 		)
 		if err != nil {
 			return err
@@ -519,7 +516,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	if osInfo.Distribution == "debian" {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
-			"/etc/apt/sources.list.d/php.list",
+			"/etc/apt/sources.list.d/nginx.list",
 		)
 		if err != nil {
 			return err

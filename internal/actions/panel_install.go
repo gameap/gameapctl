@@ -39,6 +39,7 @@ type panelInstallState struct {
 	Host           string
 	Port           string
 	Path           string
+	AdminPassword  string
 	WebServer      string
 	Database       string
 	DBCreds        databaseCredentials
@@ -257,6 +258,13 @@ func PanelInstall(cliCtx *cli.Context) error {
 		fmt.Println("Failed to configure cron: ", err.Error())
 	}
 
+	state, err = updateAdminPassword(state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to update admin password")
+	}
+
+	log.Println("GameAP successfully installed")
+
 	fmt.Println("---------------------------------")
 	fmt.Println("DONE!")
 	fmt.Println()
@@ -279,7 +287,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	fmt.Println()
 	fmt.Println("Administrator credentials")
 	fmt.Println("Login: admin")
-	// fmt.Println("Password: admin")
+	fmt.Println("Password: ", state.AdminPassword)
 	fmt.Println()
 	fmt.Println("Host: http://", state.Host)
 	fmt.Println()
@@ -845,4 +853,29 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	}
 
 	return nil
+}
+
+func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
+	var err error
+	if state.AdminPassword == "" {
+		fmt.Println("Generating admin password...")
+
+		state.AdminPassword, err = password.Generate(16, 6, 3, false, false)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to generate password")
+		}
+	}
+
+	//nolint:gosec
+	cmd := exec.Command("php", "artisan", "user:change-password", "admin", state.AdminPassword)
+	cmd.Dir = state.Path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err = cmd.Run()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to execute artisan command")
+	}
+
+	return state, nil
 }
