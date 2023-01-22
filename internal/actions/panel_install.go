@@ -869,7 +869,7 @@ func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 	if state.AdminPassword == "" {
 		fmt.Println("Generating admin password...")
 
-		state.AdminPassword, err = password.Generate(16, 6, 3, false, false)
+		state.AdminPassword, err = password.Generate(18, 6, 0, false, false)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate password")
 		}
