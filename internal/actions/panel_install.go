@@ -553,17 +553,13 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	}
 
 	fmt.Println("Creating database...")
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS ?", dbCreds.DatabaseName)
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + dbCreds.DatabaseName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create database")
 	}
 
 	fmt.Println("Creating user...")
-	_, err = db.Exec(
-		"CREATE USER IF NOT EXISTS ?@'%' IDENTIFIED BY ?",
-		dbCreds.Username,
-		dbCreds.Password,
-	)
+	_, err = db.Exec("CREATE USER IF NOT EXISTS " + dbCreds.Username + "@'%' IDENTIFIED BY " + dbCreds.Password)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
