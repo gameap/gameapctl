@@ -383,7 +383,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	return result, nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func installMySQL(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -520,7 +520,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`echo debconf mysql-server/root_password password %s | debconf-set-selections`,
+				`debconf-set-selections <<< debconf mysql-server/root_password password %s`,
 				dbCreds.RootPassword,
 			),
 		)
@@ -532,7 +532,31 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`echo debconf mysql-server/root_password_again password %s | debconf-set-selections`,
+				`debconf-set-selections <<< debconf mysql-server/root_password_again password %s`,
+				dbCreds.RootPassword,
+			),
+		)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to set debconf")
+		}
+
+		err = utils.ExecCommand(
+			"sh",
+			"-c",
+			fmt.Sprintf(
+				`debconf-set-selections <<< mariadb-server mysql-server/root_password password %s`,
+				dbCreds.RootPassword,
+			),
+		)
+		if err != nil {
+			return dbCreds, errors.WithMessage(err, "failed to set debconf")
+		}
+
+		err = utils.ExecCommand(
+			"sh",
+			"-c",
+			fmt.Sprintf(
+				`debconf-set-selections <<< mariadb-server mysql-server/root_password_again password %s`,
 				dbCreds.RootPassword,
 			),
 		)
