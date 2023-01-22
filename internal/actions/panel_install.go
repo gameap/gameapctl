@@ -556,7 +556,7 @@ func preconfigureMysql(ctx context.Context, dbCreds databaseCredentials) (databa
 			"sh",
 			"-c",
 			fmt.Sprintf(
-				`mariadb-server mysql-server/root_password_again password %s | debconf-set-selections`,
+				`echo mariadb-server mysql-server/root_password_again password %s | debconf-set-selections`,
 				dbCreds.RootPassword,
 			),
 		)
