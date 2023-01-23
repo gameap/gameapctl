@@ -45,7 +45,7 @@ jobs:
   integration_test:
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:22:10', 'debian:buster', 'debian:bullseye' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:22.10', 'debian:buster', 'debian:bullseye' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [ 1.19.x ]
