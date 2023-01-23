@@ -877,6 +877,7 @@ func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 
 	//nolint:gosec
 	cmd := exec.Command("php", "artisan", "user:change-password", "admin", state.AdminPassword)
+	log.Println('\n', "php artisan user:change-password admin ********")
 	cmd.Dir = state.Path
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()

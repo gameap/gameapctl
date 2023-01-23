@@ -8,15 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: ["linux", "windows"]
+        goos: ["linux"]
         goarch: ["amd64", "386", "arm64", "arm", "mips", "mips64"]
-        exclude:
-          - goarch: "mips"
-            goos: windows
-          - goarch: "mips64"
-            goos: windows
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Set APP_VERSION env
         run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
@@ -32,7 +27,6 @@ jobs:
           goversion: "https://dl.google.com/go/go1.18.9.linux-amd64.tar.gz"
           md5sum: false
           overwrite: true
-          project_path: "./cmd/gameap-daemon"
-          ldflags: -X "github.com/gameap/daemon/internal/app/build.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/daemon/internal/app/build.BuildDate=${{ env.BUILD_TIME }}"
-          binary_name: "gameap-daemon"
-          extra_files: README.md
+          project_path: "./cmd/gameapctl"
+          ldflags: -X "github.com/gameap/gameapctl/internal/app.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/gameapctl/internal/app.BuildDate=${{ env.BUILD_TIME }}"
+          binary_name: "gameapctl"
