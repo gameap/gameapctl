@@ -103,12 +103,16 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 	reader := bufio.NewReader(r)
 	writer := bufio.NewWriter(w)
 	for {
-		line, err := reader.ReadString('\n')
+		b, isPrefix, err := reader.ReadLine()
+		line := string(b)
 		if err != nil && err == io.EOF {
 			break
 		}
 		if err != nil {
 			return err
+		}
+		if isPrefix {
+			return errors.New("buffer size is too small")
 		}
 
 		for needle, replacement := range replaceMap {
@@ -133,6 +137,10 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 		}
 
 		_, err = writer.WriteString(line)
+		if err != nil {
+			return err
+		}
+		err = writer.WriteByte('\n')
 		if err != nil {
 			return err
 		}

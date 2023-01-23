@@ -93,14 +93,6 @@ jobs:
           path: /var/log/
           retention-days: 5
 
-      - name: Upload Nginx Artifact
-        uses: actions/upload-artifact@v3
-        if: failure()
-        with:
-          name: nginx
-          path: /etc/nginx
-          retention-days: 1
-
   test-cache:
     runs-on: ubuntu-latest
     steps:

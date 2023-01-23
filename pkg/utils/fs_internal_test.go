@@ -83,8 +83,7 @@ var nginxConfig = `server {
     location = /50x.html {
         root   /usr/share/nginx/html;
     }
-}
-`
+}`
 
 func Test_findLineAndReplace_nginxConfig(t *testing.T) {
 	r := strings.NewReader(nginxConfig)
@@ -95,21 +94,23 @@ func Test_findLineAndReplace_nginxConfig(t *testing.T) {
 		"listen":               "listen	81;",
 		"fastcgi_pass    unix": "fastcgi_pass	unix:/var/run/php/php8.1-fpm.sock;",
 	})
+	result := w.String()
 
 	require.NoError(t, err)
 	assert.Contains(
 		t,
-		w.String(),
+		result,
 		"server_name	gameap.ru;",
 	)
 	assert.Contains(
 		t,
-		w.String(),
+		result,
 		"listen	81;",
 	)
 	assert.Contains(
 		t,
-		w.String(),
+		result,
 		"fastcgi_pass	unix:/var/run/php/php8.1-fpm.sock;",
 	)
+	assert.Equal(t, "}\n", result[len(result)-2:])
 }
