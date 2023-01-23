@@ -287,9 +287,9 @@ func PanelInstall(cliCtx *cli.Context) error {
 	fmt.Println()
 	fmt.Println("Administrator credentials")
 	fmt.Println("Login: admin")
-	fmt.Println("Password: ", state.AdminPassword)
+	fmt.Println("Password:", state.AdminPassword)
 	fmt.Println()
-	fmt.Println("Host: http://", state.Host)
+	fmt.Println("Host: http://" + state.Host)
 	fmt.Println()
 	fmt.Println("---------------------------------")
 

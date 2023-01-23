@@ -146,8 +146,8 @@ func Run(args []string) {
 				Name:    "version",
 				Aliases: []string{"v"},
 				Action: func(context *cli.Context) error {
-					fmt.Println("Version: ", Version)
-					fmt.Println("Build Date: ", BuildDate)
+					fmt.Println("Version:", Version)
+					fmt.Println("Build Date:", BuildDate)
 					return nil
 				},
 			},
