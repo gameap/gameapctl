@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -146,7 +147,19 @@ func Run(args []string) {
 				},
 			},
 			{
+				Name:        "send-logs",
+				Description: "Send logs to GameAP support. You can specify log which you want to send.",
+				Usage:       "Send logs to GameAP support",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "all",
+						Usage: "Send all logs (daemon, web, nginx, php)",
+					},
+				},
+			},
+			{
 				Name:    "version",
+				Usage:   "Print version information",
 				Aliases: []string{"v"},
 				Action: func(context *cli.Context) error {
 					fmt.Println("Version:", Version)
@@ -190,7 +203,11 @@ func initLogFile(command string) string {
 		}
 	}
 
-	f, err := os.OpenFile(logpath+"/"+logname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(
+		filepath.Clean(logpath+string(os.PathSeparator)+logname),
+		os.O_RDWR|os.O_CREATE|os.O_APPEND,
+		0666,
+	)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}

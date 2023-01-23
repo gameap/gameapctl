@@ -826,7 +826,7 @@ func installNginx(
 	err = utils.FindLineAndReplace(ctx, "/etc/nginx/conf.d/gameap.conf", map[string]string{
 		"server_name":                  fmt.Sprintf("server_name       %s;", state.Host),
 		"listen":                       fmt.Sprintf("listen       %s;", state.Port),
-		"root /var/www/gameap/public;": fmt.Sprintf("root       %s/public;", state.Path),
+		"root /var/www/gameap/public;": fmt.Sprintf("root       %s%c%s;", state.Path, os.PathSeparator, "public"),
 		"fastcgi_pass    unix":         fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
 	})
 	if err != nil {
