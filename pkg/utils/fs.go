@@ -113,10 +113,10 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 
 		for needle, replacement := range replaceMap {
 			needleLen := len(needle)
-			if len(line) <= needleLen {
+			trimmedLine := strings.TrimSpace(line)
+			if len(trimmedLine) <= needleLen {
 				continue
 			}
-			trimmedLine := strings.TrimSpace(line)
 			if trimmedLine[:needleLen] == needle {
 				fi := strings.Index(line, trimmedLine)
 				li := strings.LastIndex(line, trimmedLine)

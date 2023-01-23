@@ -235,11 +235,13 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	switch state.WebServer {
 	case nginxWebServer:
+		fmt.Println("Installing nginx...")
 		state, err = installNginx(cliCtx.Context, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install nginx")
 		}
 	case apacheWebServer:
+		fmt.Println("Installing apache...")
 		state, err = installApache(cliCtx.Context, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install apache")
@@ -527,6 +529,11 @@ func installMySQL(
 		return state, errors.WithMessage(err, "failed to connect to MySQL")
 	}
 
+	_, err = db.Exec("SELECT 1")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to execute MySQL query")
+	}
+
 	return state, err
 }
 
@@ -623,7 +630,7 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		return errors.WithMessage(err, "failed to grant select privileges")
 	}
 	//nolint:gosec
-	_, err = db.Exec("GRANT ALL PRIVILEGES ON " + dbCreds.DatabaseName + ".* TO " + dbCreds.Username + "@'%'")
+	_, err = db.Exec("GRANT ALL PRIVILEGES ON " + dbCreds.DatabaseName + ".* TO '" + dbCreds.Username + "'@'%'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant all privileges")
 	}
@@ -744,11 +751,18 @@ func installNginx(
 
 	fpmUnixSocket := fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVersion)
 
-	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
+	err = utils.FindLineAndReplace(ctx, "/etc/nginx/conf.d/gameap.conf", map[string]string{
 		"server_name":                  fmt.Sprintf("server_name       %s;", state.Host),
 		"listen":                       fmt.Sprintf("listen       %s;", state.Port),
 		"root /var/www/gameap/public;": fmt.Sprintf("root       %s/public;", state.Path),
 		"fastcgi_pass    unix":         fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
+	})
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to update nginx host config")
+	}
+
+	err = utils.FindLineAndReplace(ctx, "/etc/nginx/nginx.conf", map[string]string{
+		"user  nginx;": "user  www-data;",
 	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to update nginx config")
@@ -796,7 +810,7 @@ func installApache(
 	}
 
 	if state.Port != "80" {
-		err = utils.FindLineAndReplace(ctx, "/etc/apache2/ports.conf", map[string]string{
+		err = utils.FindLineAndReplace(ctx, "/etc/apache2/sites-available/gameap.conf", map[string]string{
 			"# Listen 80": fmt.Sprintf("Listen %s", state.Port),
 		})
 		if err != nil {
