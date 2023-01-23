@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gameap/gameapctl/internal/actions"
@@ -154,7 +157,13 @@ func Run(args []string) {
 		},
 	}
 
-	err := app.Run(args)
+	ctx := shutdownContext(context.Background())
+
+	err := app.RunContext(ctx, args)
+	if err != nil && errors.Is(err, context.Canceled) {
+		fmt.Println("Terminated")
+		os.Exit(130)
+	}
 	if err != nil {
 		fmt.Println(err)
 
@@ -188,4 +197,18 @@ func initLogFile(command string) string {
 	log.SetOutput(f)
 
 	return logpath + "/" + logname
+}
+
+func shutdownContext(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("Shutdown signal received...")
+		cancel()
+	}()
+
+	return ctx
 }

@@ -2,24 +2,47 @@ package utils
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
-func Ask(question string, allowEmpty bool, validate func(string) (bool, string)) (string, error) {
-	fmt.Println("")
-	reader := bufio.NewReader(os.Stdin)
+func readStdin(ctx context.Context) string {
+	input := make(chan string)
+
+	go func(lines chan string) {
+		s := bufio.NewScanner(os.Stdin)
+		s.Scan()
+		lines <- s.Text()
+	}(input)
+
+	defer close(input)
 
 	for {
+		select {
+		case line := <-input:
+			return line
+		case <-ctx.Done():
+			return ""
+		}
+	}
+}
+
+func Ask(ctx context.Context, question string, allowEmpty bool, validate func(string) (bool, string)) (string, error) {
+	fmt.Println("")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+
 		fmt.Print(question)
 
-		result, err := reader.ReadString('\n')
-		if err != nil {
-			return result, errors.WithMessage(err, "failed to read string")
-		}
+		result := readStdin(ctx)
+
 		result = strings.TrimSpace(result)
 
 		if allowEmpty && result == "" {

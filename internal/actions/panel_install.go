@@ -5,9 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"log"
+	"net"
 	"os"
 	"os/exec"
+	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -37,6 +40,7 @@ var errEmptyWebServer = errors.New("empty web server")
 type panelInstallState struct {
 	NonInteractive bool
 	Host           string
+	HostIP         string
 	Port           string
 	Path           string
 	AdminPassword  string
@@ -60,6 +64,7 @@ type databaseCredentials struct {
 
 //nolint:funlen,gocognit,gocyclo
 func PanelInstall(cliCtx *cli.Context) error {
+	var err error
 	state := panelInstallState{}
 
 	state.NonInteractive = cliCtx.Bool("non-interactive")
@@ -98,7 +103,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if state.WebServer == "" {
 			needToAsk["webServer"] = struct{}{}
 		}
-		answers, err := askUser(needToAsk)
+		answers, err := askUser(cliCtx.Context, needToAsk)
 		if err != nil {
 			return err
 		}
@@ -138,6 +143,11 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	if state.Port == "" {
 		state.Port = "80"
+	}
+
+	state, err = filterAndCheckHost(state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check host")
 	}
 
 	fmt.Println()
@@ -306,16 +316,24 @@ type askedParams struct {
 }
 
 //nolint:funlen,gocognit
-func askUser(needToAsk map[string]struct{}) (askedParams, error) {
+func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, error) {
 	var err error
 	result := askedParams{}
 
+	//nolint:nestif
 	if _, ok := needToAsk["path"]; ok {
 		if result.path == "" {
 			result.path, err = utils.Ask(
+				ctx,
 				"Enter gameap installation path (Example: /var/www/gameap): ",
 				true,
-				nil,
+				func(s string) (bool, string) {
+					if _, err := os.Stat(s); errors.Is(err, fs.ErrNotExist) {
+						return true, ""
+					}
+
+					return false, fmt.Sprintf("Directory '%s' already exists. Please provide another path", s)
+				},
 			)
 			if err != nil {
 				return result, err
@@ -329,6 +347,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 
 	if _, ok := needToAsk["host"]; ok {
 		result.host, err = utils.Ask(
+			ctx,
 			"Enter gameap host (Example: example.com): ",
 			false,
 			nil,
@@ -348,6 +367,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 		for {
 			num := ""
 			num, err = utils.Ask(
+				ctx,
 				"Enter number: ",
 				true,
 				func(s string) (bool, string) {
@@ -394,6 +414,7 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 
 			for {
 				num, err = utils.Ask(
+					ctx,
 					"Enter number: ",
 					true,
 					func(s string) (bool, string) {
@@ -430,6 +451,49 @@ func askUser(needToAsk map[string]struct{}) (askedParams, error) {
 	return result, nil
 }
 
+func filterAndCheckHost(state panelInstallState) (panelInstallState, error) {
+	if idx := strings.Index(state.Host, "http://"); idx >= 0 {
+		state.Host = state.Host[7:]
+	} else if idx = strings.Index(state.Host, "https://"); idx >= 0 {
+		state.Host = state.Host[8:]
+	}
+
+	state.Host = strings.TrimRight(state.Host, "/?&")
+
+	var invalidChars = []int32{'/', '?', '&'}
+	for _, s := range state.Host {
+		if utils.Contains(invalidChars, s) {
+			return state, errors.New("invalid host")
+		}
+	}
+
+	//nolint:nestif
+	if utils.IsIPv4(state.Host) || utils.IsIPv6(state.Host) {
+		state.HostIP = state.Host
+	} else {
+		ips, err := net.LookupIP(state.Host)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to lookup ip")
+		}
+
+		if len(ips) == 0 {
+			return state, errors.New("no ip for chosen host")
+		}
+
+		for i := range ips {
+			if utils.IsIPv4(ips[i].String()) {
+				state.HostIP = ips[i].String()
+			}
+		}
+
+		if state.HostIP == "" {
+			state.HostIP = ips[0].String()
+		}
+	}
+
+	return state, nil
+}
+
 //nolint:funlen,gocognit
 func installMySQL(
 	ctx context.Context,
@@ -455,6 +519,14 @@ func installMySQL(
 				return state, err
 			}
 
+			isDataDirExistsBefore := true
+			if state.OSInfo.OS == "GNU/Linux" {
+				_, err := os.Stat("/var/lib/mysql")
+				if err != nil && os.IsNotExist(err) {
+					isDataDirExistsBefore = false
+				}
+			}
+
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
 				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB...")
 				log.Println(err)
@@ -466,7 +538,7 @@ func installMySQL(
 					return state, errors.WithMessage(err, "failed to remove MySQL server")
 				}
 
-				if state.OSInfo.OS == "GNU/Linux" {
+				if state.OSInfo.OS == "GNU/Linux" && !isDataDirExistsBefore {
 					err := os.RemoveAll("/var/lib/mysql")
 					if err != nil {
 						return state, errors.WithMessage(err, "failed to remove MySQL data directory")
