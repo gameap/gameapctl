@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -294,6 +295,11 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	if state.Database == sqliteDatabase {
 		fmt.Println("Database file path:", state.Path+"/database.sqlite")
+	}
+
+	if err = savePanelInstallationDetails(state); err != nil {
+		fmt.Println("Failed to save installation details: ", err.Error())
+		log.Println("Failed to save installation details: ", err)
 	}
 
 	fmt.Println()
@@ -974,4 +980,52 @@ func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 	}
 
 	return state, nil
+}
+
+func savePanelInstallationDetails(state panelInstallState) error {
+	saveStruct := struct {
+		Host                 string `json:"host"`
+		HostIP               string `json:"hostIP"`
+		Port                 string `json:"port"`
+		Path                 string `json:"path"`
+		WebServer            string `json:"webServer"`
+		Database             string `json:"database"`
+		DatabaseWasInstalled bool   `json:"databaseWasInstalled"`
+	}{
+		Host:                 state.Host,
+		HostIP:               state.HostIP,
+		Port:                 state.Port,
+		Path:                 state.Path,
+		WebServer:            state.WebServer,
+		Database:             state.Database,
+		DatabaseWasInstalled: state.DatabaseWasInstalled,
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return errors.WithMessage(err, "failed to get user home dir")
+	}
+
+	if _, err := os.Stat(homeDir + string(os.PathSeparator) + ".gameapctl"); errors.Is(err, fs.ErrNotExist) {
+		err = os.Mkdir(".gameapctl", 0600)
+		if err != nil {
+			return err
+		}
+	}
+
+	b, err := json.Marshal(saveStruct)
+	if err != nil {
+		return errors.WithMessage(err, "failed to marshal json")
+	}
+
+	err = os.WriteFile(
+		homeDir+string(os.PathSeparator)+".gameapctl"+string(os.PathSeparator)+"panel_install.json",
+		b,
+		0600,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to write file")
+	}
+
+	return nil
 }
