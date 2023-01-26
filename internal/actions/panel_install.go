@@ -1083,6 +1083,12 @@ func clearGameAPCache(_ context.Context, state panelInstallState) (panelInstallS
 }
 
 func checkInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	var err error
+	state, err = clearGameAPCache(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to clear panel cache")
+	}
+
 	url := "http://" + state.Host + "/api/healthz"
 	if state.HTTPS {
 		url = "https://" + state.Host + "/api/healthz"
