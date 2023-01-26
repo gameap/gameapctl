@@ -259,9 +259,14 @@ func PanelInstall(cliCtx *cli.Context) error {
 		fmt.Println("Failed to configure cron: ", err.Error())
 	}
 
-	state, err = updateAdminPassword(state)
+	state, err = updateAdminPassword(cliCtx.Context, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to update admin password")
+	}
+
+	state, err = clearGameAPCache(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to clear panel cache")
 	}
 
 	if state.WebServer != noneWebServer {
@@ -989,7 +994,7 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	return nil
 }
 
-func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
+func updateAdminPassword(_ context.Context, state panelInstallState) (panelInstallState, error) {
 	var err error
 	if state.AdminPassword == "" {
 		fmt.Println("Generating admin password ...")
@@ -1010,6 +1015,32 @@ func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 	err = cmd.Run()
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to execute artisan command")
+	}
+
+	return state, nil
+}
+
+func clearGameAPCache(_ context.Context, state panelInstallState) (panelInstallState, error) {
+	cmd := exec.Command("php", "artisan", "config:cache")
+	log.Println('\n', cmd.String())
+	cmd.Dir = state.Path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err := cmd.Run()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to clear config cache")
+	}
+
+	cmd = exec.Command("php", "artisan", "view:cache")
+	log.Println('\n', cmd.String())
+	cmd.Dir = state.Path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err = cmd.Run()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to clear view cache")
 	}
 
 	return state, nil
