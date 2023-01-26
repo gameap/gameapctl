@@ -136,7 +136,7 @@ jobs:
         if: failure()
         with:
           name: logs_windows
-          path: %HOME%\AppData\Local\Temp\gameapctl-log?\*.log
+          path: %HOME%/AppData/Local/Temp/gameapctl-log?/*.log
           retention-days: 5
 
   test-cache:
