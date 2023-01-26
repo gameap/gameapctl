@@ -49,7 +49,7 @@ jobs:
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [ 1.19.x ]
-        experimantal: [false]
+        experimental: [false]
         exclude:
           - distro: 'ubuntu:20.04'
             database: 'sqlite'
