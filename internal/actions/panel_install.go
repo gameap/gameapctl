@@ -169,15 +169,15 @@ func PanelInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	fmt.Println("Checking for updates...")
+	fmt.Println("Checking for updates ...")
 	if pm.CheckForUpdates(cliCtx.Context) != nil {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
-	fmt.Println("Checking for curl...")
+	fmt.Println("Checking for curl ...")
 	isAvailable := utils.IsCommandAvailable("curl")
 	if !isAvailable {
-		fmt.Println("Installing curl...")
+		fmt.Println("Installing curl ...")
 		if pm.Install(cliCtx.Context, packagemanager.CurlPackage) != nil {
 			return errors.WithMessage(err, "failed to install curl")
 		}
@@ -185,7 +185,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	isAvailable = utils.IsCommandAvailable("gpg")
 	if !isAvailable {
-		fmt.Println("Installing gpg...")
+		fmt.Println("Installing gpg ...")
 		if pm.Install(cliCtx.Context, packagemanager.GnuPGPackage) != nil {
 			return errors.WithMessage(err, "failed to install gpg")
 		}
@@ -193,7 +193,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	isAvailable = utils.IsCommandAvailable("php")
 	if !isAvailable {
-		fmt.Println("Installing php...")
+		fmt.Println("Installing php ...")
 		if pm.Install(cliCtx.Context, packagemanager.PHPPackage) != nil {
 			return errors.WithMessage(err, "failed to install php")
 		}
@@ -234,20 +234,20 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	switch state.WebServer {
 	case nginxWebServer:
-		fmt.Println("Installing nginx...")
+		fmt.Println("Installing nginx ...")
 		state, err = installNginx(cliCtx.Context, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install nginx")
 		}
 	case apacheWebServer:
-		fmt.Println("Installing apache...")
+		fmt.Println("Installing apache ...")
 		state, err = installApache(cliCtx.Context, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install apache")
 		}
 	}
 
-	fmt.Println("Updating files permissions...")
+	fmt.Println("Updating files permissions ...")
 	err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to change owner")
@@ -265,7 +265,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	if state.WebServer != noneWebServer {
-		fmt.Println("Checking panel installation...")
+		fmt.Println("Checking panel installation ...")
 		if state, err = checkInstallation(cliCtx.Context, state); err != nil {
 			fmt.Println("Installation checking failed")
 			log.Println("Installation checking failed")
@@ -391,13 +391,13 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 			switch num {
 			case "1":
 				result.database = mysqlDatabase
-				fmt.Println("Okay! Will try install MySQL...")
+				fmt.Println("Okay! Will try install MySQL ...")
 			case "2":
 				result.database = sqliteDatabase
-				fmt.Println("Okay! Will try install SQLite...")
+				fmt.Println("Okay! Will try install SQLite ...")
 			case "3":
 				result.database = noneDatabase
-				fmt.Println("Okay! ...")
+				fmt.Println("Okay!  ...")
 			default:
 				fmt.Println("Please answer 1-3.")
 				continue
@@ -438,13 +438,13 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 				switch num {
 				case "1":
 					result.webServer = nginxWebServer
-					fmt.Println("Okay! Will try to install Nginx...")
+					fmt.Println("Okay! Will try to install Nginx ...")
 				case "2":
 					result.webServer = apacheWebServer
-					fmt.Println("Okay! Will try to install Apache...")
+					fmt.Println("Okay! Will try to install Apache ...")
 				case "3":
 					result.webServer = noneWebServer
-					fmt.Println("Okay! ...")
+					fmt.Println("Okay!  ...")
 				default:
 					fmt.Println("Please answer 1-3.")
 					continue
@@ -506,7 +506,7 @@ func installMySQL(
 	pm packagemanager.PackageManager,
 	state panelInstallState,
 ) (panelInstallState, error) {
-	fmt.Println("Installing MySQL...")
+	fmt.Println("Installing MySQL ...")
 
 	var err error
 
@@ -534,11 +534,11 @@ func installMySQL(
 			}
 
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
-				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB...")
+				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
 				log.Println(err)
 				log.Println("Failed to install MySQL server. Trying to replace by MariaDB")
 
-				fmt.Println("Removing MySQL server...")
+				fmt.Println("Removing MySQL server ...")
 				err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
 				if err != nil {
 					return state, errors.WithMessage(err, "failed to remove MySQL server")
@@ -551,7 +551,7 @@ func installMySQL(
 					}
 				}
 
-				fmt.Println("Installing MariaDB server...")
+				fmt.Println("Installing MariaDB server ...")
 				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
 				if err != nil {
 					return state, errors.WithMessage(err, "failed to install MariaDB server")
@@ -564,7 +564,7 @@ func installMySQL(
 		}
 	}
 
-	fmt.Println("Starting MySQL server...")
+	fmt.Println("Starting MySQL server ...")
 	if err = service.Start(ctx, "mysql"); err != nil {
 		if err = service.Start(ctx, "mysqld"); err != nil {
 			if err = service.Start(ctx, "mariadb"); err != nil {
@@ -574,14 +574,14 @@ func installMySQL(
 	}
 
 	if needToCreateDababaseAndUser {
-		fmt.Println("Configuring MySQL...")
+		fmt.Println("Configuring MySQL ...")
 		err = configureMysql(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
 	}
 
-	fmt.Println("Checking MySQL connection...")
+	fmt.Println("Checking MySQL connection ...")
 	db, err := sql.Open(
 		mysqlDatabase,
 		fmt.Sprintf(
@@ -689,19 +689,19 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		return errors.WithMessage(err, "failed to connect to MySQL")
 	}
 
-	fmt.Println("Creating database...")
+	fmt.Println("Creating database ...")
 	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + dbCreds.DatabaseName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create database")
 	}
 
-	fmt.Println("Creating user...")
+	fmt.Println("Creating user ...")
 	_, err = db.Exec("CREATE USER IF NOT EXISTS " + dbCreds.Username + "@'%' IDENTIFIED BY '" + dbCreds.Password + "'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
 
-	fmt.Println("Granting privileges...")
+	fmt.Println("Granting privileges ...")
 	//nolint:gosec
 	_, err = db.Exec("GRANT SELECT ON *.* TO '" + dbCreds.Username + "'@'%'")
 	if err != nil {
@@ -749,7 +749,7 @@ func installGameAP(ctx context.Context, path string) error {
 		}
 	}(tempDir)
 
-	fmt.Println("Downloading GameAP...")
+	fmt.Println("Downloading GameAP ...")
 	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
@@ -760,7 +760,7 @@ func installGameAP(ctx context.Context, path string) error {
 		return errors.WithMessage(err, "failed to move gameap")
 	}
 
-	fmt.Println("Installing GameAP...")
+	fmt.Println("Installing GameAP ...")
 	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
 	if err != nil {
 		return errors.WithMessage(err, "failed to copy .env.example")
@@ -770,7 +770,7 @@ func installGameAP(ctx context.Context, path string) error {
 }
 
 func generateEncryptionKey(dir string) error {
-	fmt.Println("Generating encryption key...")
+	fmt.Println("Generating encryption key ...")
 	cmd := exec.Command("php", "artisan", "key:generate", "--force")
 	cmd.Dir = dir
 	cmd.Stdout = log.Writer()
@@ -787,7 +787,7 @@ func generateEncryptionKey(dir string) error {
 func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	var err error
 
-	fmt.Println("Updating .env")
+	fmt.Println("Updating .env ...")
 
 	url := "http://" + state.Host
 	if state.HTTPS {
@@ -811,7 +811,7 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 }
 
 func runMigration(state panelInstallState) error {
-	fmt.Println("Running migration...")
+	fmt.Println("Running migration ...")
 	var cmd *exec.Cmd
 	if state.DatabaseWasInstalled {
 		cmd = exec.Command("php", "artisan", "migrate", "--seed")
@@ -943,7 +943,7 @@ func installApache(
 }
 
 func configureCron(_ context.Context, state panelInstallState) error {
-	fmt.Println("Configuring cron...")
+	fmt.Println("Configuring cron ...")
 
 	if isAvailable := utils.IsCommandAvailable("crontab"); !isAvailable {
 		fmt.Println("Crontab is not available. Skip cron configuration")
@@ -992,7 +992,7 @@ func configureCron(_ context.Context, state panelInstallState) error {
 func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 	var err error
 	if state.AdminPassword == "" {
-		fmt.Println("Generating admin password...")
+		fmt.Println("Generating admin password ...")
 
 		state.AdminPassword, err = password.Generate(18, 6, 0, false, false)
 		if err != nil {
@@ -1059,7 +1059,7 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 }
 
 func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	fmt.Println("Trying to fix panel installation...")
+	fmt.Println("Trying to fix panel installation ...")
 
 	tried := map[int]struct{}{}
 	isTried := func(step int) bool {
@@ -1075,6 +1075,8 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			state.WebServer == "nginx" && utils.IsFileExists("/etc/nginx/conf.d/default.conf"):
 			tried[0] = struct{}{}
 
+			log.Println("Disabling nginx default.conf config")
+
 			err = os.Rename("/etc/nginx/conf.d/default.conf", "/etc/nginx/conf.d/default.conf.disabled")
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to rename default nginx config")
@@ -1084,8 +1086,10 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 				return state, errors.WithMessage(err, "failed to restart nginx")
 			}
 		case !isTried(1) &&
-			state.WebServer == "apache":
+			state.WebServer == apacheWebServer:
 			tried[1] = struct{}{}
+
+			log.Println("Disabling apache 000-default site")
 
 			err = utils.ExecCommand("a2dissite", "000-default")
 			if err != nil {
@@ -1098,6 +1102,9 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			}
 		case !isTried(2) && utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost":
 			tried[2] = struct{}{}
+
+			log.Print("Replacing localhost to 127.0.0.1 in .env")
+
 			state.DBCreds.Host = "127.0.0.1"
 			state, err = updateDotEnv(ctx, state)
 			if err != nil {
