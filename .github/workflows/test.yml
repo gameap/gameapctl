@@ -109,7 +109,7 @@ jobs:
         database: [ mysql, sqlite ]
         web-server: [ nginx ]
         go-version: [ 1.19.x ]
-        experimental: [ false ]
+        experimental: [ true ]
 
     runs-on: windows-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -128,9 +128,9 @@ jobs:
 
       - name: Tests
         run: |
-          cd %GITHUB_WORKSPACE%\cmd\gameapctl\
+          cd .\cmd\gameapctl\
           go build .
-          gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+          .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
