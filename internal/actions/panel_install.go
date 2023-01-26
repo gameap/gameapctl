@@ -690,6 +690,27 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		}
 	}
 
+	rows, err := db.Query("SELECT VERSION()")
+	if err != nil {
+		return errors.WithMessage(err, "failed to get MySQL version")
+	}
+	defer func(rows *sql.Rows) {
+		err = rows.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(rows)
+
+	var version string
+	for rows.Next() {
+		err = rows.Scan(&version)
+		if err != nil {
+			return errors.WithMessage(err, "failed to scan MySQL version")
+		}
+	}
+
+	majorVersion := strings.Split(version, ".")[0]
+
 	if err != nil {
 		return errors.WithMessage(err, "failed to connect to MySQL")
 	}
@@ -701,7 +722,22 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	}
 
 	fmt.Println("Creating user ...")
-	_, err = db.Exec("CREATE USER IF NOT EXISTS " + dbCreds.Username + "@'%' IDENTIFIED BY '" + dbCreds.Password + "'")
+
+	if majorVersion == "8" {
+		_, err = db.Exec(
+			"CREATE USER IF NOT EXISTS " +
+				dbCreds.Username +
+				"@'%' IDENTIFIED WITH mysql_native_password BY '" +
+				dbCreds.Password + "'",
+		)
+	} else {
+		_, err = db.Exec(
+			"CREATE USER IF NOT EXISTS " +
+				dbCreds.Username +
+				"@'%' IDENTIFIED BY '" +
+				dbCreds.Password + "'",
+		)
+	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
