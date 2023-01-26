@@ -720,7 +720,8 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 }
 
 func installSqlite(_ context.Context, state panelInstallState) (panelInstallState, error) {
-	f, err := os.Create(state.Path + "/database.sqlite")
+	dbPath := state.Path + string(os.PathSeparator) + "database.sqlite"
+	f, err := os.Create(dbPath)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to database.sqlite")
 	}
@@ -729,7 +730,7 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 		return state, errors.WithMessage(err, "failed to close database.sqlite")
 	}
 
-	state.DBCreds.DatabaseName = "database.sqlite"
+	state.DBCreds.DatabaseName = dbPath
 	state.DatabaseWasInstalled = true
 
 	return state, nil
