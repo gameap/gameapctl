@@ -8,8 +8,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: ["linux"]
+        goos: ["linux", "windows"]
         goarch: ["amd64", "386", "arm64", "arm", "mips", "mips64"]
+        exclude:
+          - goarch: "mips"
+            goos: windows
+          - goarch: "mips64"
+            goos: windows
     steps:
       - uses: actions/checkout@v3
 

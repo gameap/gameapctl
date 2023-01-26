@@ -103,6 +103,43 @@ jobs:
           path: /var/log/
           retention-days: 5
 
+  integration_test_windows:
+    strategy:
+      matrix:
+        database: [ mysql, sqlite ]
+        web-server: [ nginx ]
+        go-version: [ 1.19.x ]
+        experimental: [ false ]
+
+    runs-on: windows-latest
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          stable: false
+          go-version: ${{ matrix.go-version }}
+
+      - name: Set up dependencies
+        run: go mod download
+
+      - name: Tests
+        run: |
+          cd cmd\\gameapctl\\
+          go build .
+          gameapctl.exe --non-interactive panel install --path=C:\\gameap\\web --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: logs
+          path: %HOME%\\AppData\\Local\\Temp\\gameapctl*
+          retention-days: 5
+
   test-cache:
     runs-on: ubuntu-latest
     steps:

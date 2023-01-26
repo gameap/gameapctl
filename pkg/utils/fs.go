@@ -3,16 +3,14 @@ package utils
 import (
 	"bufio"
 	"context"
+	"github.com/otiai10/copy"
+	"github.com/pkg/errors"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
-
-	"github.com/otiai10/copy"
-	"github.com/pkg/errors"
 )
 
 func IsFileExists(path string) bool {
@@ -60,18 +58,6 @@ func WriteContentsToFile(contents []byte, path string) error {
 
 //nolint:funlen,gocognit
 func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]string) error {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	var uid uint32
-	var gid uint32
-
-	if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
-		uid = sysStat.Uid
-		gid = sysStat.Gid
-	}
-
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -82,6 +68,8 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 			log.Println(err)
 		}
 	}(file)
+
+	uid, gid := uidAndGidForFile(path)
 
 	tmpFile, err := os.CreateTemp("", "find-and-replace")
 	if err != nil {

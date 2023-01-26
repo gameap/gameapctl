@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -333,10 +334,16 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 
 	//nolint:nestif
 	if _, ok := needToAsk["path"]; ok {
+		pathText := "Enter gameap installation path (Example: /var/www/gameap): "
+
+		if runtime.GOOS == "windows" {
+			pathText = "Enter gameap installation path (Example: C:\\gameap\\web): "
+		}
+
 		if result.path == "" {
 			result.path, err = utils.Ask(
 				ctx,
-				"Enter gameap installation path (Example: /var/www/gameap): ",
+				pathText,
 				true,
 				func(s string) (bool, string) {
 					if _, err := os.Stat(s); errors.Is(err, fs.ErrNotExist) {
@@ -352,7 +359,7 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 		}
 
 		if result.path == "" {
-			result.path = "/var/www/gameap"
+			result.path = defaultWebInstallationPath
 		}
 	}
 
