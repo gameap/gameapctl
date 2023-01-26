@@ -128,7 +128,7 @@ jobs:
 
       - name: Tests
         run: |
-          cd cmd\gameapctl\
+          cd %GITHUB_WORKSPACE%\cmd\gameapctl\
           go build .
           gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
