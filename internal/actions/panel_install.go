@@ -726,6 +726,7 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 		return state, errors.WithMessage(err, "failed to close database.sqlite")
 	}
 
+	state.DBCreds.DatabaseName = "database.sqlite"
 	state.DatabaseWasInstalled = true
 
 	return state, nil
