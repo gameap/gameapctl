@@ -39,7 +39,18 @@ func Restart(ctx context.Context, serviceName string) error {
 	if err != nil {
 		return err
 	}
-	return s.Restart(ctx, serviceName)
+	err = s.Restart(ctx, serviceName)
+	if err != nil {
+		log.Println(err)
+		err = s.Stop(ctx, serviceName)
+		if err != nil {
+			log.Println(err)
+		}
+
+		return s.Start(ctx, serviceName)
+	}
+
+	return nil
 }
 
 func Load(ctx context.Context) (srv Service, err error) {
