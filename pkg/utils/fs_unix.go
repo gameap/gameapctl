@@ -3,10 +3,15 @@
 
 package utils
 
+import (
+	"os"
+	"syscall"
+)
+
 func uidAndGidForFile(path string) (uint32, uint32) {
 	stat, err := os.Stat(path)
 	if err != nil {
-		return err
+		return 0, 0
 	}
 	var uid uint32
 	var gid uint32
