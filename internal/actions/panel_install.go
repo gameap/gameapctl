@@ -247,12 +247,6 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	fmt.Println("Updating files permissions ...")
-	err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
-	if err != nil {
-		return errors.WithMessage(err, "failed to change owner")
-	}
-
 	err = configureCron(cliCtx.Context, state)
 	if err != nil {
 		log.Println("Failed to configure cron: ", err)
@@ -267,6 +261,12 @@ func PanelInstall(cliCtx *cli.Context) error {
 	state, err = clearGameAPCache(cliCtx.Context, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to clear panel cache")
+	}
+
+	fmt.Println("Updating files permissions ...")
+	err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to change owner")
 	}
 
 	if state.WebServer != noneWebServer {

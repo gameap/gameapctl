@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
@@ -59,6 +60,18 @@ func WriteContentsToFile(contents []byte, path string) error {
 
 //nolint:funlen,gocognit
 func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]string) error {
+	stat, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	var uid uint32
+	var gid uint32
+
+	if sysStat, ok := stat.Sys().(*syscall.Stat_t); ok {
+		uid = sysStat.Uid
+		gid = sysStat.Gid
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -99,6 +112,13 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 	err = os.Rename(tmpFile.Name(), path)
 	if err != nil {
 		return err
+	}
+
+	if uid != 0 && gid != 0 {
+		err = os.Chown(path, int(uid), int(gid))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
