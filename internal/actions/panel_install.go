@@ -928,6 +928,11 @@ func installApache(
 		return state, errors.WithMessage(err, "failed to enable apache rewrite module")
 	}
 
+	err = utils.ExecCommand("a2ensite", "gameap")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to enable site")
+	}
+
 	err = service.Start(ctx, "apache2")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to start apache")
@@ -1078,16 +1083,14 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 				return state, errors.WithMessage(err, "failed to restart nginx")
 			}
 		case !isTried(1) &&
-			state.WebServer == "apache" && utils.IsFileExists("/etc/apache2/sites-available/000-default.conf"):
+			state.WebServer == "apache":
 			tried[1] = struct{}{}
 
-			err = os.Rename(
-				"/etc/apache2/sites-available/000-default.conf",
-				"/etc/apache2/sites-available/000-default.conf.disabled",
-			)
+			err = utils.ExecCommand("a2dissite", "000-default")
 			if err != nil {
-				return state, errors.WithMessage(err, "failed to rename default apache config")
+				return state, errors.WithMessage(err, "failed to disable 000-default")
 			}
+
 			err = service.Restart(ctx, "apache2")
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to restart apache")

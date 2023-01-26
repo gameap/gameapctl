@@ -33,7 +33,6 @@ linters:
     - noctx
     - prealloc
     - revive
-    - rowserrcheck
     - staticcheck
     - stylecheck
     - thelper
