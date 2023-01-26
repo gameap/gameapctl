@@ -265,6 +265,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	if state.WebServer != noneWebServer {
+		fmt.Println("Checking panel installation...")
 		if state, err = checkInstallation(cliCtx.Context, state); err != nil {
 			fmt.Println("Installation checking failed")
 			log.Println("Installation checking failed")

@@ -49,12 +49,22 @@ jobs:
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [ 1.19.x ]
+        experimantal: [false]
         exclude:
           - distro: 'ubuntu:20.04'
             database: 'sqlite'
           - distro: 'debian:buster'
             database: 'sqlite'
+        include:
+          - distro: 'ubuntu:23.04'
+            database: 'mysql'
+            experimental: true
+          - distro: 'debian:sid'
+            database: 'mysql'
+            experimental: true
+
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
     container:
       image:  ${{ matrix.distro }}
       options: --user root
