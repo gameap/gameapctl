@@ -4,7 +4,6 @@ import (
 	"context"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
-	"github.com/pkg/errors"
 )
 
 type PackageInfo struct {
@@ -32,5 +31,5 @@ func Load(ctx context.Context) (PackageManager, error) {
 		return NewExtendedAPT(&APT{}), nil
 	}
 
-	return nil, errors.New("unsupported distribution")
+	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)
 }
