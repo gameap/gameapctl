@@ -6,9 +6,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,11 +28,13 @@ import (
 const (
 	mysqlDatabase  = "mysql"
 	sqliteDatabase = "sqlite"
+	noneDatabase   = "none"
 )
 
 const (
 	nginxWebServer  = "nginx"
 	apacheWebServer = "apache"
+	noneWebServer   = "none"
 )
 
 var errEmptyPath = errors.New("empty path")
@@ -40,6 +44,7 @@ var errEmptyWebServer = errors.New("empty web server")
 
 type panelInstallState struct {
 	NonInteractive bool
+	HTTPS          bool
 	Host           string
 	HostIP         string
 	Port           string
@@ -205,33 +210,16 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if err != nil {
 			return err
 		}
-
-		fmt.Println("Updating .env")
-		err = utils.FindLineAndReplace(cliCtx.Context, state.Path+"/.env", map[string]string{
-			"DB_CONNECTION=": "DB_CONNECTION=mysql",
-			"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
-			"DB_PORT=":       "DB_PORT=" + state.DBCreds.Port,
-			"DB_DATABASE=":   "DB_DATABASE=" + state.DBCreds.DatabaseName,
-			"DB_USERNAME=":   "DB_USERNAME=" + state.DBCreds.Username,
-			"DB_PASSWORD=":   "DB_PASSWORD=" + state.DBCreds.Password,
-		})
-		if err != nil {
-			return errors.WithMessage(err, "failed to update .env file")
-		}
 	case sqliteDatabase:
 		state, err = installSqlite(cliCtx.Context, state)
 		if err != nil {
 			return err
 		}
+	}
 
-		fmt.Println("Updating .env")
-		err = utils.FindLineAndReplace(cliCtx.Context, state.Path+"/.env", map[string]string{
-			"DB_CONNECTION=": "DB_CONNECTION=sqlite",
-			"DB_DATABASE=":   "DB_DATABASE=database.sqlite",
-		})
-		if err != nil {
-			return errors.WithMessage(err, "failed to update .env file")
-		}
+	state, err = updateDotEnv(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to update .env")
 	}
 
 	err = generateEncryptionKey(state.Path)
@@ -276,6 +264,19 @@ func PanelInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to update admin password")
 	}
 
+	if state.WebServer != noneWebServer {
+		if state, err = checkInstallation(cliCtx.Context, state); err != nil {
+			if state, err = tryToFixPanelInstallation(cliCtx.Context, state); err != nil {
+				return errors.WithMessage(err, "failed to check and fixpanel installation")
+			}
+		}
+	}
+
+	if err = savePanelInstallationDetails(state); err != nil {
+		fmt.Println("Failed to save installation details: ", err.Error())
+		log.Println("Failed to save installation details: ", err)
+	}
+
 	log.Println("GameAP successfully installed")
 
 	fmt.Println("---------------------------------")
@@ -295,11 +296,6 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	if state.Database == sqliteDatabase {
 		fmt.Println("Database file path:", state.Path+"/database.sqlite")
-	}
-
-	if err = savePanelInstallationDetails(state); err != nil {
-		fmt.Println("Failed to save installation details: ", err.Error())
-		log.Println("Failed to save installation details: ", err)
 	}
 
 	fmt.Println()
@@ -396,7 +392,7 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 				result.database = sqliteDatabase
 				fmt.Println("Okay! Will try install SQLite...")
 			case "3":
-				result.database = "none"
+				result.database = noneDatabase
 				fmt.Println("Okay! ...")
 			default:
 				fmt.Println("Please answer 1-3.")
@@ -437,13 +433,13 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 
 				switch num {
 				case "1":
-					result.webServer = "nginx"
+					result.webServer = nginxWebServer
 					fmt.Println("Okay! Will try to install Nginx...")
 				case "2":
-					result.webServer = "apache"
+					result.webServer = apacheWebServer
 					fmt.Println("Okay! Will try to install Apache...")
 				case "3":
-					result.webServer = "none"
+					result.webServer = noneWebServer
 					fmt.Println("Okay! ...")
 				default:
 					fmt.Println("Please answer 1-3.")
@@ -782,6 +778,32 @@ func generateEncryptionKey(dir string) error {
 	return nil
 }
 
+func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	var err error
+
+	fmt.Println("Updating .env")
+
+	url := "http://" + state.Host
+	if state.HTTPS {
+		url = "https://" + state.Host
+	}
+
+	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
+		"APP_URL=":       "APP_URL=" + url,
+		"DB_CONNECTION=": "DB_CONNECTION=" + state.Database,
+		"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
+		"DB_PORT=":       "DB_PORT=" + state.DBCreds.Port,
+		"DB_DATABASE=":   "DB_DATABASE=" + state.DBCreds.DatabaseName,
+		"DB_USERNAME=":   "DB_USERNAME=" + state.DBCreds.Username,
+		"DB_PASSWORD=":   "DB_PASSWORD=" + state.DBCreds.Password,
+	})
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to update .env file")
+	}
+
+	return state, nil
+}
+
 func runMigration(state panelInstallState) error {
 	fmt.Println("Running migration...")
 	var cmd *exec.Cmd
@@ -840,7 +862,7 @@ func installNginx(
 	}
 
 	err = utils.FindLineAndReplace(ctx, "/etc/nginx/nginx.conf", map[string]string{
-		"user  nginx;": "user  www-data;",
+		"user": "user www-data;",
 	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to update nginx config")
@@ -982,6 +1004,112 @@ func updateAdminPassword(state panelInstallState) (panelInstallState, error) {
 	return state, nil
 }
 
+func checkInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	url := "http://" + state.Host + "/api/healthz"
+	if state.HTTPS {
+		url = "https://" + state.Host + "/api/healthz"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return state, err
+	}
+	//nolint:bodyclose
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return state, err
+	}
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to close response body"))
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		return state, errors.New("unsuccessful response from panel")
+	}
+
+	r := struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}{}
+
+	err = json.NewDecoder(response.Body).Decode(&r)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to decode response")
+	}
+
+	if r.Status != "ok" {
+		return state, errors.New("unsuccessful response from panel")
+	}
+
+	return state, nil
+}
+
+func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	fmt.Println("Trying to fix panel installation...")
+
+	tried := map[int]struct{}{}
+	isTried := func(step int) bool {
+		_, ok := tried[step]
+		return ok
+	}
+
+	var err error
+
+	for {
+		switch {
+		case !isTried(0) &&
+			state.WebServer == "nginx" && utils.IsFileExists("/etc/nginx/conf.d/default.conf"):
+			tried[0] = struct{}{}
+
+			err = os.Rename("/etc/nginx/conf.d/default.conf", "/etc/nginx/conf.d/default.conf.disabled")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to rename default nginx config")
+			}
+			err = service.Restart(ctx, "nginx")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to restart nginx")
+			}
+		case !isTried(1) &&
+			state.WebServer == "apache" && utils.IsFileExists("/etc/apache2/sites-available/000-default.conf"):
+			tried[1] = struct{}{}
+
+			err = os.Rename(
+				"/etc/apache2/sites-available/000-default.conf",
+				"/etc/apache2/sites-available/000-default.conf.disabled",
+			)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to rename default apache config")
+			}
+			err = service.Restart(ctx, "apache2")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to restart apache")
+			}
+		case !isTried(2) && utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost":
+			tried[2] = struct{}{}
+			state.DBCreds.Host = "127.0.0.1"
+			state, err = updateDotEnv(ctx, state)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to update .env")
+			}
+		default:
+			return state, errors.New("failed to fix panel installation")
+		}
+
+		state, err = checkInstallation(ctx, state)
+		if err != nil {
+			log.Println(err)
+			continue
+		} else {
+			break
+		}
+	}
+
+	return state, nil
+}
+
 func savePanelInstallationDetails(state panelInstallState) error {
 	saveStruct := struct {
 		Host                 string `json:"host"`
@@ -1006,8 +1134,9 @@ func savePanelInstallationDetails(state panelInstallState) error {
 		return errors.WithMessage(err, "failed to get user home dir")
 	}
 
-	if _, err := os.Stat(homeDir + string(os.PathSeparator) + ".gameapctl"); errors.Is(err, fs.ErrNotExist) {
-		err = os.Mkdir(".gameapctl", 0600)
+	saveFilePath := homeDir + string(os.PathSeparator) + ".gameapctl"
+	if _, err := os.Stat(saveFilePath); errors.Is(err, fs.ErrNotExist) {
+		err = os.Mkdir(saveFilePath, 0600)
 		if err != nil {
 			return err
 		}

@@ -14,6 +14,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+func IsFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func Move(src string, dst string) error {
 	if _, err := os.Stat(src); errors.Is(err, fs.ErrNotExist) {
 		return errors.Errorf("source file %s not found", src)
