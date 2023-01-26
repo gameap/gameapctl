@@ -1058,6 +1058,7 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 	return state, nil
 }
 
+//nolint:funlen
 func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	fmt.Println("Trying to fix panel installation ...")
 
