@@ -807,6 +807,9 @@ func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstal
 	}
 
 	extensions := strings.Split(buf.String(), " ")
+	for i := range extensions {
+		extensions[i] = strings.ToLower(strings.TrimSpace(extensions[i]))
+	}
 
 	for _, extension := range []string{
 		"bcmath", "bz2", "curl", "fileinfo", "gd", "gmp",
