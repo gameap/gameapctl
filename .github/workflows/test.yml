@@ -136,7 +136,7 @@ jobs:
         with:
           name: logs_windows
           path: |
-            ~/AppData/Temp/gameapctl-log?/*log
+            ~/AppData/Temp/
           retention-days: 5
 
   test-cache:
