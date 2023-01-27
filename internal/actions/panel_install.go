@@ -199,6 +199,11 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
+	state, err = checkPHPExtensions(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check php extensions")
+	}
+
 	err = installGameAP(cliCtx.Context, state.Path)
 	if err != nil {
 		return err
@@ -784,6 +789,35 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 
 	state.DBCreds.DatabaseName = dbPath
 	state.DatabaseWasInstalled = true
+
+	return state, nil
+}
+
+func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstallState, error) {
+	cmd := exec.Command("php", "-r", "echo implode(' ', get_loaded_extensions());")
+	buf := &bytes.Buffer{}
+	buf.Grow(1024)
+	cmd.Stdout = buf
+	cmd.Stderr = log.Writer()
+	log.Println("\n", cmd.String())
+
+	err := cmd.Run()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to run php -r")
+	}
+
+	extensions := strings.Split(buf.String(), " ")
+
+	for _, extension := range []string{
+		"bcmath", "bz2", "curl", "fileinfo", "gd", "gmp",
+		"intl", "json", "mbstring", "openssl", "pdo",
+		"pdo_mysql", "pdo_sqlite", "tokenizer", "readline",
+		"xml", "zip",
+	} {
+		if !utils.Contains(extensions, extension) {
+			return state, errors.Errorf("PHP extension %s not found", extension)
+		}
+	}
 
 	return state, nil
 }
