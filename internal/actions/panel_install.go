@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -184,7 +183,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	fmt.Println("Checking for gpg")
+	fmt.Println("Checking for gpg ...")
 	if !utils.IsCommandAvailable("gpg") {
 		fmt.Println("Installing gpg ...")
 		if pm.Install(cliCtx.Context, packagemanager.GnuPGPackage) != nil {
@@ -192,7 +191,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	fmt.Println("Checking for php")
+	fmt.Println("Checking for php ...")
 	if !utils.IsCommandAvailable("php") {
 		fmt.Println("Installing php ...")
 		if pm.Install(cliCtx.Context, packagemanager.PHPPackage) != nil {
@@ -800,14 +799,6 @@ func installGameAP(ctx context.Context, path string) error {
 			log.Println(err)
 		}
 	}(tempDir)
-
-	_, err = os.Stat(filepath.Base(path))
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		err = os.MkdirAll(filepath.Base(path), 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create base directory")
-		}
-	}
 
 	fmt.Println("Downloading GameAP ...")
 	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)

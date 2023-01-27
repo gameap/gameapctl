@@ -20,16 +20,26 @@ func IsFileExists(path string) bool {
 }
 
 func Move(src string, dst string) error {
-	if _, err := os.Stat(src); errors.Is(err, fs.ErrNotExist) {
-		return errors.Errorf("source file %s not found", src)
+	_, err := os.Stat(src)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return errors.WithMessagef(err, "source file %s not found", src)
 	}
+	if err != nil {
+		return errors.WithMessage(err, "failed to stat src file")
+	}
+
 	dstDir := filepath.Dir(dst)
-	if _, err := os.Stat(dstDir); errors.Is(err, fs.ErrNotExist) {
+	_, err = os.Stat(dstDir)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		err = os.MkdirAll(dstDir, 0755)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to create destination directory %s", dst)
 		}
 	}
+	if err != nil {
+		return errors.WithMessage(err, "failed to stat destination directory")
+	}
+
 	return os.Rename(src, dst)
 }
 
