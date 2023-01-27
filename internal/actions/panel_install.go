@@ -201,7 +201,10 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	state, err = checkPHPExtensions(cliCtx.Context, state)
 	if err != nil {
-		return errors.WithMessage(err, "failed to check php extensions")
+		_ = utils.ExecCommand("php", "-i")
+		if pm.Install(cliCtx.Context, packagemanager.PHPExtensionsPackage) != nil {
+			return errors.WithMessage(err, "failed to install php extensions")
+		}
 	}
 
 	err = installGameAP(cliCtx.Context, state.Path)

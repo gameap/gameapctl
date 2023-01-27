@@ -6,6 +6,7 @@ const MySQLServerPackage = "mysql-server"
 const MariaDBServerPackage = "mariadb-server"
 const Lib32GCCPackage = "lib32gcc"
 const PHPPackage = "php"
+const PHPExtensionsPackage = "php"
 const NginxPackage = "nginx"
 const ApachePackage = "apache2"
 
