@@ -136,7 +136,7 @@ jobs:
         with:
           name: logs_windows
           path: |
-            ~/AppData/Temp/
+            ~/AppData/Local/Temp/
           retention-days: 5
 
   test-cache:
