@@ -213,7 +213,7 @@ func initLogFile(command string) string {
 	}
 	log.SetOutput(f)
 
-	return logpath + "/" + logname
+	return filepath.Clean(logpath + string(os.PathSeparator) + logname)
 }
 
 func shutdownContext(ctx context.Context) context.Context {

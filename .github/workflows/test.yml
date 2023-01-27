@@ -42,6 +42,7 @@ jobs:
           parallel: true
 
   integration_test:
+    needs: test
     strategy:
       matrix:
         distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:22.10', 'debian:buster', 'debian:bullseye' ]
@@ -102,6 +103,7 @@ jobs:
           retention-days: 5
 
   integration_test_windows:
+    needs: test
     strategy:
       matrix:
         database: [ mysql, sqlite ]
@@ -139,6 +141,7 @@ jobs:
           retention-days: 5
 
   test-cache:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Install Go

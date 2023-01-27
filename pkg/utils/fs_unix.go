@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-func uidAndGidForFile(path string) (uint32, uint32) {
+func uidAndGIDForFile(path string) (uint32, uint32) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return 0, 0

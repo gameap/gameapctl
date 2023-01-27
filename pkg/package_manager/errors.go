@@ -13,5 +13,5 @@ func NewErrUnsupportedDistribution(distro string) *ErrUnsupportedDistribution {
 }
 
 func (e *ErrUnsupportedDistribution) Error() string {
-	return fmt.Sprintf("unsupported distributin '%s'", e.distro)
+	return fmt.Sprintf("unsupported distribution '%s'", e.distro)
 }

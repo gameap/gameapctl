@@ -3,14 +3,15 @@ package utils
 import (
 	"bufio"
 	"context"
-	"github.com/otiai10/copy"
-	"github.com/pkg/errors"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/otiai10/copy"
+	"github.com/pkg/errors"
 )
 
 func IsFileExists(path string) bool {
@@ -69,7 +70,7 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 		}
 	}(file)
 
-	uid, gid := uidAndGidForFile(path)
+	uid, gid := uidAndGIDForFile(path)
 
 	tmpFile, err := os.CreateTemp("", "find-and-replace")
 	if err != nil {

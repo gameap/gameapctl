@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -176,24 +177,23 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Checking for curl ...")
-	isAvailable := utils.IsCommandAvailable("curl")
-	if !isAvailable {
+	if !utils.IsCommandAvailable("curl") {
 		fmt.Println("Installing curl ...")
 		if pm.Install(cliCtx.Context, packagemanager.CurlPackage) != nil {
 			return errors.WithMessage(err, "failed to install curl")
 		}
 	}
 
-	isAvailable = utils.IsCommandAvailable("gpg")
-	if !isAvailable {
+	fmt.Println("Checking for gpg")
+	if !utils.IsCommandAvailable("gpg") {
 		fmt.Println("Installing gpg ...")
 		if pm.Install(cliCtx.Context, packagemanager.GnuPGPackage) != nil {
 			return errors.WithMessage(err, "failed to install gpg")
 		}
 	}
 
-	isAvailable = utils.IsCommandAvailable("php")
-	if !isAvailable {
+	fmt.Println("Checking for php")
+	if !utils.IsCommandAvailable("php") {
 		fmt.Println("Installing php ...")
 		if pm.Install(cliCtx.Context, packagemanager.PHPPackage) != nil {
 			return errors.WithMessage(err, "failed to install php")
@@ -512,6 +512,10 @@ func filterAndCheckHost(state panelInstallState) (panelInstallState, error) {
 	return state, nil
 }
 
+func isMySQLInstalled(_ context.Context) bool {
+	return utils.IsCommandAvailable("mysqld")
+}
+
 //nolint:funlen,gocognit
 func installMySQL(
 	ctx context.Context,
@@ -530,7 +534,7 @@ func installMySQL(
 
 	//nolint:nestif
 	if state.DBCreds.Host == "" {
-		if isAvailable := utils.IsCommandAvailable("mysqld"); !isAvailable {
+		if !isMySQLInstalled(ctx) {
 			needToCreateDababaseAndUser = true
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
@@ -797,6 +801,14 @@ func installGameAP(ctx context.Context, path string) error {
 		}
 	}(tempDir)
 
+	_, err = os.Stat(filepath.Base(path))
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		err = os.MkdirAll(filepath.Base(path), 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create base directory")
+		}
+	}
+
 	fmt.Println("Downloading GameAP ...")
 	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
 	if err != nil {
@@ -993,7 +1005,7 @@ func installApache(
 func configureCron(_ context.Context, state panelInstallState) error {
 	fmt.Println("Configuring cron ...")
 
-	if isAvailable := utils.IsCommandAvailable("crontab"); !isAvailable {
+	if utils.IsCommandAvailable("crontab") {
 		fmt.Println("Crontab is not available. Skip cron configuration")
 		return nil
 	}
