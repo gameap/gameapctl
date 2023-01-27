@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/otiai10/copy"
@@ -31,6 +32,7 @@ func Move(src string, dst string) error {
 	dstDir := filepath.Dir(dst)
 	_, err = os.Stat(dstDir)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		log.Printf("creating '%s' directory\n", dstDir)
 		err = os.MkdirAll(dstDir, 0755)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to create destination directory %s", dst)
@@ -38,6 +40,20 @@ func Move(src string, dst string) error {
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to stat destination directory")
+	}
+
+	if runtime.GOOS == "windows" {
+		err = copy.Copy(src, dst)
+		if err != nil {
+			return errors.WithMessage(err, "failed to copy files")
+		}
+
+		err = os.RemoveAll(src)
+		if err != nil {
+			return errors.WithMessage(err, "failed to remove files from source directory")
+		}
+
+		return nil
 	}
 
 	return os.Rename(src, dst)
