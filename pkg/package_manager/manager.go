@@ -29,6 +29,8 @@ func Load(ctx context.Context) (PackageManager, error) {
 	switch osInfo.Distribution {
 	case "debian", "ubuntu":
 		return NewExtendedAPT(&APT{}), nil
+	case "windows":
+		return NewWindowsPackageManager(), nil
 	}
 
 	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)
