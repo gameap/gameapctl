@@ -1,8 +1,17 @@
 package utils
 
-import "os/exec"
+import (
+	"log"
+	"os/exec"
+)
 
 func IsCommandAvailable(command string) bool {
-	_, err := exec.LookPath(command)
-	return err == nil
+	path, err := exec.LookPath(command)
+
+	if err == nil {
+		log.Printf("command '%s' available in '%s'\n", command, path)
+		return true
+	}
+
+	return false
 }
