@@ -117,12 +117,17 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return errors.New("empty install command for package")
 	}
 
-	cmd, err := shellquote.Split(p.InstallCommand)
+	splitted, err := shellquote.Split(p.InstallCommand)
 	if err != nil {
 		return errors.WithMessage(err, "failed to split command")
 	}
 
-	return utils.ExecCommand(cmd[0], cmd[1:]...)
+	cmd := exec.Command(splitted[0], splitted[1:]...)
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+	cmd.Dir = dir
+	log.Println('\n', cmd.String())
+	return cmd.Run()
 }
 
 func (pm *WindowsPackageManager) CheckForUpdates(_ context.Context) error {

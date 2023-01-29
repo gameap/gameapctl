@@ -6,7 +6,6 @@ package service
 import (
 	"context"
 	"log"
-	"os/exec"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -34,6 +33,9 @@ var commands = map[string]struct {
 }
 
 func (s *Windows) Start(ctx context.Context, serviceName string) error {
+	_ = utils.ExecCommand("sc", "query", "state= all")
+	_ = utils.ExecCommand("sc", "query", "state=", "all")
+
 	err := s.start(ctx, serviceName)
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
@@ -146,17 +148,9 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 }
 
 func (s *Windows) start(_ context.Context, serviceName string) error {
-	cmd := exec.Command("sc", "start", serviceName)
-	cmd.Stderr = log.Writer()
-	cmd.Stdout = log.Writer()
-	log.Println('\n', cmd.String())
-	return cmd.Run()
+	return utils.ExecCommand("sc", "start", serviceName)
 }
 
 func (s *Windows) stop(_ context.Context, serviceName string) error {
-	cmd := exec.Command("sc", "start", serviceName)
-	cmd.Stderr = log.Writer()
-	cmd.Stdout = log.Writer()
-	log.Println('\n', cmd.String())
-	return cmd.Run()
+	return utils.ExecCommand("sc", "stop", serviceName)
 }
