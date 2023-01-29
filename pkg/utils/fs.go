@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -83,8 +84,15 @@ func WriteContentsToFile(contents []byte, path string) error {
 	return nil
 }
 
-//nolint:funlen,gocognit
 func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]string) error {
+	return findInFileAndReplaceOrAdd(ctx, path, replaceMap, false)
+}
+
+func FindLineAndReplaceOrAdd(ctx context.Context, path string, replaceMap map[string]string) error {
+	return findInFileAndReplaceOrAdd(ctx, path, replaceMap, true)
+}
+
+func findInFileAndReplaceOrAdd(ctx context.Context, path string, replaceMap map[string]string, add bool) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -111,7 +119,7 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 
 	reader := bufio.NewReader(file)
 
-	err = findLineAndReplace(ctx, reader, tmpFile, replaceMap)
+	err = findLineAndReplaceOrAdd(ctx, reader, tmpFile, replaceMap, add)
 	if err != nil {
 		return err
 	}
@@ -139,9 +147,17 @@ func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]
 	return nil
 }
 
-func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap map[string]string) error {
+//nolint:funlen,gocognit
+func findLineAndReplaceOrAdd(
+	_ context.Context,
+	r io.Reader,
+	w io.Writer,
+	replaceMap map[string]string,
+	add bool,
+) error {
 	reader := bufio.NewReader(r)
 	writer := bufio.NewWriter(w)
+
 	for {
 		b, isPrefix, err := reader.ReadLine()
 		line := string(b)
@@ -158,10 +174,22 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 		for needle, replacement := range replaceMap {
 			needleLen := len(needle)
 			trimmedLine := strings.TrimSpace(line)
-			if len(trimmedLine) <= needleLen {
-				continue
+
+			equal := false
+			matched := false
+
+			if len(trimmedLine) >= needleLen {
+				equal = trimmedLine[:needleLen] == needle
 			}
-			if trimmedLine[:needleLen] == needle {
+
+			if !equal {
+				matched, err = regexp.MatchString(needle, trimmedLine)
+				if err != nil {
+					return err
+				}
+			}
+
+			if equal || matched {
 				fi := strings.Index(line, trimmedLine)
 				li := strings.LastIndex(line, trimmedLine)
 
@@ -172,7 +200,9 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 				b.WriteString(line[li+len(trimmedLine):])
 
 				line = b.String()
-				continue
+
+				delete(replaceMap, needle)
+				break
 			}
 		}
 
@@ -183,6 +213,19 @@ func findLineAndReplace(_ context.Context, r io.Reader, w io.Writer, replaceMap 
 		err = writer.WriteByte('\n')
 		if err != nil {
 			return err
+		}
+	}
+
+	if add {
+		for _, replacement := range replaceMap {
+			_, err := writer.WriteString(replacement)
+			if err != nil {
+				return err
+			}
+			err = writer.WriteByte('\n')
+			if err != nil {
+				return err
+			}
 		}
 	}
 

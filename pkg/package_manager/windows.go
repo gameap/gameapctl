@@ -1,11 +1,13 @@
 package packagemanager
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -79,7 +81,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 			continue
 		}
 
-		log.Printf("Package %s is found in path '%s'\n", p, filepath.Dir(packagePath))
+		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(packagePath))
 		break
 	}
 
@@ -136,10 +138,71 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 }
 
 var packageProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	//nolint
-	PHPExtensionsPackage: func(_ context.Context, _ string) error {
-		_ = utils.ExecCommand("php", "-r", "echo php_ini_loaded_file();")
-		_ = utils.ExecCommand("php", "-r", "echo php_ini_scanned_files();")
-		return nil
+	PHPExtensionsPackage: func(ctx context.Context, packagePath string) error {
+		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
+		buf := &bytes.Buffer{}
+		buf.Grow(100)
+		cmd.Stdout = buf
+		cmd.Stderr = log.Writer()
+		log.Println("\n", cmd.String())
+		err := cmd.Run()
+		if err != nil {
+			return errors.WithMessage(err, "failed to get scanned files")
+		}
+
+		scannedFiles := strings.Split(buf.String(), "\n")
+
+		if len(scannedFiles) > 0 {
+			firstScannedFile := strings.TrimSpace(scannedFiles[0])
+			scannedFileDir := filepath.Dir(firstScannedFile)
+
+			exts := []string{
+				"bz2", "curl", "fileinfo", "gd", "gmp", "intl",
+				"mbstring", "openssl", "pdo_mysql", "pdo_sqlite", "zip",
+			}
+
+			for _, e := range exts {
+				err = utils.WriteContentsToFile([]byte(`extension=`+e), filepath.Join(scannedFileDir, e+".ini"))
+				if err != nil {
+					return errors.WithMessagef(err, "failed to create ini for '%s' php extension", e)
+				}
+			}
+		}
+
+		cmd = exec.Command("php", "-r", "echo php_ini_loaded_file();")
+		buf = &bytes.Buffer{}
+		buf.Grow(100)
+		cmd.Stdout = buf
+		cmd.Stderr = log.Writer()
+		log.Println("\n", cmd.String())
+		err = cmd.Run()
+		if err != nil {
+			return errors.WithMessage(err, "failed to get ini loaded file from php")
+		}
+		loadedFiles := strings.Split(buf.String(), "\n")
+		iniFilePath := ""
+		if len(loadedFiles) > 0 {
+			iniFilePath = strings.TrimSpace(loadedFiles[0])
+		}
+		if iniFilePath == "" {
+			iniFilePath = filepath.Join(filepath.Dir(packagePath), "php.ini")
+		}
+		if iniFilePath != "" {
+			return utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
+				";?\\s*extension=bz2\\s*":        "extension=bz2",
+				";?\\s*extension=curl\\s*":       "extension=curl",
+				";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
+				";?\\s*extension=gd\\s*":         "extension=gd",
+				";?\\s*extension=gmp\\s*":        "extension=gmp",
+				";?\\s*extension=intl\\s*":       "extension=intl",
+				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
+				";?\\s*extension=openssl\\s*":    "extension=openssl",
+				";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
+				";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
+				";?\\s*extension=zip\\s*":        "extension=zip",
+			})
+		}
+
+		return errors.New("failed to find config edition way to enable php extensions")
 	},
 }

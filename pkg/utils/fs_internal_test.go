@@ -19,10 +19,10 @@ func Test_findLineAndReplace(t *testing.T) {
 	r := strings.NewReader(config)
 	w := bytes.NewBuffer([]byte{})
 
-	err := findLineAndReplace(context.Background(), r, w, map[string]string{
+	err := findLineAndReplaceOrAdd(context.Background(), r, w, map[string]string{
 		"SOME_VAR2=": "SOME_VAR2=changed_value",
 		"SOME_VAR3=": "SOME_VAR3=changed_value3",
-	})
+	}, true)
 
 	require.NoError(t, err)
 	assert.Equal(
@@ -41,10 +41,10 @@ func Test_findLineAndReplace_withSpaces(t *testing.T) {
 	r := strings.NewReader(configWithSpaces)
 	w := bytes.NewBuffer([]byte{})
 
-	err := findLineAndReplace(context.Background(), r, w, map[string]string{
+	err := findLineAndReplaceOrAdd(context.Background(), r, w, map[string]string{
 		"SOME_VAR2=": "SOME_VAR2=changed_value",
 		"SOME_VAR3=": "SOME_VAR3=changed_value3",
-	})
+	}, true)
 
 	require.NoError(t, err)
 	assert.Equal(
@@ -89,11 +89,11 @@ func Test_findLineAndReplace_nginxConfig(t *testing.T) {
 	r := strings.NewReader(nginxConfig)
 	w := bytes.NewBuffer([]byte{})
 
-	err := findLineAndReplace(context.Background(), r, w, map[string]string{
+	err := findLineAndReplaceOrAdd(context.Background(), r, w, map[string]string{
 		"server_name":          "server_name	gameap.ru;",
 		"listen":               "listen	81;",
 		"fastcgi_pass    unix": "fastcgi_pass	unix:/var/run/php/php8.1-fpm.sock;",
-	})
+	}, false)
 	result := w.String()
 
 	require.NoError(t, err)
@@ -113,4 +113,48 @@ func Test_findLineAndReplace_nginxConfig(t *testing.T) {
 		"fastcgi_pass	unix:/var/run/php/php8.1-fpm.sock;",
 	)
 	assert.Equal(t, "}\n", result[len(result)-2:])
+}
+
+func Test_findLineAndReplaceOrAdd(t *testing.T) {
+	r := strings.NewReader(config)
+	w := bytes.NewBuffer([]byte{})
+
+	err := findLineAndReplaceOrAdd(context.Background(), r, w, map[string]string{
+		"SOME_VAR2=": "SOME_VAR2=changed_value",
+		"SOME_VAR3=": "SOME_VAR3=changed_value3",
+		"SOME_VAR4=": "SOME_VAR4=new_value4",
+	}, true)
+
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"SOME_VAR1=some_value\nSOME_VAR2=changed_value\nSOME_VAR3=changed_value3\nSOME_VAR4=new_value4\n",
+		w.String(),
+	)
+}
+
+var iniFileContents = `;extension=bz2
+extension=curl
+extension=gd2
+;extension=gettext
+`
+
+func Test_findLineAndReplaceOrAddRegex(t *testing.T) {
+	r := strings.NewReader(iniFileContents)
+	w := bytes.NewBuffer([]byte{})
+
+	err := findLineAndReplaceOrAdd(context.Background(), r, w, map[string]string{
+		";?\\s*extension=bz2\\s*":     "extension=bz2",
+		";?\\s*extension=curl\\s*":    "extension=curl",
+		";?\\s*extension=gd2\\s*":     "extension=gd2",
+		";?\\s*extension=gettext\\s*": ";extension=gettext",
+		";?\\s*extension=exif\\s*":    "extension=exif",
+	}, true)
+
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"extension=bz2\nextension=curl\nextension=gd2\n;extension=gettext\nextension=exif\n",
+		w.String(),
+	)
 }
