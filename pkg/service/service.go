@@ -71,6 +71,8 @@ func Load(ctx context.Context) (srv Service, err error) {
 				service = NewSystemd()
 				return
 			}
+		case "windows":
+			service = NewWindows()
 		default:
 			err = errors.New("unsupported distribution")
 		}
