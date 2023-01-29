@@ -201,6 +201,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 
 	state, err = checkPHPExtensions(cliCtx.Context, state)
 	if err != nil {
+		fmt.Println("Installing needed php extensions ...")
 		if pm.Install(cliCtx.Context, packagemanager.PHPExtensionsPackage) != nil {
 			return errors.WithMessage(err, "failed to install php extensions")
 		}
