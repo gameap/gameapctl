@@ -20,7 +20,7 @@ func NewWindows() *Windows {
 }
 
 var aliases = map[string][]string{
-	"mysql": {"mariadb"},
+	"mysql": {"mysql57", "mysql80", "mariadb"},
 }
 
 var commands = map[string]struct {
