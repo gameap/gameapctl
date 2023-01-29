@@ -122,6 +122,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return errors.WithMessage(err, "failed to split command")
 	}
 
+	//nolint:gosec
 	cmd := exec.Command(splitted[0], splitted[1:]...)
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
