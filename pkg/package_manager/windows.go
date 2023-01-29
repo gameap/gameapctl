@@ -136,6 +136,7 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 }
 
 var packageProcessors = map[string]func(ctx context.Context, packagePath string) error{
+	//nolint
 	PHPExtensionsPackage: func(_ context.Context, _ string) error {
 		_ = utils.ExecCommand("php", "-r", "echo php_ini_loaded_file();")
 		_ = utils.ExecCommand("php", "-r", "echo php_ini_scanned_files();")
