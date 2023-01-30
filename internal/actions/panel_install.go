@@ -927,6 +927,7 @@ func runMigration(state panelInstallState) error {
 	return nil
 }
 
+//nolint:funlen
 func installNginx(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -937,10 +938,19 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to install nginx")
 	}
 
+	gameapHostConfPath, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.NginxPackage,
+		"gameap_host_conf",
+	)
+	if err != nil {
+		return state, err
+	}
+
 	err = utils.DownloadFile(
 		ctx,
 		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/nginx-no-ssl.conf",
-		"/etc/nginx/conf.d/gameap.conf",
+		gameapHostConfPath,
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to download nginx config")
@@ -951,19 +961,51 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to define php version")
 	}
 
-	fpmUnixSocket := fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVersion)
+	socketPath, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.PHPPackage,
+		"fpm_sock",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to get fpm_sock config for distro")
+	}
 
-	err = utils.FindLineAndReplace(ctx, "/etc/nginx/conf.d/gameap.conf", map[string]string{
-		"server_name":                  fmt.Sprintf("server_name       %s;", state.Host),
-		"listen":                       fmt.Sprintf("listen       %s;", state.Port),
-		"root /var/www/gameap/public;": fmt.Sprintf("root       %s%c%s;", state.Path, os.PathSeparator, "public"),
-		"fastcgi_pass    unix":         fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
+	if socketPath != "" {
+		fpmUnixSocket := fmt.Sprintf(socketPath, phpVersion)
+		err = utils.FindLineAndReplace(ctx, gameapHostConfPath, map[string]string{
+			"fastcgi_pass    unix": fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
+		})
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to update fastcgi_pass in nginx host config")
+		}
+	} else {
+		err = utils.FindLineAndReplace(ctx, gameapHostConfPath, map[string]string{
+			"#fastcgi_pass    localhost": "fastcgi_pass localhost:9000;",
+		})
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to update fastcgi_pass in nginx host config")
+		}
+	}
+
+	err = utils.FindLineAndReplace(ctx, gameapHostConfPath, map[string]string{
+		"server_name":                  fmt.Sprintf("server_name %s;", state.Host),
+		"listen":                       fmt.Sprintf("listen %s;", state.Port),
+		"root /var/www/gameap/public;": fmt.Sprintf("root %s%c%s;", state.Path, os.PathSeparator, "public"),
 	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to update nginx host config")
 	}
 
-	err = utils.FindLineAndReplace(ctx, "/etc/nginx/nginx.conf", map[string]string{
+	nginxMainConf, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.NginxPackage,
+		"nginx_conf",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to get nginx_conf")
+	}
+
+	err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
 		"user": "user www-data;",
 	})
 	if err != nil {
@@ -982,6 +1024,7 @@ func installNginx(
 	return state, nil
 }
 
+//nolint:funlen
 func installApache(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -992,16 +1035,25 @@ func installApache(
 		return state, errors.WithMessage(err, "failed to install apache")
 	}
 
+	gameapHostConf, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.ApachePackage,
+		"gameap_host_conf",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to get gameap_host_conf")
+	}
+
 	err = utils.DownloadFile(
 		ctx,
 		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/apache-no-ssl.conf",
-		"/etc/apache2/sites-available/gameap.conf",
+		gameapHostConf,
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to download apache config")
 	}
 
-	err = utils.FindLineAndReplace(ctx, "/etc/apache2/sites-available/gameap.conf", map[string]string{
+	err = utils.FindLineAndReplace(ctx, gameapHostConf, map[string]string{
 		"ServerName":                         fmt.Sprintf("ServerName %s", state.Host),
 		"DocumentRoot":                       fmt.Sprintf("DocumentRoot %s/public", state.Path),
 		"<VirtualHost":                       fmt.Sprintf("<VirtualHost *:%s>", state.Port),
@@ -1012,7 +1064,7 @@ func installApache(
 	}
 
 	if state.Port != "80" {
-		err = utils.FindLineAndReplace(ctx, "/etc/apache2/sites-available/gameap.conf", map[string]string{
+		err = utils.FindLineAndReplace(ctx, gameapHostConf, map[string]string{
 			"# Listen 80": fmt.Sprintf("Listen %s", state.Port),
 		})
 		if err != nil {

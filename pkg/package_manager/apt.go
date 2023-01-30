@@ -459,7 +459,7 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if osInfo.Distribution == DistributinionDebian {
+	if osInfo.Distribution == DistributionDebian {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb https://packages.sury.org/php/ %s main", osInfo.DistributionCodename)),
 			"/etc/apt/sources.list.d/php.list",

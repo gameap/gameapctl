@@ -15,21 +15,23 @@ import (
 )
 
 type pack struct {
-	DownloadPathes []string
-	LookupPath     []string
-	InstallCommand string
+	DownloadURLs       []string
+	LookupPath         []string
+	InstallCommand     string
+	DefaultInstallPath string
 }
 
 var repository = map[string]pack{
 	NginxPackage: {
 		LookupPath: []string{"nginx"},
-		DownloadPathes: []string{
+		DownloadURLs: []string{
 			"http://nginx.org/download/nginx-1.22.1.zip",
 		},
+		DefaultInstallPath: "\\gameap\\tools\\nginx",
 	},
 	MariaDBServerPackage: {
 		LookupPath: []string{"mysql", "mariadb"},
-		DownloadPathes: []string{
+		DownloadURLs: []string{
 			"https://mirror.23m.com/mariadb/mariadb-10.6.11/winx64-packages/mariadb-10.6.11-winx64.msi",
 			"https://ftp.bme.hu/pub/mirrors/mariadb/mariadb-10.6.11/winx64-packages/mariadb-10.6.11-winx64.msi",
 		},
@@ -37,7 +39,7 @@ var repository = map[string]pack{
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
-		DownloadPathes: []string{
+		DownloadURLs: []string{
 			"https://windows.php.net/downloads/releases/php-8.2.1-Win32-vs16-x64.zip",
 		},
 	},
@@ -102,7 +104,11 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return errors.WithMessagef(err, "failed to make temp directory")
 	}
 
-	for _, path := range p.DownloadPathes {
+	if p.InstallCommand == "" {
+		return nil
+	}
+
+	for _, path := range p.DownloadURLs {
 		err = utils.DownloadFile(ctx, path, dir)
 		if err != nil {
 			log.Println("failed to download file")
@@ -111,10 +117,6 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 
 		break
-	}
-
-	if p.InstallCommand == "" {
-		return errors.New("empty install command for package")
 	}
 
 	splitted, err := shellquote.Split(p.InstallCommand)
@@ -210,5 +212,20 @@ var packageProcessors = map[string]func(ctx context.Context, packagePath string)
 		}
 
 		return errors.New("failed to find config edition way to enable php extensions")
+	},
+	NginxPackage: func(ctx context.Context, _ string) error {
+		p := repository[NginxPackage]
+
+		var err error
+		for _, url := range p.DownloadURLs {
+			err = utils.Download(ctx, url, p.DefaultInstallPath)
+			if err != nil {
+				log.Printf("failed to download nginx from url %s, error %s\n", url, err)
+				continue
+			}
+			break
+		}
+
+		return err
 	},
 }
