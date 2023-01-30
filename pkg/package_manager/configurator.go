@@ -20,8 +20,8 @@ var configs = map[string]map[string]map[string]string{
 			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
 		},
 		DistributionWindows: {
-			"nginx_conf":       "C:\\gameap\\tools\\nginx\\nginx.conf",
-			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf.d\\gameap.conf",
+			"nginx_conf":       "C:\\gameap\\tools\\nginx\\conf\\nginx.conf",
+			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf\\gameap.conf",
 		},
 	},
 	ApachePackage: {
