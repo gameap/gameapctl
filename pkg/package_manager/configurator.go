@@ -20,8 +20,8 @@ var configs = map[string]map[string]map[string]string{
 			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
 		},
 		DistributionWindows: {
-			"nginx_conf":       "\\gameap\\tools\\nginx\\nginx.conf",
-			"gameap_host_conf": "\\gameap\\tools\\nginx\\conf.d\\gameap.conf",
+			"nginx_conf":       "C:\\gameap\\tools\\nginx\\nginx.conf",
+			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf.d\\gameap.conf",
 		},
 	},
 	ApachePackage: {
@@ -32,7 +32,7 @@ var configs = map[string]map[string]map[string]string{
 			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
 		},
 		DistributionWindows: {
-			"gameap_host_conf": "\\gameap\\tools\\apache2\\sites-available\\gameap.conf",
+			"gameap_host_conf": "C:\\gameap\\tools\\apache2\\sites-available\\gameap.conf",
 		},
 	},
 	PHPPackage: {

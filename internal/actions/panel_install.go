@@ -935,7 +935,7 @@ func installNginx(
 ) (panelInstallState, error) {
 	err := pm.Install(ctx, packagemanager.NginxPackage)
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to install nginx")
+		return state, errors.WithMessage(err, "failed to install package")
 	}
 
 	gameapHostConfPath, err := packagemanager.ConfigForDistro(

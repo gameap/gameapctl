@@ -33,8 +33,6 @@ var commands = map[string]struct {
 }
 
 func (s *Windows) Start(ctx context.Context, serviceName string) error {
-	_ = utils.ExecCommand("sc", "query", "state=", "all")
-
 	err := s.start(ctx, serviceName)
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
