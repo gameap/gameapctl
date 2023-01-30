@@ -27,7 +27,7 @@ var repository = map[string]pack{
 		DownloadURLs: []string{
 			"http://nginx.org/download/nginx-1.22.1.zip",
 		},
-		DefaultInstallPath: "\\gameap\\tools\\nginx",
+		DefaultInstallPath: "C:\\gameap\\tools\\nginx",
 	},
 	MariaDBServerPackage: {
 		LookupPath: []string{"mysql", "mariadb"},
