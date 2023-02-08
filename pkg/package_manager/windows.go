@@ -218,7 +218,7 @@ var packageProcessors = map[string]func(ctx context.Context, packagePath string)
 
 		var err error
 		for _, url := range p.DownloadURLs {
-			log.Println("Trying to download nginx", url)
+			log.Println("Trying to download nginx", url, "to", p.DefaultInstallPath)
 			err = utils.Download(ctx, url, p.DefaultInstallPath)
 			if err != nil {
 				log.Printf("failed to download nginx from url %s, error %s\n", url, err)
