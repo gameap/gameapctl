@@ -68,7 +68,8 @@ var repository = map[string]pack{
 		DownloadURLs: []string{
 			"https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe",
 		},
-		DefaultInstallPath: "C:\\Windows\\System32\\winsw.exe",
+		DefaultInstallPath: "C:\\Windows\\System32",
+		InstallCommand:     "mv WinSW-x64.exe winsw.exe",
 	},
 }
 
