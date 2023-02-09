@@ -231,6 +231,9 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
+	log.Println("create service config")
+	log.Println(string(out))
+
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
 		return errors.WithMessagef(err, "failed to save config for service '%s' ", packName)
