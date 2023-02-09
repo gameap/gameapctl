@@ -149,7 +149,7 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 }
 
 func (s *Windows) start(_ context.Context, serviceName string) error {
-	if s.isServiceExists(context.Background(), serviceName) {
+	if IsExists(context.Background(), serviceName) {
 		return utils.ExecCommand("sc", "start", serviceName)
 	}
 
@@ -157,14 +157,14 @@ func (s *Windows) start(_ context.Context, serviceName string) error {
 }
 
 func (s *Windows) stop(_ context.Context, serviceName string) error {
-	if s.isServiceExists(context.Background(), serviceName) {
+	if IsExists(context.Background(), serviceName) {
 		return utils.ExecCommand("sc", "stop", serviceName)
 	}
 
 	return NewErrServiceNotFound(serviceName)
 }
 
-func (s *Windows) isServiceExists(_ context.Context, serviceName string) bool {
+func IsExists(_ context.Context, serviceName string) bool {
 	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
 	buf := &bytes.Buffer{}
 	buf.Grow(10240)

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
@@ -212,6 +213,11 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		if err != nil {
 			return errors.WithMessage(err, "failed to install winsw")
 		}
+	}
+
+	if service.IsExists(ctx, packName) {
+		log.Printf("Service '%s' is already exists", packName)
+		return nil
 	}
 
 	out, err := xml.Marshal(struct {

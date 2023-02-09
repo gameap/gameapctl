@@ -1,7 +1,13 @@
 package packagemanager
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"log"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/pkg/errors"
@@ -9,7 +15,7 @@ import (
 
 var ErrConfigNotFound = errors.New("config not found")
 
-var configs = map[string]map[string]map[string]string{
+var staticConfigs = map[string]map[string]map[string]string{
 	NginxPackage: {
 		DistributionDebian: {
 			"nginx_conf":       "/etc/nginx/nginx.conf",
@@ -48,20 +54,94 @@ var configs = map[string]map[string]map[string]string{
 	},
 }
 
+var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
+	NginxPackage: {
+		DistributionWindows: {
+			"nginx_conf": func(ctx context.Context) (string, error) {
+				nginxBinaryPath, err := defineWindowsServiceBinaryPath(ctx, NginxPackage)
+				if err != nil {
+					return "", err
+				}
+
+				return filepath.Join(nginxBinaryPath, "conf\\nginx.conf"), nil
+			},
+			"gameap_host_conf": func(ctx context.Context) (string, error) {
+				nginxBinaryPath, err := defineWindowsServiceBinaryPath(ctx, NginxPackage)
+				if err != nil {
+					return "", err
+				}
+
+				return filepath.Join(nginxBinaryPath, "conf\\gameap.conf"), nil
+			},
+		},
+	},
+}
+
 func ConfigForDistro(ctx context.Context, packName string, configName string) (string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	if _, ok := configs[packName]; !ok {
+	// Dynamic config
+	//nolint:nestif
+	if _, ok := dynamicConfig[packName]; ok {
+		if _, ok = staticConfigs[packName][osInfo.Distribution]; ok {
+			if _, ok = staticConfigs[packName][osInfo.Distribution][configName]; ok {
+				config, err := dynamicConfig[packName][osInfo.Distribution][configName](ctx)
+				if err != nil {
+					return "", errors.WithMessage(err, "failed to get dynamic config")
+				}
+				if config != "" {
+					return config, nil
+				}
+			}
+		}
+	}
+
+	// Static config
+	if _, ok := staticConfigs[packName]; !ok {
 		return "", ErrConfigNotFound
 	}
 
-	if _, ok := configs[packName][osInfo.Distribution]; !ok {
+	if _, ok := staticConfigs[packName][osInfo.Distribution]; !ok {
 		return "", ErrConfigNotFound
 	}
 
-	if _, ok := configs[packName][osInfo.Distribution][configName]; !ok {
+	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; !ok {
 		return "", ErrConfigNotFound
 	}
 
-	return configs[packName][osInfo.Distribution][configName], nil
+	return staticConfigs[packName][osInfo.Distribution][configName], nil
+}
+
+func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {
+	cmd := exec.Command("sc", "qc", serviceName)
+	buf := &bytes.Buffer{}
+	buf.Grow(1024)
+	cmd.Stdout = buf
+	cmd.Stderr = log.Writer()
+
+	log.Println("\n", cmd.String())
+
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		//nolint:gocritic
+		switch key {
+		case "BINARY_PATH_NAME":
+			return value, nil
+		}
+	}
+
+	return "", nil
 }

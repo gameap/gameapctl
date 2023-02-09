@@ -26,3 +26,7 @@ func (s *WindowsNil) Stop(ctx context.Context, serviceName string) error {
 func (s *WindowsNil) Restart(ctx context.Context, serviceName string) error {
 	return errors.New("unsupported")
 }
+
+func IsExists(_ context.Context, serviceName string) bool {
+	panic("function is not implemented")
+}
