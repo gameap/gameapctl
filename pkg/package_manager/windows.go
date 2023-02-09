@@ -79,6 +79,7 @@ func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) e
 	return nil
 }
 
+//nolint:funlen
 func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName string, p pack) error {
 	log.Println("Installing", packName, "package")
 	var err error
@@ -296,7 +297,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 }
 
 var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	PHPPackage: func(ctx context.Context, packagePath string) error {
+	PHPPackage: func(_ context.Context, _ string) error {
 		p := repository[PHPPackage]
 
 		path, _ := os.LookupEnv("PATH")
