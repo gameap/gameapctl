@@ -83,8 +83,8 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 	// Dynamic config
 	//nolint:nestif
 	if _, ok := dynamicConfig[packName]; ok {
-		if _, ok = staticConfigs[packName][osInfo.Distribution]; ok {
-			if _, ok = staticConfigs[packName][osInfo.Distribution][configName]; ok {
+		if _, ok = dynamicConfig[packName][osInfo.Distribution]; ok {
+			if _, ok = dynamicConfig[packName][osInfo.Distribution][configName]; ok {
 				config, err := dynamicConfig[packName][osInfo.Distribution][configName](ctx)
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to get dynamic config")
