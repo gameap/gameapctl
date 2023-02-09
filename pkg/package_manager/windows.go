@@ -12,6 +12,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
 
 type pack struct {
@@ -19,7 +20,12 @@ type pack struct {
 	LookupPath         []string
 	InstallCommand     string
 	DefaultInstallPath string
+	ServiceConfig      *WinSWServiceConfig
 }
+
+const WinSWPackage = "winsw"
+
+const servicesConfigPath = "C:\\gameap\\services"
 
 var repository = map[string]pack{
 	NginxPackage: {
@@ -28,6 +34,14 @@ var repository = map[string]pack{
 			"http://nginx.org/download/nginx-1.22.1.zip",
 		},
 		DefaultInstallPath: "C:\\gameap\\tools\\nginx",
+		ServiceConfig: &WinSWServiceConfig{
+			ID:               "nginx",
+			Name:             "nginx",
+			Executable:       "nginx",
+			WorkingDirectory: "C:\\gameap\\tools\\nginx",
+			StopExecutable:   "nginx",
+			StopArguments:    "-s stop",
+		},
 	},
 	MariaDBServerPackage: {
 		LookupPath: []string{"mysql", "mariadb"},
@@ -49,10 +63,16 @@ var repository = map[string]pack{
 		LookupPath:         []string{"php"},
 		DefaultInstallPath: "C:\\php",
 	},
+	WinSWPackage: {
+		LookupPath: []string{"winsw"},
+		DownloadURLs: []string{
+			"https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe",
+		},
+		DefaultInstallPath: "C:\\Windows\\System32\\winsw.exe",
+	},
 }
 
-type WindowsPackageManager struct {
-}
+type WindowsPackageManager struct{}
 
 func NewWindowsPackageManager() *WindowsPackageManager {
 	return &WindowsPackageManager{}
@@ -147,6 +167,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 	}
 
+	if p.ServiceConfig != nil {
+		err = pm.installService(ctx, packName, p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install service")
+		}
+	}
+
 	postProcessor, ok := packagePostProcessors[packName]
 	if ok {
 		err = postProcessor(ctx, packagePath)
@@ -168,6 +195,35 @@ func (pm *WindowsPackageManager) Remove(_ context.Context, _ ...string) error {
 
 func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
+}
+
+func (pm *WindowsPackageManager) installService(ctx context.Context, packName string, p pack) error {
+	_, err := exec.LookPath(repository[WinSWPackage].LookupPath[0])
+	if err != nil {
+		err = pm.Install(ctx, WinSWPackage)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install winsw")
+		}
+	}
+
+	out, err := yaml.Marshal(p.ServiceConfig)
+	if err != nil {
+		return errors.WithMessage(err, "failed to marshal service config")
+	}
+
+	configPath := filepath.Join(servicesConfigPath, packName+".yaml")
+
+	err = utils.WriteContentsToFile(out, configPath)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to save config for service '%s' ", packName)
+	}
+
+	err = utils.ExecCommand("winsw", "install", configPath)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to install service '%s'", packName)
+	}
+
+	return nil
 }
 
 var packagePreProcessors = map[string]func(ctx context.Context, packagePath string) error{
@@ -303,4 +359,20 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		path, _ := os.LookupEnv("PATH")
 		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
+}
+
+type WinSWServiceConfig struct {
+	ID               string `yaml:"id"`
+	Name             string `yaml:"name"`
+	Executable       string `yaml:"executable"`
+	WorkingDirectory string `yaml:"workingdirectory,omitempty"`
+	Arguments        string `yaml:"arguments,omitempty"`
+
+	StopExecutable string `yaml:"stopexecutable,omitempty"`
+	StopArguments  string `yaml:"stoparguments,omitempty"`
+
+	ServiceAccount struct {
+		Username string `yaml:"username,omitempty"`
+		Password string `yaml:"password,omitempty"`
+	} `yaml:"serviceaccount,omitempty"`
 }

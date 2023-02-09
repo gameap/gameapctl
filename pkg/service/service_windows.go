@@ -4,10 +4,12 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"log"
 	"os/exec"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -162,7 +164,7 @@ func (s *Windows) stop(_ context.Context, serviceName string) error {
 	return NewErrServiceNotFound(serviceName)
 }
 
-func (s *Windows) isServiceExists(_ context.Context, _ string) bool {
+func (s *Windows) isServiceExists(_ context.Context, serviceName string) bool {
 	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
 	buf := &bytes.Buffer{}
 	buf.Grow(10240)
@@ -175,7 +177,74 @@ func (s *Windows) isServiceExists(_ context.Context, _ string) bool {
 	}
 
 	log.Println("\n", cmd.String())
-	log.Println(buf.String())
+
+	services, err := parseScQueryex(buf.Bytes())
+	if err != nil {
+		return false
+	}
+
+	for _, winservice := range services {
+		if winservice.ServiceName == serviceName {
+			return true
+		}
+	}
 
 	return false
+}
+
+type windowsService struct {
+	ServiceName   string
+	DisplayName   string
+	Type          string
+	State         string
+	Win32ExitCode string
+	ExitCode      string
+	Checkpoint    string
+	WaitHint      string
+	PID           string
+	Flags         string
+}
+
+func parseScQueryex(buf []byte) ([]windowsService, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(buf))
+	services := make([]windowsService, 0)
+	var s windowsService
+
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "SERVICE_NAME":
+			s.ServiceName = value
+		case "DISPLAY_NAME":
+			s.DisplayName = value
+		case "TYPE":
+			s.Type = value
+		case "STATE":
+			s.State = value
+		case "WIN32_EXIT_CODE":
+			s.Win32ExitCode = value
+		case "SERVICE_EXIT_CODE":
+			s.ExitCode = value
+		case "CHECKPOINT":
+			s.Checkpoint = value
+		case "WAIT_HINT":
+			s.WaitHint = value
+		case "PID":
+			s.PID = value
+		case "FLAGS":
+			s.Flags = value
+
+			services = append(services, s)
+			s = windowsService{}
+		}
+	}
+
+	return services, nil
 }
