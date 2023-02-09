@@ -207,7 +207,12 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	out, err := xml.Marshal(p.ServiceConfig)
+	out, err := xml.Marshal(struct {
+		Service *WinSWServiceConfig `xml:"service"`
+	}{
+		Service: p.ServiceConfig,
+	})
+
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
