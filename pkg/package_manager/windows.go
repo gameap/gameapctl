@@ -3,6 +3,7 @@ package packagemanager
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"log"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
 )
 
 type pack struct {
@@ -207,7 +207,7 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	out, err := yaml.Marshal(p.ServiceConfig)
+	out, err := xml.Marshal(p.ServiceConfig)
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
@@ -219,7 +219,7 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	configPath := filepath.Join(servicesConfigPath, packName+".yml")
+	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
@@ -370,17 +370,17 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 }
 
 type WinSWServiceConfig struct {
-	ID               string `yaml:"id"`
-	Name             string `yaml:"name"`
-	Executable       string `yaml:"executable"`
-	WorkingDirectory string `yaml:"workingdirectory,omitempty"`
-	Arguments        string `yaml:"arguments,omitempty"`
+	ID               string `xml:"id"`
+	Name             string `xml:"name"`
+	Executable       string `xml:"executable"`
+	WorkingDirectory string `xml:"workingdirectory,omitempty"`
+	Arguments        string `xml:"arguments,omitempty"`
 
-	StopExecutable string `yaml:"stopexecutable,omitempty"`
-	StopArguments  string `yaml:"stoparguments,omitempty"`
+	StopExecutable string `xml:"stopexecutable,omitempty"`
+	StopArguments  string `xml:"stoparguments,omitempty"`
 
 	ServiceAccount struct {
-		Username string `yaml:"username,omitempty"`
-		Password string `yaml:"password,omitempty"`
-	} `yaml:"serviceaccount,omitempty"`
+		Username string `xml:"username,omitempty"`
+		Password string `xml:"password,omitempty"`
+	} `xml:"serviceaccount,omitempty"`
 }
