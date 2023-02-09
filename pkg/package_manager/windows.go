@@ -214,10 +214,11 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	s := serviceConfig{
-		Service: *p.ServiceConfig,
-	}
-	out, err := xml.Marshal(s)
+	out, err := xml.Marshal(struct {
+		WinSWServiceConfig
+		XMLName struct{} `xml:"service"`
+	}{WinSWServiceConfig: *p.ServiceConfig})
+
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
@@ -380,10 +381,6 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		path, _ := os.LookupEnv("PATH")
 		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
-}
-
-type serviceConfig struct {
-	Service WinSWServiceConfig `xml:"service"`
 }
 
 type WinSWServiceConfig struct {
