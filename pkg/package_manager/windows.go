@@ -134,6 +134,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	}
 
 	if packagePath != "" {
+		if p.ServiceConfig != nil {
+			err = pm.installService(ctx, packName, p)
+			if err != nil {
+				return errors.WithMessage(err, "failed to install service")
+			}
+		}
+
 		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", packagePath, packName)
 		return nil
 	}
