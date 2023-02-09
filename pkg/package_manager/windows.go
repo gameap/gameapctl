@@ -58,6 +58,13 @@ var repository = map[string]pack{
 			"https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip",
 		},
 		DefaultInstallPath: "C:\\php",
+		ServiceConfig: &WinSWServiceConfig{
+			ID:               "php-fpm",
+			Name:             "php-fpm",
+			Executable:       "php-cgi",
+			Arguments:        "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
+			WorkingDirectory: "C:\\php",
+		},
 	},
 	PHPExtensionsPackage: {
 		LookupPath:         []string{"php"},
@@ -207,12 +214,10 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	out, err := xml.Marshal(struct {
-		Service *WinSWServiceConfig `xml:"service"`
-	}{
-		Service: p.ServiceConfig,
-	})
-
+	s := serviceConfig{
+		Service: *p.ServiceConfig,
+	}
+	out, err := xml.Marshal(s)
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
@@ -372,6 +377,10 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		path, _ := os.LookupEnv("PATH")
 		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
+}
+
+type serviceConfig struct {
+	Service WinSWServiceConfig `xml:"service"`
 }
 
 type WinSWServiceConfig struct {

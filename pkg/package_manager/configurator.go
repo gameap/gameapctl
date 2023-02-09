@@ -43,7 +43,7 @@ var configs = map[string]map[string]map[string]string{
 			"fpm_sock": "unix:/var/run/php/php%s-fpm.sock",
 		},
 		DistributionWindows: {
-			"fpm_sock": "",
+			"fpm_sock": "127.0.0.1:9934",
 		},
 	},
 }
