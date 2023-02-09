@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -43,12 +44,6 @@ var staticConfigs = map[string]map[string]map[string]string{
 		},
 	},
 	PHPPackage: {
-		DistributionDebian: {
-			"fpm_sock": "unix:/var/run/php/php%s-fpm.sock",
-		},
-		DistributionUbuntu: {
-			"fpm_sock": "unix:/var/run/php/php%s-fpm.sock",
-		},
 		DistributionWindows: {
 			"fpm_sock": "127.0.0.1:9934",
 		},
@@ -56,12 +51,34 @@ var staticConfigs = map[string]map[string]map[string]string{
 }
 
 var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
+	PHPPackage: {
+		DistributionDebian: {
+			"fpm_sock": func(ctx context.Context) (string, error) {
+				phpVerion, err := DefinePHPVersion()
+				if err != nil {
+					return "", err
+				}
+
+				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+			},
+		},
+		DistributionUbuntu: {
+			"fpm_sock": func(ctx context.Context) (string, error) {
+				phpVerion, err := DefinePHPVersion()
+				if err != nil {
+					return "", err
+				}
+
+				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+			},
+		},
+	},
 	NginxPackage: {
 		DistributionWindows: {
 			"nginx_conf": func(ctx context.Context) (string, error) {
 				path, err := defineNginxPath(ctx)
 				if err != nil {
-					return "", err
+					return "", errors.WithMessage(err, "failed to define nginx path")
 				}
 
 				return filepath.Join(path, "conf", "nginx.conf"), nil
@@ -69,7 +86,7 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 			"gameap_host_conf": func(ctx context.Context) (string, error) {
 				path, err := defineNginxPath(ctx)
 				if err != nil {
-					return "", err
+					return "", errors.WithMessage(err, "failed to define nginx path")
 				}
 
 				return filepath.Join(path, "conf", "gameap.conf"), nil
@@ -116,13 +133,13 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 func defineNginxPath(ctx context.Context) (string, error) {
 	path, err := findNginxDirWindows(ctx)
 	if err != nil {
-		return "", err
+		return "", errors.WithMessage(err, "failed to find nginx directory")
 	}
 
 	if path == "" {
 		path, err = defineWindowsServiceBinaryPath(ctx, NginxPackage)
 		if err != nil {
-			return "", err
+			return "", errors.WithMessage(err, "failed to define service binary path")
 		}
 
 		stat, err := os.Stat(path)
@@ -149,19 +166,22 @@ func defineNginxPath(ctx context.Context) (string, error) {
 func findNginxDirWindows(_ context.Context) (string, error) {
 	directories := []string{
 		"C:\\tools",
+		"C:\\gameap\\tools",
 	}
 
 	for _, dir := range directories {
-		if _, err := os.Stat(dir); err == nil {
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				return "", err
-			}
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
 
-			for _, entry := range entries {
-				if entry.IsDir() && strings.HasPrefix(entry.Name(), "nginx") {
-					return filepath.Join(dir, entry.Name()), nil
-				}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return "", err
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), "nginx") {
+				return filepath.Join(dir, entry.Name()), nil
 			}
 		}
 	}
@@ -180,7 +200,7 @@ func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (stri
 
 	err := cmd.Run()
 	if err != nil {
-		return "", err
+		return "", errors.WithMessage(err, "failed to execute command")
 	}
 
 	log.Println(buf.String())

@@ -77,7 +77,7 @@ var repository = map[string]pack{
 			"https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe",
 		},
 		DefaultInstallPath: "C:\\Windows\\System32",
-		InstallCommand:     "mv WinSW-x64.exe winsw.exe",
+		InstallCommand:     "cmd /c \"move WinSW-x64.exe winsw.exe\"",
 	},
 }
 
@@ -126,6 +126,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 
 	preProcessor, ok := packagePreProcessors[packName]
 	if ok {
+		log.Println("Execute pre processor for ", packName)
 		err = preProcessor(ctx, packagePath)
 		if err != nil {
 			return err
@@ -133,6 +134,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	}
 
 	if packagePath != "" {
+		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", packagePath, packName)
 		return nil
 	}
 
@@ -159,6 +161,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	}
 
 	if p.InstallCommand != "" {
+		log.Println("Running install command for package ", packName)
 		splitted, err := shellquote.Split(p.InstallCommand)
 		if err != nil {
 			return errors.WithMessage(err, "failed to split command")
@@ -172,7 +175,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		log.Println('\n', cmd.String())
 		err = cmd.Run()
 		if err != nil {
-			return err
+			return errors.WithMessage(err, "failed to execute install command")
 		}
 	}
 
@@ -214,6 +217,8 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 			return errors.WithMessage(err, "failed to install winsw")
 		}
 	}
+
+	log.Println("Installing service for package", packName)
 
 	if service.IsExists(ctx, packName) {
 		log.Printf("Service '%s' is already exists", packName)
@@ -376,6 +381,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			}
 		}
 
+		log.Println("Removing", d)
 		return os.RemoveAll(d)
 	},
 }

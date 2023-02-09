@@ -260,10 +260,12 @@ func PanelInstall(cliCtx *cli.Context) error {
 		}
 	}
 
-	err = configureCron(cliCtx.Context, state)
-	if err != nil {
-		log.Println("Failed to configure cron: ", err)
-		fmt.Println("Failed to configure cron: ", err.Error())
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		err = configureCron(cliCtx.Context, state)
+		if err != nil {
+			log.Println("Failed to configure cron: ", err)
+			fmt.Println("Failed to configure cron: ", err.Error())
+		}
 	}
 
 	state, err = updateAdminPassword(cliCtx.Context, state)
@@ -276,10 +278,12 @@ func PanelInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to clear panel cache")
 	}
 
-	fmt.Println("Updating files permissions ...")
-	err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
-	if err != nil {
-		return errors.WithMessage(err, "failed to change owner")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Updating files permissions ...")
+		err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
+		if err != nil {
+			return errors.WithMessage(err, "failed to change owner")
+		}
 	}
 
 	if state.WebServer != noneWebServer {
@@ -956,12 +960,6 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to download nginx config")
 	}
 
-	phpVersion, err := packagemanager.DefinePHPVersion()
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to define php version")
-	}
-	log.Println("Defined PHP version: ", phpVersion)
-
 	socketPath, err := packagemanager.ConfigForDistro(
 		ctx,
 		packagemanager.PHPPackage,
@@ -972,9 +970,8 @@ func installNginx(
 	}
 
 	if socketPath != "" {
-		fpmUnixSocket := fmt.Sprintf(socketPath, phpVersion)
 		err = utils.FindLineAndReplace(ctx, gameapHostConfPath, map[string]string{
-			"fastcgi_pass    unix": fmt.Sprintf("fastcgi_pass %s;", fpmUnixSocket),
+			"fastcgi_pass    unix": fmt.Sprintf("fastcgi_pass %s;", socketPath),
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to update fastcgi_pass in nginx host config")
@@ -1006,7 +1003,21 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to get nginx_conf")
 	}
 
-	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		err = os.Rename(nginxMainConf, nginxMainConf+".old")
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to rename config")
+		}
+
+		err = utils.DownloadFile(
+			ctx,
+			"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/nginx-windows.conf",
+			nginxMainConf,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to download nginx config")
+		}
+	} else {
 		err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
 			"user": "user www-data;",
 		})
@@ -1019,7 +1030,17 @@ func installNginx(
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to start nginx")
 	}
-	err = service.Start(ctx, "php"+phpVersion+"-fpm")
+
+	phpServiceName := "php-fpm"
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		phpVersion, err := packagemanager.DefinePHPVersion()
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to define php version")
+		}
+		phpServiceName = "php" + phpVersion + "-fpm"
+	}
+
+	err = service.Start(ctx, phpServiceName)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to start php-fpm")
 	}
