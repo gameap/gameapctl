@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -58,20 +59,20 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 	NginxPackage: {
 		DistributionWindows: {
 			"nginx_conf": func(ctx context.Context) (string, error) {
-				nginxBinaryPath, err := defineWindowsServiceBinaryPath(ctx, NginxPackage)
+				path, err := defineNginxPath(ctx)
 				if err != nil {
 					return "", err
 				}
 
-				return filepath.Join(nginxBinaryPath, "conf\\nginx.conf"), nil
+				return filepath.Join(path, "conf", "nginx.conf"), nil
 			},
 			"gameap_host_conf": func(ctx context.Context) (string, error) {
-				nginxBinaryPath, err := defineWindowsServiceBinaryPath(ctx, NginxPackage)
+				path, err := defineNginxPath(ctx)
 				if err != nil {
 					return "", err
 				}
 
-				return filepath.Join(nginxBinaryPath, "conf\\gameap.conf"), nil
+				return filepath.Join(path, "conf", "gameap.conf"), nil
 			},
 		},
 	},
@@ -110,6 +111,62 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 	}
 
 	return staticConfigs[packName][osInfo.Distribution][configName], nil
+}
+
+func defineNginxPath(ctx context.Context) (string, error) {
+	path, err := findNginxDirWindows(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if path == "" {
+		path, err = defineWindowsServiceBinaryPath(ctx, NginxPackage)
+		if err != nil {
+			return "", err
+		}
+
+		stat, err := os.Stat(path)
+		if err != nil {
+			return "", err
+		}
+
+		if !stat.IsDir() {
+			path = filepath.Dir(path)
+		}
+	}
+
+	if path == "" {
+		return "", errors.New("nginx binary not found")
+	}
+
+	if _, err := os.Stat(filepath.Join(path, "nginx.exe")); err == nil {
+		return path, nil
+	}
+
+	return "", errors.New("nginx path not found")
+}
+
+func findNginxDirWindows(_ context.Context) (string, error) {
+	directories := []string{
+		"C:\\tools",
+	}
+
+	for _, dir := range directories {
+		if _, err := os.Stat(dir); err == nil {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				return "", err
+			}
+
+			for _, entry := range entries {
+				if entry.IsDir() && strings.HasPrefix(entry.Name(), "nginx") {
+					return filepath.Join(dir, entry.Name()), nil
+				}
+			}
+		}
+	}
+
+	return "", nil
 }
 
 func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {

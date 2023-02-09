@@ -960,6 +960,7 @@ func installNginx(
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to define php version")
 	}
+	log.Println("Defined PHP version: ", phpVersion)
 
 	socketPath, err := packagemanager.ConfigForDistro(
 		ctx,
@@ -1005,11 +1006,13 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to get nginx_conf")
 	}
 
-	err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
-		"user": "user www-data;",
-	})
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to update nginx config")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
+			"user": "user www-data;",
+		})
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to update nginx config")
+		}
 	}
 
 	err = service.Start(ctx, "nginx")
