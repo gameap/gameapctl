@@ -53,7 +53,7 @@ var staticConfigs = map[string]map[string]map[string]string{
 var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionDebian: {
-			"fpm_sock": func(ctx context.Context) (string, error) {
+			"fpm_sock": func(_ context.Context) (string, error) {
 				phpVerion, err := DefinePHPVersion()
 				if err != nil {
 					return "", err
@@ -63,7 +63,7 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 			},
 		},
 		DistributionUbuntu: {
-			"fpm_sock": func(ctx context.Context) (string, error) {
+			"fpm_sock": func(_ context.Context) (string, error) {
 				phpVerion, err := DefinePHPVersion()
 				if err != nil {
 					return "", err
