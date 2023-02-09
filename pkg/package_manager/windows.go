@@ -40,8 +40,14 @@ var repository = map[string]pack{
 	PHPPackage: {
 		LookupPath: []string{"php"},
 		DownloadURLs: []string{
-			"https://windows.php.net/downloads/releases/php-8.2.1-Win32-vs16-x64.zip",
+			"https://windows.php.net/downloads/releases/php-8.2.2-Win32-vs16-x64.zip",
+			"https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip",
 		},
+		DefaultInstallPath: "C:\\php",
+	},
+	PHPExtensionsPackage: {
+		LookupPath:         []string{"php"},
+		DefaultInstallPath: "C:\\php",
 	},
 }
 
@@ -74,6 +80,7 @@ func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) e
 }
 
 func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName string, p pack) error {
+	log.Println("Installing", packName, "package")
 	var err error
 
 	packagePath := ""
@@ -87,9 +94,9 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		break
 	}
 
-	processor, ok := packageProcessors[packName]
+	preProcessor, ok := packagePreProcessors[packName]
 	if ok {
-		err = processor(ctx, packagePath)
+		err = preProcessor(ctx, packagePath)
 		if err != nil {
 			return err
 		}
@@ -99,17 +106,19 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return nil
 	}
 
-	dir, err := os.MkdirTemp("", "install")
-	if err != nil {
-		return errors.WithMessagef(err, "failed to make temp directory")
-	}
+	dir := p.DefaultInstallPath
 
-	if p.InstallCommand == "" {
-		return nil
+	if dir == "" {
+		dir, err = os.MkdirTemp("", "install")
+		if err != nil {
+			return errors.WithMessagef(err, "failed to make temp directory")
+		}
 	}
 
 	for _, path := range p.DownloadURLs {
-		err = utils.DownloadFile(ctx, path, dir)
+		log.Println("Downloading file from", path, "to", dir)
+
+		err = utils.Download(ctx, path, dir)
 		if err != nil {
 			log.Println("failed to download file")
 			log.Println(err)
@@ -119,18 +128,33 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		break
 	}
 
-	splitted, err := shellquote.Split(p.InstallCommand)
-	if err != nil {
-		return errors.WithMessage(err, "failed to split command")
+	if p.InstallCommand != "" {
+		splitted, err := shellquote.Split(p.InstallCommand)
+		if err != nil {
+			return errors.WithMessage(err, "failed to split command")
+		}
+
+		//nolint:gosec
+		cmd := exec.Command(splitted[0], splitted[1:]...)
+		cmd.Stdout = log.Writer()
+		cmd.Stderr = log.Writer()
+		cmd.Dir = dir
+		log.Println('\n', cmd.String())
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
-	//nolint:gosec
-	cmd := exec.Command(splitted[0], splitted[1:]...)
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-	cmd.Dir = dir
-	log.Println('\n', cmd.String())
-	return cmd.Run()
+	postProcessor, ok := packagePostProcessors[packName]
+	if ok {
+		err = postProcessor(ctx, packagePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (pm *WindowsPackageManager) CheckForUpdates(_ context.Context) error {
@@ -145,8 +169,10 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
 }
 
-var packageProcessors = map[string]func(ctx context.Context, packagePath string) error{
+var packagePreProcessors = map[string]func(ctx context.Context, packagePath string) error{
 	PHPExtensionsPackage: func(ctx context.Context, packagePath string) error {
+		p := repository[PHPExtensionsPackage]
+
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
 		buf.Grow(100)
@@ -193,8 +219,24 @@ var packageProcessors = map[string]func(ctx context.Context, packagePath string)
 			iniFilePath = strings.TrimSpace(loadedFiles[0])
 		}
 		if iniFilePath == "" {
-			iniFilePath = filepath.Join(filepath.Dir(packagePath), "php.ini")
+			if packagePath == "" {
+				iniFilePath = filepath.Join(p.DefaultInstallPath, "php.ini")
+			} else {
+				iniFilePath = filepath.Join(filepath.Dir(packagePath), "php.ini")
+			}
 		}
+
+		if !utils.IsFileExists(iniFilePath) {
+			log.Println("Creating php.ini file on", iniFilePath)
+			f, err := os.Create(iniFilePath)
+			if err != nil {
+				return err
+			}
+			if err = f.Close(); err != nil {
+				return err
+			}
+		}
+
 		if iniFilePath != "" {
 			return utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
 				";?\\s*extension=bz2\\s*":        "extension=bz2",
@@ -227,6 +269,37 @@ var packageProcessors = map[string]func(ctx context.Context, packagePath string)
 			break
 		}
 
-		return err
+		entries, err := os.ReadDir(p.DefaultInstallPath)
+		if err != nil {
+			return err
+		}
+
+		if len(entries) != 1 {
+			return NewErrInvalidDirContents(p.DefaultInstallPath)
+		}
+
+		d := filepath.Join(p.DefaultInstallPath, entries[0].Name())
+
+		entries, err = os.ReadDir(d)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			err = os.Rename(filepath.Join(d, entry.Name()), filepath.Join(p.DefaultInstallPath, entry.Name()))
+			if err != nil {
+				return errors.WithMessage(err, "failed to move file")
+			}
+		}
+
+		return os.RemoveAll(d)
+	},
+}
+
+var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
+	PHPPackage: func(ctx context.Context, packagePath string) error {
+		p := repository[PHPPackage]
+
+		path, _ := os.LookupEnv("PATH")
+		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
 }
