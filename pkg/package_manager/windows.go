@@ -211,7 +211,14 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
 
-	configPath := filepath.Join(servicesConfigPath, packName+".yaml")
+	if _, err = os.Stat(servicesConfigPath); errors.Is(err, os.ErrNotExist) {
+		err = os.MkdirAll(servicesConfigPath, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create services config directory")
+		}
+	}
+
+	configPath := filepath.Join(servicesConfigPath, packName+".yml")
 
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
