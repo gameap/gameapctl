@@ -4,8 +4,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"log"
+	"os/exec"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -141,13 +143,39 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 }
 
 func (s *Windows) Restart(_ context.Context, _ string) error {
-	return errors.New("use stop and start ins")
+	return errors.New("use stop and start instead of restart")
 }
 
 func (s *Windows) start(_ context.Context, serviceName string) error {
-	return utils.ExecCommand("sc", "start", serviceName)
+	if s.isServiceExists(context.Background(), serviceName) {
+		return utils.ExecCommand("sc", "start", serviceName)
+	}
+
+	return NewErrServiceNotFound(serviceName)
 }
 
 func (s *Windows) stop(_ context.Context, serviceName string) error {
-	return utils.ExecCommand("sc", "stop", serviceName)
+	if s.isServiceExists(context.Background(), serviceName) {
+		return utils.ExecCommand("sc", "stop", serviceName)
+	}
+
+	return NewErrServiceNotFound(serviceName)
+}
+
+func (s *Windows) isServiceExists(_ context.Context, _ string) bool {
+	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
+	buf := &bytes.Buffer{}
+	buf.Grow(10240)
+	cmd.Stdout = buf
+	cmd.Stderr = log.Writer()
+
+	err := cmd.Run()
+	if err != nil {
+		return false
+	}
+
+	log.Println("\n", cmd.String())
+	log.Println(buf.String())
+
+	return false
 }
