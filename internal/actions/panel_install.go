@@ -192,7 +192,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Checking for php ...")
-	if !utils.IsCommandAvailable("php") {
+	if !utils.IsCommandAvailable("php") || state.OSInfo.Distribution == packagemanager.DistributionWindows {
 		fmt.Println("Installing php ...")
 		if err = pm.Install(cliCtx.Context, packagemanager.PHPPackage); err != nil {
 			return errors.WithMessage(err, "failed to install php")

@@ -447,7 +447,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	if osInfo.Distribution == "ubuntu" {
+	if osInfo.Distribution == DistributionUbuntu {
 		cmd := exec.Command("add-apt-repository", "ppa:ondrej/php")
 		cmd.Env = append(cmd.Env, "LC_ALL=C.UTF-8")
 		cmd.Stderr = log.Writer()

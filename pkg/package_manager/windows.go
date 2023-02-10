@@ -186,18 +186,18 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 	}
 
-	if p.ServiceConfig != nil {
-		err = pm.installService(ctx, packName, p)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install service")
-		}
-	}
-
 	postProcessor, ok := packagePostProcessors[packName]
 	if ok {
 		err = postProcessor(ctx, packagePath)
 		if err != nil {
 			return err
+		}
+	}
+
+	if p.ServiceConfig != nil {
+		err = pm.installService(ctx, packName, p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install service")
 		}
 	}
 
@@ -352,19 +352,17 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		return errors.New("failed to find config edition way to enable php extensions")
 	},
-	NginxPackage: func(ctx context.Context, _ string) error {
-		p := repository[NginxPackage]
+}
 
-		var err error
-		for _, url := range p.DownloadURLs {
-			log.Println("Trying to download nginx", url, "to", p.DefaultInstallPath)
-			err = utils.Download(ctx, url, p.DefaultInstallPath)
-			if err != nil {
-				log.Printf("failed to download nginx from url %s, error %s\n", url, err)
-				continue
-			}
-			break
-		}
+var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
+	PHPPackage: func(_ context.Context, _ string) error {
+		p := repository[PHPPackage]
+
+		path, _ := os.LookupEnv("PATH")
+		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
+	},
+	NginxPackage: func(_ context.Context, _ string) error {
+		p := repository[NginxPackage]
 
 		entries, err := os.ReadDir(p.DefaultInstallPath)
 		if err != nil {
@@ -390,15 +388,6 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		log.Println("Removing", d)
 		return os.RemoveAll(d)
-	},
-}
-
-var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	PHPPackage: func(_ context.Context, _ string) error {
-		p := repository[PHPPackage]
-
-		path, _ := os.LookupEnv("PATH")
-		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
 }
 
