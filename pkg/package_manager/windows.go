@@ -22,9 +22,11 @@ type pack struct {
 	InstallCommand     string
 	DefaultInstallPath string
 	ServiceConfig      *WinSWServiceConfig
+	Dependencies       []string
 }
 
 const WinSWPackage = "winsw"
+const VCRedist16Package = "vc_redist_16"
 
 const servicesConfigPath = "C:\\gameap\\services"
 
@@ -65,10 +67,17 @@ var repository = map[string]pack{
 			Executable: "php-cgi",
 			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
 		},
+		Dependencies: []string{VCRedist16Package},
 	},
 	PHPExtensionsPackage: {
 		LookupPath:         []string{"php"},
 		DefaultInstallPath: "C:\\php",
+	},
+	VCRedist16Package: {
+		DownloadURLs: []string{
+			"https://aka.ms/vs/16/release/VC_redist.x64.exe",
+		},
+		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
 	},
 	WinSWPackage: {
 		LookupPath: []string{"winsw"},
@@ -123,6 +132,15 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		break
 	}
 
+	if len(p.Dependencies) > 0 {
+		for _, d := range p.Dependencies {
+			err = pm.Install(ctx, d)
+			if err != nil {
+				return errors.WithMessagef(err, "failed to install dependency '%s'", d)
+			}
+		}
+	}
+
 	preProcessor, ok := packagePreProcessors[packName]
 	if ok {
 		log.Println("Execute pre processor for ", packName)
@@ -151,6 +169,12 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		if err != nil {
 			return errors.WithMessagef(err, "failed to make temp directory")
 		}
+		defer func(path string) {
+			err := os.RemoveAll(path)
+			if err != nil {
+				log.Println(err)
+			}
+		}(dir)
 	}
 
 	for _, path := range p.DownloadURLs {

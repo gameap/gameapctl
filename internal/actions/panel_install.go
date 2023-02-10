@@ -330,7 +330,11 @@ func PanelInstall(cliCtx *cli.Context) error {
 	fmt.Println("Login: admin")
 	fmt.Println("Password:", state.AdminPassword)
 	fmt.Println()
-	fmt.Println("Host: http://" + state.Host)
+	if state.Port == "80" {
+		fmt.Println("Host: http://" + state.Host)
+	} else {
+		fmt.Println("Host: http://" + state.Host + ":" + state.Port)
+	}
 	fmt.Println()
 	fmt.Println("---------------------------------")
 
@@ -1221,9 +1225,14 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 		return state, errors.WithMessage(err, "failed to clear panel cache")
 	}
 
-	url := "http://" + state.Host + "/api/healthz"
+	hostPort := state.Host
+	if state.Port != "80" && state.Port != "433" {
+		hostPort = state.Host + ":" + state.Port
+	}
+
+	url := "http://" + hostPort + "/api/healthz"
 	if state.HTTPS {
-		url = "https://" + state.Host + "/api/healthz"
+		url = "https://" + hostPort + "/api/healthz"
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
