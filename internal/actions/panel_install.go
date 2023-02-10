@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/go-sql-driver/mysql"
 	"io"
 	"io/fs"
 	"log"
@@ -16,6 +15,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/go-sql-driver/mysql"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
