@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
 	"io"
 	"io/fs"
 	"log"
@@ -42,6 +43,7 @@ var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
 var errEmptyWebServer = errors.New("empty web server")
+var errApacheWindowsIsNotSupported = errors.New("apache is not supported yet, sorry")
 
 type panelInstallState struct {
 	NonInteractive bool
@@ -110,7 +112,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if state.WebServer == "" {
 			needToAsk["webServer"] = struct{}{}
 		}
-		answers, err := askUser(cliCtx.Context, needToAsk)
+		answers, err := askUser(cliCtx.Context, state, needToAsk)
 		if err != nil {
 			return err
 		}
@@ -130,6 +132,10 @@ func PanelInstall(cliCtx *cli.Context) error {
 		if _, ok := needToAsk["webServer"]; ok {
 			state.WebServer = answers.webServer
 		}
+	}
+
+	if state.WebServer == apacheWebServer && state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		return errApacheWindowsIsNotSupported
 	}
 
 	if state.Path == "" {
@@ -349,7 +355,7 @@ type askedParams struct {
 }
 
 //nolint:funlen,gocognit
-func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, error) {
+func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]struct{}) (askedParams, error) {
 	var err error
 	result := askedParams{}
 
@@ -448,7 +454,11 @@ func askUser(ctx context.Context, needToAsk map[string]struct{}) (askedParams, e
 			fmt.Println("Select Web-server to install and configure")
 			fmt.Println()
 			fmt.Println("1) Nginx (Recommended)")
-			fmt.Println("2) Apache")
+
+			if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+				fmt.Println("2) Apache")
+			}
+
 			fmt.Println("3) None. Do not install a Web Server")
 
 			for {
@@ -547,8 +557,11 @@ func installMySQL(
 
 	var err error
 
-	if state.DBCreds.Port == "" {
+	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		state.DBCreds.Port = "3306"
+	} else if state.DBCreds.Port == "" {
+		// Default port for windows
+		state.DBCreds.Port = "9306"
 	}
 
 	var needToCreateDababaseAndUser bool
@@ -571,9 +584,12 @@ func installMySQL(
 			}
 
 			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
+				if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+					return state, errors.WithMessage(err, "failed to install mysql")
+				}
+
 				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
 				log.Println(err)
-				log.Println("Failed to install MySQL server. Trying to replace by MariaDB")
 
 				fmt.Println("Removing MySQL server ...")
 				err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
@@ -692,21 +708,37 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 
 //nolint:funlen
 func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
-	dsns := []string{
-		"root@unix(/var/run/mysqld/mysqld.sock)/mysql",
-		fmt.Sprintf(
-			"root:%s@tcp(%s:%s)/%s",
-			dbCreds.Password,
-			dbCreds.Host,
-			dbCreds.Port,
-			dbCreds.DatabaseName,
-		),
+	mysqlCfgs := []mysql.Config{
+		{
+			User:                 "root",
+			Passwd:               dbCreds.RootPassword,
+			Net:                  "unix",
+			Addr:                 "/var/run/mysqld/mysqld.sock",
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
+		{
+			User:                 "root",
+			Net:                  "tcp",
+			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
+		{
+			User:                 "root",
+			Passwd:               dbCreds.RootPassword,
+			Net:                  "tcp",
+			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
 	}
 
 	var err error
+	var version string
 	var db *sql.DB
-	for _, dsn := range dsns {
-		db, err = sql.Open("mysql", dsn)
+	for _, cfg := range mysqlCfgs {
+		db, err = sql.Open("mysql", cfg.FormatDSN())
 		if err != nil {
 			continue
 		}
@@ -716,29 +748,43 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 				log.Println(err)
 			}
 		}(db)
-		err = db.Ping()
-		if err == nil {
-			break
-		}
-	}
 
-	rows, err := db.Query("SELECT VERSION()")
-	if err != nil {
-		return errors.WithMessage(err, "failed to get MySQL version")
-	}
-	defer func(rows *sql.Rows) {
-		err = rows.Close()
+		log.Printf("Cheking database %s\n", cfg.FormatDSN())
+
+		err = db.Ping()
 		if err != nil {
 			log.Println(err)
+			continue
 		}
-	}(rows)
 
-	var version string
-	for rows.Next() {
-		err = rows.Scan(&version)
+		var rows *sql.Rows
+		rows, err = db.Query("SELECT VERSION()")
 		if err != nil {
-			return errors.WithMessage(err, "failed to scan MySQL version")
+			log.Println(err)
+			continue
 		}
+		defer func(rows *sql.Rows) {
+			err = rows.Close()
+			if err != nil {
+				log.Println(err)
+			}
+		}(rows)
+
+		var version string
+		for rows.Next() {
+			err = rows.Scan(&version)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+		}
+
+		err = nil
+		break
+	}
+
+	if err != nil {
+		return errors.WithMessage(err, "failed to get MySQL version")
 	}
 
 	majorVersion := strings.Split(version, ".")[0]

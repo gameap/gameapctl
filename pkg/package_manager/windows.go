@@ -48,13 +48,13 @@ var repository = map[string]pack{
 			StopArguments:    "-s stop",
 		},
 	},
-	MariaDBServerPackage: {
-		LookupPath: []string{"mysql", "mariadb"},
+	MySQLServerPackage: {
+		LookupPath: []string{"mariadb"},
 		DownloadURLs: []string{
-			"https://mirror.23m.com/mariadb/mariadb-10.6.11/winx64-packages/mariadb-10.6.11-winx64.msi",
-			"https://ftp.bme.hu/pub/mirrors/mariadb/mariadb-10.6.11/winx64-packages/mariadb-10.6.11-winx64.msi",
+			"https://mirror.23m.com/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
+			"https://ftp.bme.hu/pub/mirrors/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
 		},
-		InstallCommand: "msiexec /i mariadb-10.6.11-winx64.msi SERVICENAME=MariaDB PORT=3306 /qn",
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.12-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
