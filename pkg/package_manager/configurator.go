@@ -203,8 +203,6 @@ func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (stri
 		return "", errors.WithMessage(err, "failed to execute command")
 	}
 
-	log.Println(buf.String())
-
 	scanner := bufio.NewScanner(buf)
 	for scanner.Scan() {
 		parts := strings.SplitN(scanner.Text(), ":", 2)

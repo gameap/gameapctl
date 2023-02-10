@@ -148,16 +148,16 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 	return errors.New("use stop and start instead of restart")
 }
 
-func (s *Windows) start(_ context.Context, serviceName string) error {
-	if IsExists(context.Background(), serviceName) {
+func (s *Windows) start(ctx context.Context, serviceName string) error {
+	if IsExists(ctx, serviceName) {
 		return utils.ExecCommand("sc", "start", serviceName)
 	}
 
 	return NewErrServiceNotFound(serviceName)
 }
 
-func (s *Windows) stop(_ context.Context, serviceName string) error {
-	if IsExists(context.Background(), serviceName) {
+func (s *Windows) stop(ctx context.Context, serviceName string) error {
+	if IsExists(ctx, serviceName) {
 		return utils.ExecCommand("sc", "stop", serviceName)
 	}
 

@@ -60,11 +60,10 @@ var repository = map[string]pack{
 		},
 		DefaultInstallPath: "C:\\php",
 		ServiceConfig: &WinSWServiceConfig{
-			ID:               "php-fpm",
-			Name:             "php-fpm",
-			Executable:       "php-cgi",
-			Arguments:        "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
-			WorkingDirectory: "C:\\php",
+			ID:         "php-fpm",
+			Name:       "php-fpm",
+			Executable: "php-cgi",
+			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
 		},
 	},
 	PHPExtensionsPackage: {
@@ -216,6 +215,7 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
 }
 
+//nolint:funlen
 func (pm *WindowsPackageManager) installService(ctx context.Context, packName string, p pack) error {
 	_, err := exec.LookPath(repository[WinSWPackage].LookupPath[0])
 	if err != nil {
@@ -232,10 +232,25 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		return nil
 	}
 
+	serviceConfig := *p.ServiceConfig
+
+	if serviceConfig.WorkingDirectory == "" {
+		path, err := exec.LookPath(serviceConfig.Executable)
+		if err != nil {
+			return errors.WithMessage(err, "failed to look path for service executable")
+		}
+
+		if path == "" {
+			return errors.New("executable path not found")
+		}
+
+		serviceConfig.WorkingDirectory = filepath.Dir(path)
+	}
+
 	out, err := xml.Marshal(struct {
 		WinSWServiceConfig
 		XMLName struct{} `xml:"service"`
-	}{WinSWServiceConfig: *p.ServiceConfig})
+	}{WinSWServiceConfig: serviceConfig})
 
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
@@ -251,7 +266,6 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
 	log.Println("create service config")
-	log.Println(string(out))
 
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
