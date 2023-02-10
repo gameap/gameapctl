@@ -25,8 +25,10 @@ type pack struct {
 	Dependencies       []string
 }
 
-const WinSWPackage = "winsw"
-const VCRedist16Package = "vc_redist_16"
+const (
+	WinSWPackage      = "winsw"
+	VCRedist16Package = "vc_redist_16" //nolint:gosec
+)
 
 const servicesConfigPath = "C:\\gameap\\services"
 
@@ -116,7 +118,7 @@ func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) e
 	return nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName string, p pack) error {
 	log.Println("Installing", packName, "package")
 	var err error
