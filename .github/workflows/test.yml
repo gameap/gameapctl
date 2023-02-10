@@ -139,6 +139,7 @@ jobs:
           name: logs_windows
           path: |
             ~/AppData/Local/Temp/gameapctl*
+            C:/gameap/services/*
           retention-days: 5
 
   test-cache:
