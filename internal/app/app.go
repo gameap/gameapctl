@@ -113,8 +113,7 @@ func Run(args []string) {
 								Name: "host",
 							},
 							&cli.StringFlag{
-								Name:  "port",
-								Value: "80",
+								Name: "port",
 							},
 							&cli.StringFlag{
 								Name: "web-server",

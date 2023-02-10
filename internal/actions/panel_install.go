@@ -160,6 +160,7 @@ func PanelInstall(cliCtx *cli.Context) error {
 	fmt.Println()
 	fmt.Println("Path:", state.Path)
 	fmt.Println("Host:", state.Host)
+	fmt.Println("Port:", state.Port)
 	fmt.Println("Database:", state.Database)
 	fmt.Println("Web server:", state.WebServer)
 	fmt.Println("Develop:", cliCtx.Bool("develop"))
