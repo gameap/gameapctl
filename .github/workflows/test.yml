@@ -130,7 +130,7 @@ jobs:
           sc delete nginx
           cd .\cmd\gameapctl\
           go build .
-          .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+          .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
