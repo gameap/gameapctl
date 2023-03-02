@@ -64,8 +64,6 @@ func DaemonInstall(cliCtx *cli.Context) error {
 		SteamCMDPath: defaultSteamCMDPath,
 	}
 
-	fmt.Printf("%+v \n", state)
-
 	if state.Host == "" {
 		return errEmptyHost
 	}
@@ -196,6 +194,13 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	hostname, err := os.Hostname()
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to get hostname")
+	}
+
+	if _, err := os.Stat(state.CertsPath); os.IsNotExist(err) {
+		err = os.MkdirAll(state.CertsPath, 0700)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to create certificates directory")
+		}
 	}
 
 	var privKey []byte
