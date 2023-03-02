@@ -88,11 +88,19 @@ jobs:
       - name: Set up dependencies
         run: go mod download
 
-      - name: Tests
+      - name: GameAP Installation Test
         run: |
           cd cmd/gameapctl/
           go build .
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+
+      - name: Daemon Installation Test
+        shell: bash
+        run: |
+          cd cmd/gameapctl/
+          go build .
+          echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | /var/www/gameap/artisan tinker || true          
+          ./gameapctl --non-interactive daemon install --path=/var/www/gameap --host=http://127.0.0.1 --token=test_auto_setup_token
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
