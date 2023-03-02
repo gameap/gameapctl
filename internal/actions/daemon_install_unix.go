@@ -17,15 +17,10 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 	_, err := user.LookupGroup("gameap")
 
 	if err != nil {
-		switch err.(type) {
-		case user.UnknownGroupError:
-			fmt.Println("Creating group...")
-			err = utils.ExecCommand("groupadd", "gameap")
-			if err != nil {
-				return daemonsInstallState{}, errors.WithMessage(err, "failed to add group")
-			}
-		default:
-			return state, errors.WithMessage(err, "failed to lookup group")
+		fmt.Println("Creating group...")
+		err = utils.ExecCommand("groupadd", "gameap")
+		if err != nil {
+			return daemonsInstallState{}, errors.WithMessage(err, "failed to add group")
 		}
 	}
 
