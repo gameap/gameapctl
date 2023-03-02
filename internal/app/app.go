@@ -57,6 +57,19 @@ func Run(args []string) {
 							return nil
 						},
 						Action: actions.DaemonInstall,
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "token",
+								EnvVars: []string{"CREATE_TOKEN"},
+							},
+							&cli.StringFlag{
+								Name:    "host",
+								EnvVars: []string{"PANEL_HOST"},
+							},
+							&cli.StringFlag{
+								Name: "work-dir",
+							},
+						},
 					},
 					{
 						Name:        "upgrade",
