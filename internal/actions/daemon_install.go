@@ -261,7 +261,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 			},
 		}
 
-		csrBytes, err = x509.CreateCertificateRequest(rand.Reader, csr, privKey)
+		csrBytes, err = x509.CreateCertificateRequest(rand.Reader, csr, ed25519.PrivateKey(privKey))
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create certificate request")
 		}
