@@ -303,7 +303,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	err = utils.Download(
 		ctx,
-		"https://packages.gameap.ru/gameap-daemon/download-release?os=linux&arch=$(arch)",
+		fmt.Sprintf("https://packages.gameap.ru/gameap-daemon/download-release.tar.gz?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH),
 		daemonBinariesTmpDir,
 	)
 	if err != nil {
@@ -325,6 +325,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 			return state, errors.WithMessage(err, "failed to move gameap-daemon binaries")
 		}
 		binariesInstalled = true
+		break
 	}
 
 	if !binariesInstalled {
