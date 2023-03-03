@@ -442,18 +442,18 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 			log.Println(errors.WithMessage(err, "failed to close response body"))
 		}
 	}(r.Body)
-
-	if r.StatusCode != http.StatusOK {
-		err = InvalidResponseStatusCodeError(r.StatusCode)
-		log.Println(err)
-		log.Println(r.Body)
-		return state, err
-	}
-
 	result, err := io.ReadAll(r.Body)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to read response body")
 	}
+
+	if r.StatusCode != http.StatusOK {
+		err = InvalidResponseStatusCodeError(r.StatusCode)
+		log.Println(err)
+		log.Println(string(result))
+		return state, err
+	}
+
 	parts := bytes.SplitN(result, []byte("\n"), 2)
 	if len(parts) == 0 {
 		return state, errors.New("invalid response body")
