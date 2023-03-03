@@ -40,6 +40,12 @@ func (e UnableToSetupNodeError) Error() string {
 	return "unable to setup node: " + string(e)
 }
 
+type InvalidResponseStatusCodeError int
+
+func (e InvalidResponseStatusCodeError) Error() string {
+	return "invalid response status code " + strconv.Itoa(int(e))
+}
+
 type daemonsInstallState struct {
 	Host  string
 	Token string
@@ -148,7 +154,7 @@ func DaemonInstall(cliCtx *cli.Context) error {
 	fmt.Println("Configuring gameap-daemon ...")
 	state, err = configureDaemon(cliCtx.Context, state)
 	if err != nil {
-		return errors.WithMessage(err, "failed to download runner")
+		return errors.WithMessage(err, "failed to configure daemon")
 	}
 
 	state, err = saveDaemonConfig(cliCtx.Context, state)
@@ -438,7 +444,10 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 	}(r.Body)
 
 	if r.StatusCode != http.StatusOK {
-		return state, errors.New("failed to make post request, invalid status code")
+		err = InvalidResponseStatusCodeError(r.StatusCode)
+		log.Println(err)
+		log.Println(r.Body)
+		return state, err
 	}
 
 	result, err := io.ReadAll(r.Body)
