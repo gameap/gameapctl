@@ -303,7 +303,11 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	err = utils.Download(
 		ctx,
-		fmt.Sprintf("https://packages.gameap.ru/gameap-daemon/download-release.tar.gz?os=%s&arch=%s", runtime.GOOS, runtime.GOARCH),
+		fmt.Sprintf(
+			"https://packages.gameap.ru/gameap-daemon/download-release.tar.gz?os=%s&arch=%s",
+			runtime.GOOS,
+			runtime.GOARCH,
+		),
 		daemonBinariesTmpDir,
 	)
 	if err != nil {
