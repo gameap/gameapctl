@@ -426,7 +426,7 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 		Timeout: 30 * time.Second,
 	}
 
-	u, err := url.JoinPath(state.Host, "/gdaemon/create/")
+	u, err := url.JoinPath(state.Host, "/gdaemon/create/", state.Token)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create daemon create url")
 	}
