@@ -391,6 +391,11 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 	ips := detectIPs()
 	state.ListenIP = chooseBestIP(ips)
 
+	fw, _ = w.CreateFormField("ip[]")
+	for _, ip := range ips {
+		_, _ = fw.Write([]byte(ip))
+	}
+
 	fw, _ = w.CreateFormField("gdaemon_host")
 	_, _ = fw.Write([]byte(state.ListenIP))
 
