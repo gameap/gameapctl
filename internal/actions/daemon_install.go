@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -209,13 +209,13 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 		}
 	}
 
-	var privKey []byte
+	var privKey *rsa.PrivateKey
 	privKeyFilePath := filepath.Join(state.CertsPath, "server.key")
 
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		_, privKey, err = ed25519.GenerateKey(rand.Reader)
+		privKey, err = rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -232,7 +232,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 		}(f)
 		err = pem.Encode(f, &pem.Block{
 			Type:  "PRIVATE KEY",
-			Bytes: privKey,
+			Bytes: privKey.D.Bytes(),
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to encode private key")
@@ -251,7 +251,10 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 			return state, errors.New("failed to decode private key")
 		}
 
-		privKey = block.Bytes
+		privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to parse private key")
+		}
 	}
 
 	var csrBytes []byte
@@ -267,7 +270,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 			},
 		}
 
-		csrBytes, err = x509.CreateCertificateRequest(rand.Reader, csr, ed25519.PrivateKey(privKey))
+		csrBytes, err = x509.CreateCertificateRequest(rand.Reader, csr, privKey)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create certificate request")
 		}
