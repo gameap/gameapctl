@@ -65,7 +65,7 @@ func Copy(src string, dst string) error {
 }
 
 func WriteContentsToFile(contents []byte, path string) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
