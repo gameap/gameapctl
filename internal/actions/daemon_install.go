@@ -440,13 +440,12 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.WithMessage(err, "failed to create daemon create url")
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, &b)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &b)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create daemon create request")
 	}
-	request.WithContext(ctx)
 
-	//nolint:bodyclose,noctx
+	//nolint:bodyclose
 	r, err := client.Do(request)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to post daemon create request")
