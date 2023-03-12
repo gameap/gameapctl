@@ -465,20 +465,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		err = InvalidResponseStatusCodeError(r.StatusCode)
 		log.Println(err)
 
-		dumpRequest, err := httputil.DumpRequestOut(request, true)
-		if err != nil {
-			log.Println(err)
-		} else {
-			log.Println("Request:\n", string(dumpRequest))
-		}
-
-		dumpResponse, err := httputil.DumpResponse(r, true)
-		if err != nil {
-			log.Println(err)
-			log.Println("Result: \n", string(result))
-		} else {
-			log.Println("Result: \n", string(dumpResponse))
-		}
+		dumpRequestAndResponse(request, r)
 
 		return state, err
 	}
@@ -492,7 +479,9 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 
 	if string(statusParts[0]) != "Success" {
 		if len(statusParts) > 1 {
-			return state, UnableToSetupNodeError(statusParts[1])
+			dumpRequestAndResponse(request, r)
+
+			return state, UnableToSetupNodeError(bytes.Join(statusParts[1:], []byte(" ")))
 		}
 
 		return state, UnableToSetupNodeError("error, no message")
@@ -530,6 +519,22 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	}
 
 	return state, nil
+}
+
+func dumpRequestAndResponse(req *http.Request, res *http.Response) {
+	dumpRequest, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println("Request:\n", string(dumpRequest))
+	}
+
+	dumpResponse, err := httputil.DumpResponse(res, true)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println("Result: \n", string(dumpResponse))
+	}
 }
 
 func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
