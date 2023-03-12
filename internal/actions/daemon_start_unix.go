@@ -131,13 +131,8 @@ func daemonConfigureSystemd(ctx context.Context) error {
 
 func startDaemonFork(_ context.Context) error {
 	var attr = os.ProcAttr{
-		Dir: ".",
+		Dir: "/srv/gameap",
 		Env: os.Environ(),
-		Files: []*os.File{
-			os.Stdin,
-			nil,
-			nil,
-		},
 		Sys: &syscall.SysProcAttr{Noctty: true},
 	}
 	p, err := os.StartProcess("gameap-daemon", []string{}, &attr)
