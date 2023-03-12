@@ -74,11 +74,6 @@ func serviceConfigure(ctx context.Context, state daemonsInstallState) (daemonsIn
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to copy service configuration")
 		}
-
-		err = utils.ExecCommand("systemctl", "daemon-reload")
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to reload systemctl")
-		}
 	}
 
 	return state, nil
