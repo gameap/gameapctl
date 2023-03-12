@@ -526,7 +526,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 }
 
 func dumpRequestAndResponse(req *http.Request, res *http.Response) {
-	dumpRequest, err := httputil.DumpRequest(req, true)
+	dumpRequest, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
 		log.Println(err)
 	} else {
