@@ -16,6 +16,7 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -369,7 +370,7 @@ func downloadRunner(ctx context.Context, state daemonsInstallState) (daemonsInst
 }
 
 //nolint:funlen
-func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to get hostname")
@@ -439,8 +440,14 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 		return state, errors.WithMessage(err, "failed to create daemon create url")
 	}
 
+	request, err := http.NewRequest(http.MethodPost, u, &b)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to create daemon create request")
+	}
+	request.WithContext(ctx)
+
 	//nolint:bodyclose,noctx
-	r, err := client.Post(u, w.FormDataContentType(), &b)
+	r, err := client.Do(request)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to post daemon create request")
 	}
@@ -458,7 +465,22 @@ func configureDaemon(_ context.Context, state daemonsInstallState) (daemonsInsta
 	if r.StatusCode != http.StatusOK {
 		err = InvalidResponseStatusCodeError(r.StatusCode)
 		log.Println(err)
-		log.Println(string(result))
+
+		dumpRequest, err := httputil.DumpRequestOut(request, true)
+		if err != nil {
+			log.Println(err)
+		} else {
+			log.Println("Request:\n", string(dumpRequest))
+		}
+
+		dumpResponse, err := httputil.DumpResponse(r, true)
+		if err != nil {
+			log.Println(err)
+			log.Println("Result: \n", string(result))
+		} else {
+			log.Println("Result: \n", string(dumpResponse))
+		}
+
 		return state, err
 	}
 
