@@ -415,7 +415,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		}
 	}(csrBites)
 
-	fw, err = w.CreateFormFile("gdaemon_server_cert", "server.csr")
+	fw, err = w.CreateFormFile("gdaemon_server_cert", "gdaemon_server_cert")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create form file")
 	}
@@ -466,6 +466,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		log.Println(err)
 
 		dumpRequestAndResponse(request, r)
+		log.Println(result)
 
 		return state, err
 	}
@@ -479,6 +480,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 
 	if string(statusParts[0]) != "Success" {
 		dumpRequestAndResponse(request, r)
+		log.Println(result)
 
 		if len(statusParts) > 1 {
 			return state, UnableToSetupNodeError(bytes.Join(statusParts[1:], []byte(" ")))
