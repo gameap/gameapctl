@@ -27,7 +27,6 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
-	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -164,14 +163,7 @@ func DaemonInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to save daemon config")
 	}
 
-	fmt.Println("Configuring service ...")
-	state, err = serviceConfigure(cliCtx.Context, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to configure service")
-	}
-
-	fmt.Println("Starting gameap-daemon ...")
-	err = service.Start(cliCtx.Context, "gameap-daemon")
+	err = startDaemon(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
