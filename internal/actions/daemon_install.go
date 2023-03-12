@@ -392,8 +392,8 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	ips := detectIPs()
 	state.ListenIP = chooseBestIP(ips)
 
-	fw, _ = w.CreateFormField("ip[]")
 	for _, ip := range ips {
+		fw, _ = w.CreateFormField("ip[]")
 		_, _ = fw.Write([]byte(ip))
 	}
 
@@ -439,8 +439,6 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create daemon create url")
 	}
-
-	log.Println(b.String())
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &b)
 	if err != nil {
@@ -610,9 +608,12 @@ func detectLocation() string {
 			continue
 		}
 
-		b := make([]byte, 0, r.ContentLength)
-		_, err = r.Body.Read(b)
+		b, err := io.ReadAll(r.Body)
 		if err != nil {
+			continue
+		}
+
+		if len(b) == 0 {
 			continue
 		}
 
