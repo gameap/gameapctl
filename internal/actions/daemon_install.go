@@ -478,9 +478,9 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	statusParts := bytes.SplitN(parts[0], []byte(" "), 3)
 
 	if string(statusParts[0]) != "Success" {
-		if len(statusParts) > 1 {
-			dumpRequestAndResponse(request, r)
+		dumpRequestAndResponse(request, r)
 
+		if len(statusParts) > 1 {
 			return state, UnableToSetupNodeError(bytes.Join(statusParts[1:], []byte(" ")))
 		}
 
@@ -522,7 +522,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 }
 
 func dumpRequestAndResponse(req *http.Request, res *http.Response) {
-	dumpRequest, err := httputil.DumpRequestOut(req, true)
+	dumpRequest, err := httputil.DumpRequest(req, true)
 	if err != nil {
 		log.Println(err)
 	} else {
