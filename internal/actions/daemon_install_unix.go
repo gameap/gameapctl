@@ -59,7 +59,8 @@ func serviceConfigure(ctx context.Context, state daemonsInstallState) (daemonsIn
 		}
 	}(tempDir)
 
-	if !utils.IsCommandAvailable("systemctl") {
+	if utils.IsCommandAvailable("systemctl") {
+		log.Println("Downloading systemctl service configuration")
 		err = utils.Download(
 			ctx,
 			"https://packages.gameap.ru/gameap-daemon/systemd-service.tar.gz",

@@ -170,7 +170,7 @@ func DaemonInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to configure service")
 	}
 
-	fmt.Println("Starting gameap-daemon")
+	fmt.Println("Starting gameap-daemon ...")
 	err = service.Start(cliCtx.Context, "gameap-daemon")
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
