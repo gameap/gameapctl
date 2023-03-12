@@ -3,6 +3,10 @@
 
 package actions
 
-func startDaemon(ctx context.Context) error {
+import (
+	"context"
+)
+
+func startDaemon(_ context.Context) error {
 	return nil
 }

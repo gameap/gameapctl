@@ -60,15 +60,14 @@ func detectInit(ctx context.Context) (string, error) {
 		return "", errors.WithMessage(err, "failed to evaluate symlink")
 	}
 
-	parts := filepath.SplitList(exe)
-	filename := parts[len(parts)-1]
+	_, filename := filepath.Split(exe)
 
 	switch filename {
 	case "systemd":
 		log.Println("Detected systemd init")
 		result = initSystemd
 	default:
-		log.Println("Unsupported init: ", filename)
+		log.Println("Unsupported init:", filename)
 	}
 
 	return result, nil
@@ -131,9 +130,10 @@ func daemonConfigureSystemd(ctx context.Context) error {
 
 func startDaemonFork(_ context.Context) error {
 	var attr = os.ProcAttr{
-		Dir: "/srv/gameap",
-		Env: os.Environ(),
-		Sys: &syscall.SysProcAttr{Noctty: true},
+		Dir:   "/srv/gameap",
+		Env:   os.Environ(),
+		Sys:   &syscall.SysProcAttr{Noctty: true},
+		Files: []*os.File{nil, nil, nil},
 	}
 	p, err := os.StartProcess("gameap-daemon", []string{}, &attr)
 	if err != nil {
