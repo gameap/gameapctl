@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 
@@ -129,15 +130,31 @@ func daemonConfigureSystemd(ctx context.Context) error {
 }
 
 func startDaemonFork(_ context.Context) error {
-	var attr = os.ProcAttr{
+	exePath, err := exec.LookPath("gameap-daemon")
+	if err != nil {
+		return errors.WithMessage(err, "failed to lookup gameap-daemon path")
+	}
+	log.Println("Found", exePath)
+
+	attr := os.ProcAttr{
 		Dir:   "/srv/gameap",
 		Env:   os.Environ(),
 		Sys:   &syscall.SysProcAttr{Noctty: true},
-		Files: []*os.File{nil, nil, nil},
+		Files: []*os.File{os.Stdin, nil, nil},
 	}
-	p, err := os.StartProcess("gameap-daemon", []string{}, &attr)
+	p, err := os.StartProcess(exePath, []string{}, &attr)
 	if err != nil {
-		return errors.WithMessage(err, "failed to start process")
+		log.Println(errors.WithMessage(err, "failed to start process"))
+
+		attr = os.ProcAttr{
+			Dir:   "/srv/gameap",
+			Env:   os.Environ(),
+			Files: []*os.File{os.Stdin, nil, nil},
+		}
+		p, err = os.StartProcess(exePath, []string{}, &attr)
+		if err != nil {
+			return errors.WithMessage(err, "failed to start process")
+		}
 	}
 
 	err = p.Release()
