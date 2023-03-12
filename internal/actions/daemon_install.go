@@ -444,9 +444,10 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create daemon create request")
 	}
+	requestClone := request.Clone(ctx)
 
 	//nolint:bodyclose
-	r, err := client.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to post daemon create request")
 	}
@@ -455,18 +456,19 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to close response body"))
 		}
-	}(r.Body)
-	result, err := io.ReadAll(r.Body)
+	}(response.Body)
+	result, err := io.ReadAll(response.Body)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to read response body")
 	}
+	response.Body = io.NopCloser(bytes.NewBuffer(result))
 
-	if r.StatusCode != http.StatusOK {
-		err = InvalidResponseStatusCodeError(r.StatusCode)
+	if response.StatusCode != http.StatusOK {
+		err = InvalidResponseStatusCodeError(response.StatusCode)
 		log.Println(err)
 
-		dumpRequestAndResponse(request, r)
-		log.Println(result)
+		dumpRequestAndResponse(requestClone, response)
+		log.Println(string(result))
 
 		return state, err
 	}
@@ -479,8 +481,8 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	statusParts := bytes.SplitN(parts[0], []byte(" "), 3)
 
 	if string(statusParts[0]) != "Success" {
-		dumpRequestAndResponse(request, r)
-		log.Println(result)
+		dumpRequestAndResponse(requestClone, response)
+		log.Println(string(result))
 
 		if len(statusParts) > 1 {
 			return state, UnableToSetupNodeError(bytes.Join(statusParts[1:], []byte(" ")))
