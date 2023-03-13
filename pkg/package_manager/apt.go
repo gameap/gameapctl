@@ -227,6 +227,21 @@ var packageAliases = distVersionPackagesMap{
 		},
 	},
 	"ubuntu": {
+		"precise": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"trusty": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"xenial": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"bionic": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"focal": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
 		"jammy": {
 			Lib32GCCPackage: {"lib32gcc-s1"},
 		},
