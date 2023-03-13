@@ -238,8 +238,8 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 			}
 		}(f)
 		err = pem.Encode(f, &pem.Block{
-			Type:  "PRIVATE KEY",
-			Bytes: privKey.D.Bytes(),
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(privKey),
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to encode private key")

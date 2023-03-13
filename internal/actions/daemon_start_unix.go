@@ -136,6 +136,8 @@ func daemonConfigureSystemd(ctx context.Context) error {
 }
 
 func startDaemonFork(_ context.Context) error {
+	log.Println("Starting daemon (fork)")
+
 	exePath, err := exec.LookPath("gameap-daemon")
 	if err != nil {
 		return errors.WithMessage(err, "failed to lookup gameap-daemon path")
@@ -163,6 +165,8 @@ func startDaemonFork(_ context.Context) error {
 		}
 	}
 
+	log.Println("Process started with pid", p.Pid)
+	log.Println("Releasing process")
 	err = p.Release()
 	if err != nil {
 		return errors.WithMessage(err, "failed to release process")
