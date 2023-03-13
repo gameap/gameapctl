@@ -163,6 +163,7 @@ func DaemonInstall(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to save daemon config")
 	}
 
+	fmt.Println("Starting gameap-daemon ...")
 	err = startDaemon(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
@@ -319,7 +320,8 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 	err = utils.Download(
 		ctx,
 		fmt.Sprintf(
-			"https://packages.gameap.ru/gameap-daemon/download-release.tar.gz?os=%s&arch=%s",
+			"%s/gameap-daemon/download-release.tar.gz?os=%s&arch=%s",
+			gameapRepo(),
 			runtime.GOOS,
 			runtime.GOARCH,
 		),

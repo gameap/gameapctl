@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -896,7 +897,12 @@ func installGameAP(ctx context.Context, path string) error {
 	}(tempDir)
 
 	fmt.Println("Downloading GameAP ...")
-	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
+	downloadPath, err := url.JoinPath(gameapRepo(), "gameap/latest.tar.gz")
+	if err != nil {
+		return errors.WithMessage(err, "failed to join url")
+	}
+
+	err = utils.Download(ctx, downloadPath, tempDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
 	}
@@ -935,13 +941,13 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 
 	fmt.Println("Updating .env ...")
 
-	url := "http://" + state.Host
+	u := "http://" + state.Host
 	if state.HTTPS {
-		url = "https://" + state.Host
+		u = "https://" + state.Host
 	}
 
 	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
-		"APP_URL=":       "APP_URL=" + url,
+		"APP_URL=":       "APP_URL=" + u,
 		"DB_CONNECTION=": "DB_CONNECTION=" + state.Database,
 		"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
 		"DB_PORT=":       "DB_PORT=" + state.DBCreds.Port,
@@ -1271,12 +1277,12 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 		hostPort = state.Host + ":" + state.Port
 	}
 
-	url := "http://" + hostPort + "/api/healthz"
+	u := "http://" + hostPort + "/api/healthz"
 	if state.HTTPS {
-		url = "https://" + hostPort + "/api/healthz"
+		u = "https://" + hostPort + "/api/healthz"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return state, err
 	}

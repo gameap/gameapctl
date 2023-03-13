@@ -7,6 +7,7 @@ import (
 	"context"
 	"io/fs"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,10 +107,15 @@ func daemonConfigureSystemd(ctx context.Context) error {
 		}
 	}(tempDir)
 
+	downloadURL, err := url.JoinPath(gameapRepo(), "gameap-daemon/systemd-service.tar.gz")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create download url")
+	}
+
 	log.Println("Downloading systemctl service configuration")
 	err = utils.Download(
 		ctx,
-		"https://packages.gameap.ru/gameap-daemon/systemd-service.tar.gz",
+		downloadURL,
 		tempDir,
 	)
 	if err != nil {
