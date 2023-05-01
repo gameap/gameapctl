@@ -56,6 +56,8 @@ type panelInstallState struct {
 	Path           string
 	AdminPassword  string
 	WebServer      string
+	FromGithub     bool
+	Branch         string
 	Database       string
 	DBCreds        databaseCredentials
 	OSInfo         osinfo.Info
@@ -92,6 +94,14 @@ func PanelInstall(cliCtx *cli.Context) error {
 		Password:     cliCtx.String("database-password"),
 	}
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
+
+	state.FromGithub = cliCtx.Bool("github")
+	developBranch := cliCtx.Bool("develop")
+	if developBranch {
+		state.Branch = "develop"
+	} else {
+		state.Branch = cliCtx.String("branch")
+	}
 
 	fmt.Printf(
 		"Detected operating system as %s/%s.\n",

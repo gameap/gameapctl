@@ -158,6 +158,18 @@ func Run(args []string) {
 							&cli.StringFlag{
 								Name: "database-password",
 							},
+							&cli.BoolFlag{
+								Name:   "github",
+								Hidden: true,
+							},
+							&cli.BoolFlag{
+								Name:   "develop",
+								Hidden: true,
+							},
+							&cli.StringFlag{
+								Name:   "branch",
+								Hidden: true,
+							},
 						},
 					},
 				},

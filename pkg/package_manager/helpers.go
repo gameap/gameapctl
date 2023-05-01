@@ -9,7 +9,12 @@ import (
 )
 
 func DefinePHPVersion() (string, error) {
-	cmd := exec.Command("php", "--version")
+	phpPath, err := exec.LookPath("php")
+	if err != nil {
+		return "", errors.WithMessage(err, "php command not found")
+	}
+
+	cmd := exec.Command(phpPath, "--version")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to check php version")
@@ -24,10 +29,7 @@ func parsePHPVersion(s string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	for scanner.Scan() {
 		data := strings.Split(scanner.Text(), " ")
-		if len(data) < 2 {
-			continue
-		}
-		if data[0] != "PHP" {
+		if len(data) < 2 || !strings.HasPrefix(data[0], "PHP") {
 			continue
 		}
 		parsedVersion := strings.Split(data[1], "-")
@@ -41,6 +43,7 @@ func parsePHPVersion(s string) (string, error) {
 		}
 
 		version = vr[0] + "." + vr[1]
+		break
 	}
 
 	if version == "" {
