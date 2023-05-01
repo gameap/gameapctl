@@ -140,6 +140,11 @@ func Run(args []string) {
 								Usage: "Install gameap from GitHub.",
 							},
 							&cli.StringFlag{
+								Name:   "branch",
+								Usage:  "Set specific GitHub branch.",
+								Hidden: true,
+							},
+							&cli.StringFlag{
 								Name:  "database",
 								Usage: "Database type. Available: mysql, sqlite. ",
 							},
@@ -157,18 +162,6 @@ func Run(args []string) {
 							},
 							&cli.StringFlag{
 								Name: "database-password",
-							},
-							&cli.BoolFlag{
-								Name:   "github",
-								Hidden: true,
-							},
-							&cli.BoolFlag{
-								Name:   "develop",
-								Hidden: true,
-							},
-							&cli.StringFlag{
-								Name:   "branch",
-								Hidden: true,
 							},
 						},
 					},
