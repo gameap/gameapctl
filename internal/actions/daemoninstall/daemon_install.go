@@ -834,12 +834,12 @@ func findReleaseURL(_ context.Context, kernel, platform string) (string, error) 
 	return link, nil
 }
 
-type failedToFindRelease struct {
+type failedToFindReleaseError struct {
 	OS   string
 	Arch string
 }
 
-func (e failedToFindRelease) Error() string {
+func (e failedToFindReleaseError) Error() string {
 	return fmt.Sprintf("failed to find release for %s (arch: %s)", e.OS, e.Arch)
 }
 
@@ -866,5 +866,5 @@ func findRelease(reader io.Reader, os string, arch string) (string, error) {
 		}
 	}
 
-	return "", failedToFindRelease{os, arch}
+	return "", failedToFindReleaseError{os, arch}
 }
