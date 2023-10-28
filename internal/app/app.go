@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
+	"github.com/gameap/gameapctl/internal/actions/daemonrestart"
 	"github.com/gameap/gameapctl/internal/actions/daemonstart"
 	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
 	"github.com/gameap/gameapctl/internal/actions/daemonstop"
@@ -135,6 +136,7 @@ func Run(args []string) {
 						Aliases:     []string{"r"},
 						Description: "Restart daemon",
 						Usage:       "Restart daemon",
+						Action:      daemonrestart.Handle,
 					},
 				},
 			},
