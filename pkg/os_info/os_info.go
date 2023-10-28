@@ -55,14 +55,13 @@ func GetOSInfo() (Info, error) {
 	return result, nil
 }
 
-//nolint:unused
 type distInfo struct {
 	Name            string
 	Version         string
 	VersionCodename string
 }
 
-// nolint
+//nolint:funlen,unparam
 func detectLinuxDist() (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"
@@ -71,6 +70,7 @@ func detectLinuxDist() (distInfo, error) {
 
 	result := distInfo{}
 
+	//nolint:nestif
 	if _, err := os.Stat(etcLsbRelease); !os.IsNotExist(err) {
 		// /etc/lsb-release exists, read it
 		data, err := os.ReadFile(etcLsbRelease)
@@ -146,7 +146,6 @@ func detectLinuxDist() (distInfo, error) {
 
 	_, debianVersionErr := os.Stat("/etc/debian_version")
 	if result.VersionCodename == "" && !errors.Is(debianVersionErr, os.ErrNotExist) {
-
 		// /etc/debian_version exists
 		// extract os from /etc/issue
 		data, err := os.ReadFile("/etc/issue")
@@ -182,12 +181,12 @@ func detectLinuxDist() (distInfo, error) {
 	return result, nil
 }
 
-//nolint:unused
 func extractField(data []byte, key string) string {
 	regex := regexp.MustCompile(fmt.Sprintf(`(?m)^%s=([^\s]+)`, key))
 	matches := regex.FindStringSubmatch(string(data))
 	if len(matches) == 2 {
 		return matches[1]
 	}
+
 	return ""
 }

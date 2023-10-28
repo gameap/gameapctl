@@ -147,7 +147,7 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil || svc == nil {
-		return NewErrServiceNotFound(serviceName)
+		return NewNotFoundError(serviceName)
 	}
 
 	if svc.State == windowsServiceStateStopped {
@@ -162,7 +162,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 func (s *Windows) stop(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil || svc == nil {
-		return NewErrServiceNotFound(serviceName)
+		return NewNotFoundError(serviceName)
 	}
 
 	if svc.State == windowsServiceStateRunning {

@@ -43,6 +43,7 @@ func parsePHPVersion(s string) (string, error) {
 		}
 
 		version = vr[0] + "." + vr[1]
+
 		break
 	}
 

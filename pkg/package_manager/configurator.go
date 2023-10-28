@@ -192,7 +192,7 @@ func findNginxDirWindows(_ context.Context) (string, error) {
 func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {
 	cmd := exec.Command("sc", "qc", serviceName)
 	buf := &bytes.Buffer{}
-	buf.Grow(1024)
+	buf.Grow(1024) //nolint:gomnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
 

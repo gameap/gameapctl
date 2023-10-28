@@ -2,12 +2,17 @@ linters:
   enable:
     - asciicheck
     - bodyclose
+    - containedctx
+    - decorder
     - dogsled
     - dupl
+    - dupword
     - errcheck
+    - errname
     - exportloopref
-    - govet
+    - forcetypeassert
     - funlen
+    - gocheckcompilerdirectives
     - gochecknoinits
     - gocognit
     - goconst
@@ -18,27 +23,45 @@ linters:
     - goerr113
     - gofmt
     - goimports
+    - gomnd
     - gomodguard
     - goprintffuncname
     - gosec
     - gosimple
     - govet
     - ineffassign
+    - ireturn
     - lll
     - makezero
+    - mirror
     - misspell
+    - musttag
     - nakedret
     - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
     - noctx
+    - nolintlint
+    - perfsprint
     - prealloc
+    - predeclared
+    - protogetter
+    - reassign
     - revive
+    - rowserrcheck
+    - sqlclosecheck
     - staticcheck
     - stylecheck
+    - tagalign
+    - tagliatelle
+    - tenv
     - thelper
     - typecheck
     - unconvert
     - unparam
     - unused
+    - usestdlibvars
     - whitespace
 issues:
   exclude-rules:
@@ -57,3 +80,11 @@ issues:
         - funlen
         - revive
         - stylecheck
+
+linters-settings:
+  gomnd:
+    ignored-numbers:
+      - '0600'
+      - '0666'
+      - '0755'
+      - '2'

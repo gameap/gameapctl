@@ -23,6 +23,7 @@ type PackageManager interface {
 	Purge(ctx context.Context, packs ...string) error
 }
 
+//nolint:ireturn,nolintlint
 func Load(ctx context.Context) (PackageManager, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 

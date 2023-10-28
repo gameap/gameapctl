@@ -20,7 +20,7 @@ func gameapRepo() string {
 
 		for _, cr := range repos {
 			client := http.DefaultClient
-			client.Timeout = 5 * time.Second
+			client.Timeout = 5 * time.Second //nolint:gomnd
 
 			//nolint:bodyclose,noctx
 			r, err := client.Get(cr)
@@ -36,6 +36,7 @@ func gameapRepo() string {
 
 			if r.StatusCode == http.StatusOK {
 				repo = cr
+
 				break
 			}
 		}

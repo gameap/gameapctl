@@ -18,6 +18,7 @@ import (
 
 func IsFileExists(path string) bool {
 	_, err := os.Stat(path)
+
 	return err == nil
 }
 
@@ -65,7 +66,7 @@ func Copy(src string, dst string) error {
 }
 
 func WriteContentsToFile(contents []byte, path string) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644) //nolint:gomnd
 	if err != nil {
 		return err
 	}
@@ -202,6 +203,7 @@ func findLineAndReplaceOrAdd(
 				line = b.String()
 
 				delete(replaceMap, needle)
+
 				break
 			}
 		}

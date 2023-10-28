@@ -33,6 +33,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	defaultDaemonPort = 31717
+)
+
 var errEmptyToken = errors.New("empty token")
 
 type UnableToSetupNodeError string
@@ -210,7 +214,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	}
 
 	if _, err := os.Stat(state.CertsPath); os.IsNotExist(err) {
-		err = os.MkdirAll(state.CertsPath, 0700)
+		err = os.MkdirAll(state.CertsPath, 0700) //nolint:gomnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create certificates directory")
 		}
@@ -222,7 +226,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		privKey, err = rsa.GenerateKey(rand.Reader, 2048)
+		privKey, err = rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -346,6 +350,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 			return state, errors.WithMessage(err, "failed to move gameap-daemon binaries")
 		}
 		binariesInstalled = true
+
 		break
 	}
 
@@ -397,7 +402,10 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	_, _ = fw.Write([]byte(runtime.GOOS))
 
 	ips := detectIPs()
-	state.ListenIP = chooseBestIP(ips)
+	state.ListenIP, err = chooseBestIP(ips)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to choose best IP")
+	}
 
 	for _, ip := range ips {
 		fw, _ = w.CreateFormField("ip[]")
@@ -439,7 +447,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	_, _ = fw.Write([]byte("{node_work_path}/runner.sh send_command -d {dir} -n {uuid} -u {user} -c \"{command}\""))
 
 	client := http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 30 * time.Second, //nolint:gomnd
 	}
 
 	u, err := url.JoinPath(state.Host, "/gdaemon/create/", state.Token)
@@ -487,7 +495,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.New("invalid response body")
 	}
 
-	statusParts := bytes.SplitN(parts[0], []byte(" "), 3)
+	statusParts := bytes.SplitN(parts[0], []byte(" "), 3) //nolint:gomnd
 
 	if string(statusParts[0]) != "Success" {
 		dumpRequestAndResponse(requestClone, response)
@@ -500,6 +508,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, UnableToSetupNodeError("error, no message")
 	}
 
+	//nolint:gomnd
 	if len(statusParts) < 3 {
 		return state, UnableToSetupNodeError("error, invalid status message")
 	}
@@ -555,7 +564,7 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		NodeID: state.NodeID,
 
 		ListenIP:   state.ListenIP,
-		ListenPort: 31717,
+		ListenPort: defaultDaemonPort,
 
 		APIHost: state.Host,
 		APIKey:  state.APIKey,
@@ -592,7 +601,7 @@ func detectLocation() string {
 	}
 
 	client := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 5 * time.Second, //nolint:gomnd
 	}
 
 	for _, d := range detectors {
@@ -611,6 +620,7 @@ func detectLocation() string {
 			}
 		}(r.Body)
 
+		//nolint:gomnd
 		if r.ContentLength > 20 {
 			continue
 		}
@@ -668,6 +678,7 @@ func (h WeightStructHeap) Len() int           { return len(h) }
 func (h WeightStructHeap) Less(i, j int) bool { return h[i].W > h[j].W }
 func (h WeightStructHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
+//nolint:forcetypeassert
 func (h *WeightStructHeap) Push(x interface{}) {
 	*h = append(*h, x.(WeightStruct))
 }
@@ -677,12 +688,13 @@ func (h *WeightStructHeap) Pop() interface{} {
 	n := len(old)
 	x := old[n-1]
 	*h = old[0 : n-1]
+
 	return x
 }
 
-func chooseBestIP(ips []string) string {
+func chooseBestIP(ips []string) (string, error) {
 	if len(ips) == 0 {
-		return "0.0.0.0"
+		return "0.0.0.0", nil
 	}
 
 	h := make(WeightStructHeap, 0, len(ips))
@@ -707,7 +719,17 @@ func chooseBestIP(ips []string) string {
 		}
 	}
 
-	return heap.Pop(&h).(WeightStruct).V.(string)
+	p, ok := heap.Pop(&h).(WeightStruct)
+	if !ok {
+		return "", errors.New("invalid pop struct")
+	}
+
+	result, ok := p.V.(string)
+	if !ok {
+		return "", errors.New("invalid value struct")
+	}
+
+	return result, nil
 }
 
 type DaemonConfigScripts struct {
@@ -731,6 +753,7 @@ type DaemonSteamConfig struct {
 	Password string `yaml:"password"`
 }
 
+//nolint:tagliatelle
 type DaemonConfig struct {
 	NodeID uint `yaml:"ds_id"`
 

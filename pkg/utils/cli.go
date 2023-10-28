@@ -39,7 +39,7 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate func(st
 		default:
 		}
 
-		fmt.Print(question)
+		fmt.Print(question) //nolint:forbidigo
 
 		result := readStdin(ctx)
 
@@ -53,6 +53,7 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate func(st
 			ok, message := validate(result)
 			if !ok {
 				fmt.Println(message)
+
 				continue
 			}
 		}

@@ -31,7 +31,8 @@ func Test_chooseBestIP(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, chooseBestIP(test.ips))
+			result, _ := chooseBestIP(test.ips)
+			assert.Equal(t, test.want, result)
 		})
 	}
 }

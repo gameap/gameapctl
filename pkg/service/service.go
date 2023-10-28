@@ -23,6 +23,7 @@ func Start(ctx context.Context, serviceName string) error {
 	if err != nil {
 		return err
 	}
+
 	return s.Start(ctx, serviceName)
 }
 
@@ -31,6 +32,7 @@ func Stop(ctx context.Context, serviceName string) error {
 	if err != nil {
 		return err
 	}
+
 	return s.Stop(ctx, serviceName)
 }
 
@@ -53,6 +55,7 @@ func Restart(ctx context.Context, serviceName string) error {
 	return nil
 }
 
+//nolint:ireturn,nolintlint
 func Load(ctx context.Context) (srv Service, err error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
@@ -63,12 +66,14 @@ func Load(ctx context.Context) (srv Service, err error) {
 			_, err = exec.LookPath("service")
 			if err == nil {
 				service = NewBasic()
+
 				return
 			}
 
 			_, err := exec.LookPath("systemctl")
 			if err == nil {
 				service = NewSystemd()
+
 				return
 			}
 		case "windows":
@@ -94,6 +99,7 @@ func (s *Systemd) Start(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }
 
@@ -102,6 +108,7 @@ func (s *Systemd) Stop(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }
 
@@ -110,6 +117,7 @@ func (s *Systemd) Restart(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }
 
@@ -124,6 +132,7 @@ func (s *Basic) Start(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }
 
@@ -132,6 +141,7 @@ func (s *Basic) Stop(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }
 
@@ -140,5 +150,6 @@ func (s *Basic) Restart(_ context.Context, serviceName string) error {
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	log.Println('\n', cmd.String())
+
 	return cmd.Run()
 }

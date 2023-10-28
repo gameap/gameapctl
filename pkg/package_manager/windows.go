@@ -131,6 +131,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 
 		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(packagePath))
+
 		break
 	}
 
@@ -161,6 +162,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 
 		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", packagePath, packName)
+
 		return nil
 	}
 
@@ -186,6 +188,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		if err != nil {
 			log.Println("failed to download file")
 			log.Println(err)
+
 			continue
 		}
 
@@ -255,6 +258,7 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	if service.IsExists(ctx, packName) {
 		log.Printf("Service '%s' is already exists", packName)
+
 		return nil
 	}
 
@@ -312,7 +316,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
-		buf.Grow(100)
+		buf.Grow(100) //nolint:gomnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -342,7 +346,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd = exec.Command("php", "-r", "echo php_ini_loaded_file();")
 		buf = &bytes.Buffer{}
-		buf.Grow(100)
+		buf.Grow(100) //nolint:gomnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -399,6 +403,7 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		p := repository[PHPPackage]
 
 		path, _ := os.LookupEnv("PATH")
+
 		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
 	},
 	NginxPackage: func(_ context.Context, _ string) error {
@@ -427,6 +432,7 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		}
 
 		log.Println("Removing", d)
+
 		return os.RemoveAll(d)
 	},
 }
