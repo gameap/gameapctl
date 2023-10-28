@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/matishsiao/goInfo"
@@ -36,6 +37,10 @@ func GetOSInfo() (Info, error) {
 		OS:       gi.OS,
 		Hostname: gi.Hostname,
 		CPUs:     gi.CPUs,
+	}
+
+	if result.Platform == "" || result.Platform == "unknown" {
+		result.Platform = runtime.GOARCH
 	}
 
 	if gi.OS == "GNU/Linux" {

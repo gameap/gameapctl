@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -28,11 +29,30 @@ func Run(args []string) {
 		Name:      "gameapctl",
 		Usage:     "GameAP Control",
 		UsageText: "Find more information at: https://docs.gameap.ru/",
-		Before: func(context *cli.Context) error {
+		Before: func(ctx *cli.Context) error {
 			var err error
-			context.Context, err = contextInternal.SetOSContext(context.Context)
+			ctx.Context, err = contextInternal.SetOSContext(ctx.Context)
 			if err != nil {
 				return err
+			}
+
+			if ctx.Bool("debug") {
+				osInfo := contextInternal.OSInfoFromContext(ctx.Context)
+
+				fmt.Println("---------------")
+				fmt.Println("Information")
+				fmt.Println()
+				fmt.Println("Kernel:", osInfo.Kernel)
+				fmt.Println("Core:", osInfo.Core)
+				fmt.Println("Distribution:", osInfo.Distribution)
+				fmt.Println("DistributionVersion:", osInfo.DistributionVersion)
+				fmt.Println("DistributionCodename:", osInfo.DistributionCodename)
+				fmt.Println("Platform:", osInfo.Platform)
+				fmt.Println("Platform:", runtime.NumCPU())
+				fmt.Println("OS:", osInfo.OS)
+				fmt.Println("Hostname:", osInfo.Hostname)
+				fmt.Println("CPUs:", osInfo.CPUs)
+				fmt.Println("---------------")
 			}
 
 			return nil
@@ -40,6 +60,10 @@ func Run(args []string) {
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "non-interactive",
+				Value: false,
+			},
+			&cli.BoolFlag{
+				Name:  "debug",
 				Value: false,
 			},
 		},

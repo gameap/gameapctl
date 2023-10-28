@@ -205,78 +205,17 @@ func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
 	return e.apt.Purge(ctx, packs...)
 }
 
-type distVersionPackagesMap map[string]map[string]map[string][]string
-
-var packageAliases = distVersionPackagesMap{
-	"debian": {
-		"squeeze": {
-			MySQLServerPackage: {"mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc1"},
-		},
-		"wheezy": {
-			MySQLServerPackage: {"mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc1"},
-		},
-		"jessie": {
-			MySQLServerPackage: {"mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc1"},
-		},
-		"stretch": {
-			MySQLServerPackage: {"default-mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc1"},
-		},
-		"buster": {
-			MySQLServerPackage: {"default-mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc1"},
-		},
-		"bullseye": {
-			MySQLServerPackage: {"default-mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc-s1"},
-		},
-		"bookwork": {
-			MySQLServerPackage: {"default-mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc-s1"},
-		},
-		"sid": {
-			MySQLServerPackage: {"default-mysql-server"},
-			Lib32GCCPackage:    {"lib32gcc-s1"},
-		},
-	},
-	"ubuntu": {
-		"precise": {
-			Lib32GCCPackage: {"lib32gcc1"},
-		},
-		"trusty": {
-			Lib32GCCPackage: {"lib32gcc1"},
-		},
-		"xenial": {
-			Lib32GCCPackage: {"lib32gcc1"},
-		},
-		"bionic": {
-			Lib32GCCPackage: {"lib32gcc1"},
-		},
-		"focal": {
-			Lib32GCCPackage: {"lib32gcc1"},
-		},
-		"jammy": {
-			Lib32GCCPackage: {"lib32gcc-s1"},
-		},
-		"kinetic": {
-			Lib32GCCPackage: {"lib32gcc-s1"},
-		},
-		"lunar": {
-			Lib32GCCPackage: {"lib32gcc-s1"},
-		},
-	},
-}
-
 func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []string {
 	replacedPacks := make([]string, 0, len(packs))
 
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	for _, pack := range packs {
-		if aliases, exists := packageAliases[osInfo.Distribution][osInfo.DistributionCodename][pack]; exists {
+		if aliases, exists :=
+			packageAliases[osInfo.Distribution][osInfo.DistributionCodename][osInfo.Platform][pack]; exists {
+			replacedPacks = append(replacedPacks, aliases...)
+		} else if aliases, exists =
+			packageAliases[osInfo.Distribution][osInfo.DistributionCodename]["default"][pack]; exists {
 			replacedPacks = append(replacedPacks, aliases...)
 		} else {
 			replacedPacks = append(replacedPacks, pack)
