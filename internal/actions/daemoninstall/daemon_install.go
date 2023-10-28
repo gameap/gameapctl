@@ -1,4 +1,4 @@
-package actions
+package daemoninstall
 
 import (
 	"bytes"
@@ -25,6 +25,8 @@ import (
 	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -67,12 +69,12 @@ type daemonsInstallState struct {
 }
 
 //nolint:funlen
-func DaemonInstall(cliCtx *cli.Context) error {
+func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Install daemon")
 	state := daemonsInstallState{
 		Host:         cliCtx.String("host"),
 		Token:        cliCtx.String("token"),
-		SteamCMDPath: defaultSteamCMDPath,
+		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
 	if state.Host == "" {
@@ -84,11 +86,11 @@ func DaemonInstall(cliCtx *cli.Context) error {
 	}
 
 	if state.WorkPath == "" {
-		state.WorkPath = defaultWorkPath
+		state.WorkPath = gameap.DefaultWorkPath
 	}
 
 	if state.CertsPath == "" {
-		state.CertsPath = defaultDaemonCertPath
+		state.CertsPath = gameap.DefaultDaemonCertPath
 	}
 
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
@@ -168,7 +170,7 @@ func DaemonInstall(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
-	err = startDaemon(cliCtx.Context)
+	err = daemon.Start(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
@@ -325,7 +327,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 		ctx,
 		fmt.Sprintf(
 			"%s/gameap-daemon/download-release.tar.gz?os=%s&arch=%s",
-			gameapRepo(),
+			gameap.Repository(),
 			runtime.GOOS,
 			runtime.GOARCH,
 		),
@@ -345,7 +347,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 			return state, errors.WithMessage(err, "failed to stat file")
 		}
 
-		err = utils.Move(fp, defaultDaemonFilePath)
+		err = utils.Move(fp, gameap.DefaultDaemonFilePath)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to move gameap-daemon binaries")
 		}
@@ -362,7 +364,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 }
 
 func downloadRunner(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
-	runnerFilePath := filepath.Join(defaultToolsPath, "runner.sh")
+	runnerFilePath := filepath.Join(gameap.DefaultToolsPath, "runner.sh")
 
 	err := utils.DownloadFile(
 		ctx,
@@ -574,10 +576,10 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		PrivateKeyFile:       filepath.Join(state.CertsPath, "server.key"),
 
 		LogLevel:  "debug",
-		OutputLog: defaultOutputLogPath,
+		OutputLog: gameap.DefaultOutputLogPath,
 
 		WorkPath:     state.WorkPath,
-		ToolsPath:    defaultToolsPath,
+		ToolsPath:    gameap.DefaultToolsPath,
 		SteamCMDPath: state.SteamCMDPath,
 	}
 
@@ -586,7 +588,7 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		return state, errors.WithMessage(err, "failed to marshal daemon config")
 	}
 
-	err = os.WriteFile(defaultDaemonConfigFilePath, cfgBytes, 0600)
+	err = os.WriteFile(gameap.DefaultDaemonConfigFilePath, cfgBytes, 0600)
 
 	return state, err
 }

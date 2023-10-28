@@ -11,7 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gameap/gameapctl/internal/actions"
+	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
+	"github.com/gameap/gameapctl/internal/actions/panelinstall"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -57,7 +58,7 @@ func Run(args []string) {
 
 							return nil
 						},
-						Action: actions.DaemonInstall,
+						Action: daemoninstall.Handle,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "token",
@@ -118,7 +119,7 @@ func Run(args []string) {
 
 							return nil
 						},
-						Action: actions.PanelInstall,
+						Action: panelinstall.Handle,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:  "path",

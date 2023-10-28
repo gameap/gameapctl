@@ -85,6 +85,7 @@ linters-settings:
   gomnd:
     ignored-numbers:
       - '0600'
+      - '0644'
       - '0666'
       - '0755'
       - '2'

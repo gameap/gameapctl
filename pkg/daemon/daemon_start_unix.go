@@ -1,7 +1,7 @@
 //go:build linux || darwin
 // +build linux darwin
 
-package actions
+package daemon
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -24,7 +25,7 @@ const (
 	initSystemd = "systemd"
 )
 
-func startDaemon(ctx context.Context) error {
+func Start(ctx context.Context) error {
 	init, err := detectInit(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect init")
@@ -107,7 +108,7 @@ func daemonConfigureSystemd(ctx context.Context) error {
 		}
 	}(tempDir)
 
-	downloadURL, err := url.JoinPath(gameapRepo(), "gameap-daemon/systemd-service.tar.gz")
+	downloadURL, err := url.JoinPath(gameap.Repository(), "gameap-daemon/systemd-service.tar.gz")
 	if err != nil {
 		return errors.WithMessage(err, "failed to create download url")
 	}

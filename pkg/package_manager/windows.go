@@ -206,6 +206,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 
 		err = nil
+
 		break
 	}
 	if err != nil {

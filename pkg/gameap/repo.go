@@ -1,4 +1,4 @@
-package actions
+package gameap
 
 import (
 	"io"
@@ -11,7 +11,7 @@ import (
 var repo string
 var repoOnce sync.Once
 
-func gameapRepo() string {
+func Repository() string {
 	repoOnce.Do(func() {
 		repos := []string{
 			"https://packages.gameap.ru",

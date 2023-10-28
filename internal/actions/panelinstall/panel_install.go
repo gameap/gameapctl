@@ -1,4 +1,4 @@
-package actions
+package panelinstall
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/go-sql-driver/mysql"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -88,7 +89,7 @@ type databaseCredentials struct {
 }
 
 //nolint:funlen,gocognit,gocyclo
-func PanelInstall(cliCtx *cli.Context) error {
+func Handle(cliCtx *cli.Context) error {
 	var err error
 	state := panelInstallState{}
 
@@ -410,7 +411,7 @@ func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]
 		}
 
 		if result.path == "" {
-			result.path = defaultWebInstallationPath
+			result.path = gameap.DefaultWebInstallationPath
 		}
 	}
 
@@ -935,7 +936,7 @@ func installGameAP(ctx context.Context, path string) error {
 	}(tempDir)
 
 	fmt.Println("Downloading GameAP ...")
-	downloadPath, err := url.JoinPath(gameapRepo(), "gameap/latest.tar.gz")
+	downloadPath, err := url.JoinPath(gameap.Repository(), "gameap/latest.tar.gz")
 	if err != nil {
 		return errors.WithMessage(err, "failed to join url")
 	}

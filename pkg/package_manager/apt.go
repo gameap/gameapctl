@@ -523,7 +523,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to export nginx gpg key")
 	}
-	//nolint:gosec,gomnd
+	//nolint:gosec
 	err = os.WriteFile("/etc/apt/trusted.gpg.d/nginx.gpg", out, 0644)
 	if err != nil {
 		return errors.WithMessage(err, "failed to write nginx gpg key")

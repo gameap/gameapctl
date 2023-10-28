@@ -1,12 +1,12 @@
 //go:build windows
 // +build windows
 
-package actions
+package daemon
 
 import (
 	"context"
 )
 
-func startDaemon(_ context.Context) error {
+func Start(_ context.Context) error {
 	return nil
 }

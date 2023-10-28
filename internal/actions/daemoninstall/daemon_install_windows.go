@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package actions
+package daemoninstall
 
 import "context"
 
