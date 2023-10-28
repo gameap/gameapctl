@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -325,7 +324,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	daemonBinariesTmpDir := filepath.Join(tmpDir, "daemon")
 
-	downloadURL, err := findReleaseURL(ctx, state.OSInfo.Kernel, state.OSInfo.Platform)
+	downloadURL, err := findReleaseURL(ctx, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to find release")
 	}
@@ -826,7 +825,7 @@ func findReleaseURL(_ context.Context, kernel, platform string) (string, error) 
 		}
 	}(resp.Body)
 
-	link, err := findRelease(resp.Body, strings.ToLower(kernel), strings.ToLower(platform))
+	link, err := findRelease(resp.Body, kernel, platform)
 	if err != nil {
 		return "", err
 	}
