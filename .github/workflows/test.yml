@@ -87,8 +87,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
-        run: go version
-
 
       - name: Set up dependencies
         run: go mod download
