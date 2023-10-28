@@ -233,6 +233,10 @@ var packageAliases = distVersionPackagesMap{
 			MySQLServerPackage: {"default-mysql-server"},
 			Lib32GCCPackage:    {"lib32gcc-s1"},
 		},
+		"bookwork": {
+			MySQLServerPackage: {"default-mysql-server"},
+			Lib32GCCPackage:    {"lib32gcc-s1"},
+		},
 		"sid": {
 			MySQLServerPackage: {"default-mysql-server"},
 			Lib32GCCPackage:    {"lib32gcc-s1"},
