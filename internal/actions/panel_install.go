@@ -41,6 +41,12 @@ const (
 	noneWebServer   = "none"
 )
 
+const (
+	defaultMysqlUsername = "gameap"
+	defaultMysqlHost     = "localhost"
+	defaultMysqlDatabase = "gameap"
+)
+
 var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
@@ -683,15 +689,15 @@ func installMySQL(
 //nolint:funlen
 func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
 	if dbCreds.Username == "" {
-		dbCreds.Username = "gameap"
+		dbCreds.Username = defaultMysqlUsername
 	}
 
 	if dbCreds.DatabaseName == "" {
-		dbCreds.DatabaseName = "gameap"
+		dbCreds.DatabaseName = defaultMysqlDatabase
 	}
 
 	if dbCreds.Host == "" {
-		dbCreds.Host = "localhost"
+		dbCreds.Host = defaultMysqlHost
 	}
 
 	passwordGenerator, err := password.NewGenerator(&password.GeneratorInput{
@@ -1389,7 +1395,6 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 		state, err = checkInstallation(ctx, state)
 		if err != nil {
 			log.Println(err)
-			continue
 		} else {
 			break
 		}

@@ -375,9 +375,9 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 			versionAvailable = "8.2"
 			log.Println("PHP 8.2 version found")
 			break
-		} else {
-			log.Println("PHP 8.2 version not found")
 		}
+
+		log.Println("PHP 8.2 version not found")
 
 		log.Println("Checking for PHP 8.1 version available...")
 		pk, err = e.apt.Search(ctx, "php8.1")
@@ -388,9 +388,9 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 			versionAvailable = "8.1"
 			log.Println("PHP 8.1 version found")
 			break
-		} else {
-			log.Println("PHP 8.1 version not found")
 		}
+
+		log.Println("PHP 8.1 version not found")
 
 		pk, err = e.apt.Search(ctx, "php8.0")
 		if err != nil {
@@ -400,9 +400,9 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 			versionAvailable = "8.0"
 			log.Println("PHP 8.0 version found")
 			break
-		} else {
-			log.Println("PHP 8.0 version not found")
 		}
+
+		log.Println("PHP 8.0 version not found")
 
 		pk, err = e.apt.Search(ctx, "php7.4")
 		if err != nil {
@@ -412,9 +412,9 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 			versionAvailable = "7.4"
 			log.Println("PHP 7.4 version found")
 			break
-		} else {
-			log.Println("PHP 7.4 version not found")
 		}
+
+		log.Println("PHP 7.4 version not found")
 
 		pk, err = e.apt.Search(ctx, "php7.3")
 		if err != nil {
@@ -424,9 +424,9 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 			versionAvailable = "7.3"
 			log.Println("PHP 7.3 version found")
 			break
-		} else {
-			log.Println("PHP 7.3 version not found")
 		}
+
+		log.Println("PHP 7.3 version not found")
 
 		added, err := e.addPHPRepositories(ctx)
 		if err != nil {
@@ -437,6 +437,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		}
 	}
 
+	//nolint:goconst
 	packages := []string{
 		"php" + versionAvailable + "-bcmath",
 		"php" + versionAvailable + "-bz2",

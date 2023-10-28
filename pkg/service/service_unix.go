@@ -15,18 +15,18 @@ func NewWindows() *WindowsNil {
 	return &WindowsNil{}
 }
 
-func (s *WindowsNil) Start(ctx context.Context, serviceName string) error {
+func (s *WindowsNil) Start(_ context.Context, _ string) error {
 	return errors.New("unsupported")
 }
 
-func (s *WindowsNil) Stop(ctx context.Context, serviceName string) error {
+func (s *WindowsNil) Stop(_ context.Context, _ string) error {
 	return errors.New("unsupported")
 }
 
-func (s *WindowsNil) Restart(ctx context.Context, serviceName string) error {
+func (s *WindowsNil) Restart(_ context.Context, _ string) error {
 	return errors.New("unsupported")
 }
 
-func IsExists(_ context.Context, serviceName string) bool {
+func IsExists(_ context.Context, _ string) bool {
 	panic("function is not implemented")
 }

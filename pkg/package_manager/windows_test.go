@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func Test(t *testing.T) {
+func Test(_ *testing.T) {
 	p, _ := exec.LookPath("php")
 
 	fmt.Println(p)
