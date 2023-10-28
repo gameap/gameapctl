@@ -9,12 +9,10 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
@@ -62,18 +60,20 @@ var errApacheWindowsIsNotSupported = errors.New("apache is not supported yet, so
 
 type panelInstallState struct {
 	NonInteractive bool
-	HTTPS          bool
-	Host           string
-	HostIP         string
-	Port           string
-	Path           string
-	AdminPassword  string
-	WebServer      string
-	FromGithub     bool
-	Branch         string
-	Database       string
-	DBCreds        databaseCredentials
-	OSInfo         osinfo.Info
+	SkipWarnings   bool
+
+	HTTPS         bool
+	Host          string
+	HostIP        string
+	Port          string
+	Path          string
+	AdminPassword string
+	WebServer     string
+	FromGithub    bool
+	Branch        string
+	Database      string
+	DBCreds       databaseCredentials
+	OSInfo        osinfo.Info
 
 	// Installation variables
 	DatabaseWasInstalled bool
@@ -186,6 +186,16 @@ func Handle(cliCtx *cli.Context) error {
 	state, err = filterAndCheckHost(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check host")
+	}
+
+	state, err = checkWebServers(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check web servers")
+	}
+
+	state, err = checkHTTPHostAvailability(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check http host availability")
 	}
 
 	fmt.Println()
@@ -370,206 +380,6 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("---------------------------------")
 
 	return nil
-}
-
-type askedParams struct {
-	path      string
-	host      string
-	database  string
-	webServer string
-}
-
-//nolint:funlen,gocognit
-func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]struct{}) (askedParams, error) {
-	var err error
-	result := askedParams{}
-
-	//nolint:nestif
-	if _, ok := needToAsk["path"]; ok {
-		pathText := "Enter gameap installation path (Example: /var/www/gameap): "
-
-		if runtime.GOOS == "windows" {
-			pathText = "Enter gameap installation path (Example: C:\\gameap\\web): "
-		}
-
-		if result.path == "" {
-			result.path, err = utils.Ask(
-				ctx,
-				pathText,
-				true,
-				func(s string) (bool, string) {
-					if _, err := os.Stat(s); errors.Is(err, fs.ErrNotExist) {
-						return true, ""
-					}
-
-					return false, fmt.Sprintf("Directory '%s' already exists. Please provide another path", s)
-				},
-			)
-			if err != nil {
-				return result, err
-			}
-		}
-
-		if result.path == "" {
-			result.path = gameap.DefaultWebInstallationPath
-		}
-	}
-
-	if _, ok := needToAsk["host"]; ok {
-		result.host, err = utils.Ask(
-			ctx,
-			"Enter gameap host (Example: example.com): ",
-			false,
-			nil,
-		)
-		if err != nil {
-			return result, err
-		}
-	}
-
-	if _, ok := needToAsk["database"]; ok {
-		fmt.Println("Select database to install and configure")
-		fmt.Println("")
-		fmt.Println("1) MySQL")
-		fmt.Println("2) SQLite")
-		fmt.Println("3) None. Do not install a database")
-
-		for {
-			num := ""
-			num, err = utils.Ask(
-				ctx,
-				"Enter number: ",
-				true,
-				func(s string) (bool, string) {
-					if s != "1" && s != "2" && s != "3" {
-						return false, "Please answer 1-3."
-					}
-
-					return true, ""
-				},
-			)
-			if err != nil {
-				return result, err
-			}
-
-			switch num {
-			case "1":
-				result.database = mysqlDatabase
-				fmt.Println("Okay! Will try install MySQL ...")
-			case "2":
-				result.database = sqliteDatabase
-				fmt.Println("Okay! Will try install SQLite ...")
-			case "3":
-				result.database = noneDatabase
-				fmt.Println("Okay!  ...")
-			default:
-				fmt.Println("Please answer 1-3.")
-
-				continue
-			}
-
-			break
-		}
-	}
-
-	//nolint:nestif
-	if _, ok := needToAsk["webServer"]; ok {
-		if result.webServer == "" {
-			num := ""
-
-			fmt.Println()
-			fmt.Println("Select Web-server to install and configure")
-			fmt.Println()
-			fmt.Println("1) Nginx (Recommended)")
-
-			if state.OSInfo.Distribution != packagemanager.DistributionWindows {
-				fmt.Println("2) Apache")
-			}
-
-			fmt.Println("3) None. Do not install a Web Server")
-
-			for {
-				num, err = utils.Ask(
-					ctx,
-					"Enter number: ",
-					true,
-					func(s string) (bool, string) {
-						if s != "1" && s != "2" && s != "3" {
-							return false, "Please answer 1-3."
-						}
-
-						return true, ""
-					},
-				)
-				if err != nil {
-					return result, err
-				}
-
-				switch num {
-				case "1":
-					result.webServer = nginxWebServer
-					fmt.Println("Okay! Will try to install Nginx ...")
-				case "2":
-					result.webServer = apacheWebServer
-					fmt.Println("Okay! Will try to install Apache ...")
-				case "3":
-					result.webServer = noneWebServer
-					fmt.Println("Okay!  ...")
-				default:
-					fmt.Println("Please answer 1-3.")
-
-					continue
-				}
-
-				break
-			}
-		}
-	}
-
-	return result, nil
-}
-
-func filterAndCheckHost(state panelInstallState) (panelInstallState, error) {
-	if idx := strings.Index(state.Host, "http://"); idx >= 0 {
-		state.Host = state.Host[7:]
-	} else if idx = strings.Index(state.Host, "https://"); idx >= 0 {
-		state.Host = state.Host[8:]
-	}
-
-	state.Host = strings.TrimRight(state.Host, "/?&")
-
-	var invalidChars = []int32{'/', '?', '&'}
-	for _, s := range state.Host {
-		if utils.Contains(invalidChars, s) {
-			return state, errors.New("invalid host")
-		}
-	}
-
-	//nolint:nestif
-	if utils.IsIPv4(state.Host) || utils.IsIPv6(state.Host) {
-		state.HostIP = state.Host
-	} else {
-		ips, err := net.LookupIP(state.Host)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to lookup ip")
-		}
-
-		if len(ips) == 0 {
-			return state, errors.New("no ip for chosen host")
-		}
-
-		for i := range ips {
-			if utils.IsIPv4(ips[i].String()) {
-				state.HostIP = ips[i].String()
-			}
-		}
-
-		if state.HostIP == "" {
-			state.HostIP = ips[0].String()
-		}
-	}
-
-	return state, nil
 }
 
 func isMySQLInstalled(_ context.Context) bool {

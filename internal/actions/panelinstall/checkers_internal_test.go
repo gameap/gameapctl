@@ -13,26 +13,43 @@ func Test_checkHost(t *testing.T) {
 		host          string
 		expectedHost  string
 		expectedError string
+		expectedPort  string
 	}{
 		{
 			name:         "with_http",
 			host:         "http://gameap.ru",
 			expectedHost: "gameap.ru",
+			expectedPort: "80",
 		},
 		{
 			name:         "with_https",
 			host:         "https://gameap.ru",
 			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "without_http",
+			host:         "gameap.ru",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "other_port",
+			host:         "https://gameap.ru:9000",
+			expectedHost: "gameap.ru",
+			expectedPort: "9000",
 		},
 		{
 			name:         "with_slash",
 			host:         "https://www.gameap.ru/",
 			expectedHost: "www.gameap.ru",
+			expectedPort: "80",
 		},
 		{
 			name:         "ip",
 			host:         "127.0.0.1",
 			expectedHost: "127.0.0.1",
+			expectedPort: "80",
 		},
 		{
 			name:          "unknown_host",
@@ -56,6 +73,7 @@ func Test_checkHost(t *testing.T) {
 			if test.expectedError == "" {
 				require.NoError(t, err)
 				assert.Equal(t, test.expectedHost, resultState.Host)
+				assert.Equal(t, test.expectedPort, resultState.Port)
 			} else {
 				assert.Equal(t, test.expectedError, err.Error())
 			}

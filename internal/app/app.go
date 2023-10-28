@@ -63,8 +63,13 @@ func Run(args []string) {
 				Value: false,
 			},
 			&cli.BoolFlag{
-				Name:  "debug",
+				Name:  "skip-warnings",
 				Value: false,
+			},
+			&cli.BoolFlag{
+				Name:    "debug",
+				Value:   false,
+				EnvVars: []string{"DEBUG"},
 			},
 		},
 		Commands: []*cli.Command{

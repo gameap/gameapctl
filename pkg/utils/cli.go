@@ -29,7 +29,9 @@ func readStdin(ctx context.Context) string {
 	}
 }
 
-func Ask(ctx context.Context, question string, allowEmpty bool, validate func(string) (bool, string)) (string, error) {
+type ValidateFunc func(string) (ok bool, message string, err error)
+
+func Ask(ctx context.Context, question string, allowEmpty bool, validate ValidateFunc) (string, error) {
 	fmt.Println("")
 
 	for {
@@ -50,7 +52,10 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate func(st
 		}
 
 		if validate != nil {
-			ok, message := validate(result)
+			ok, message, err := validate(result)
+			if err != nil {
+				return "", err
+			}
 			if !ok {
 				fmt.Println(message)
 
