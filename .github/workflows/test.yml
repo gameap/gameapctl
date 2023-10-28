@@ -81,12 +81,14 @@ jobs:
           update-ca-certificates
 
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
+        run: go version
+
 
       - name: Set up dependencies
         run: go mod download

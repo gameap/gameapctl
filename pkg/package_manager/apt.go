@@ -529,7 +529,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
-	if osInfo.Distribution == "ubuntu" {
+	if osInfo.Distribution == DistributionUbuntu {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
 			"/etc/apt/sources.list.d/nginx.list",
@@ -539,7 +539,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 		}
 	}
 
-	if osInfo.Distribution == "debian" {
+	if osInfo.Distribution == DistributionDebian {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
 			"/etc/apt/sources.list.d/nginx.list",
