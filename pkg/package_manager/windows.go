@@ -46,6 +46,13 @@ var repository = map[string]pack{
 			WorkingDirectory: "C:\\gameap\\tools\\nginx",
 			StopExecutable:   "nginx",
 			StopArguments:    "-s stop",
+			OnFailure: []onFailure{
+				{Action: "restart", Delay: "1 sec"},
+				{Action: "restart", Delay: "2 sec"},
+				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart", Delay: "5 sec"},
+			},
+			ResetFailure: "1 hour",
 		},
 	},
 	MySQLServerPackage: {
@@ -68,12 +75,18 @@ var repository = map[string]pack{
 			Name:       "php-fpm",
 			Executable: "php-cgi",
 			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
+			OnFailure: []onFailure{
+				{Action: "restart", Delay: "1 sec"},
+				{Action: "restart", Delay: "2 sec"},
+				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart", Delay: "5 sec"},
+			},
+			ResetFailure: "1 hour",
 		},
 		Dependencies: []string{VCRedist16Package},
 	},
 	PHPExtensionsPackage: {
-		LookupPath:         []string{"php"},
-		DefaultInstallPath: "C:\\php",
+		LookupPath: []string{"php"},
 	},
 	VCRedist16Package: {
 		DownloadURLs: []string{
@@ -192,7 +205,11 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 			continue
 		}
 
+		err = nil
 		break
+	}
+	if err != nil {
+		return errors.WithMessage(err, "failed to download file")
 	}
 
 	if p.InstallCommand != "" {
@@ -332,7 +349,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			scannedFileDir := filepath.Dir(firstScannedFile)
 
 			exts := []string{
-				"bz2", "curl", "fileinfo", "gd", "gmp", "intl",
+				"bz2", "curl", "fileinfo", "gd2", "gmp", "intl",
 				"mbstring", "openssl", "pdo_mysql", "pdo_sqlite", "zip",
 			}
 
@@ -383,7 +400,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 				";?\\s*extension=bz2\\s*":        "extension=bz2",
 				";?\\s*extension=curl\\s*":       "extension=curl",
 				";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
-				";?\\s*extension=gd\\s*":         "extension=gd",
+				";?\\s*extension=gd\\s*":         "extension=gd2",
 				";?\\s*extension=gmp\\s*":        "extension=gmp",
 				";?\\s*extension=intl\\s*":       "extension=intl",
 				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
@@ -447,8 +464,16 @@ type WinSWServiceConfig struct {
 	StopExecutable string `xml:"stopexecutable,omitempty"`
 	StopArguments  string `xml:"stoparguments,omitempty"`
 
+	OnFailure    []onFailure `xml:"onfailure,omitempty"`
+	ResetFailure string      `xml:"resetfailure,omitempty"`
+
 	ServiceAccount struct {
 		Username string `xml:"username,omitempty"`
 		Password string `xml:"password,omitempty"`
 	} `xml:"serviceaccount,omitempty"`
+}
+
+type onFailure struct {
+	Action string `xml:"action,attr"`
+	Delay  string `xml:"delay,attr,omitempty"`
 }
