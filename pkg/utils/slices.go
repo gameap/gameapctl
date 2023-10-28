@@ -6,5 +6,6 @@ func Contains[T comparable](s []T, e T) bool {
 			return true
 		}
 	}
+
 	return false
 }

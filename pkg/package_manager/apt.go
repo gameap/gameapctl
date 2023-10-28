@@ -35,6 +35,7 @@ func (apt *APT) Search(_ context.Context, packName string) ([]PackageInfo, error
 		if bytes.Contains(out, []byte("E: No packages found")) {
 			return []PackageInfo{}, nil
 		}
+
 		return nil, errors.WithMessage(err, "failed to run dpkg-query")
 	}
 
@@ -91,6 +92,7 @@ func (apt *APT) CheckForUpdates(_ context.Context) error {
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
+
 	return cmd.Run()
 }
 
@@ -108,6 +110,7 @@ func (apt *APT) Install(_ context.Context, packs ...string) error {
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
+
 	return cmd.Run()
 }
 
@@ -125,6 +128,7 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
+
 	return cmd.Run()
 }
 
@@ -142,6 +146,7 @@ func (apt *APT) Purge(_ context.Context, packs ...string) error {
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
+
 	return cmd.Run()
 }
 
@@ -181,6 +186,7 @@ func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
 		return errors.WithMessage(err, "failed preRemovingSteps")
 	}
 	packs = e.replaceAliases(ctx, packs)
+
 	return e.apt.Remove(ctx, packs...)
 }
 
@@ -190,6 +196,7 @@ func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
 		return errors.WithMessage(err, "failed preRemovingSteps")
 	}
 	packs = e.replaceAliases(ctx, packs)
+
 	return e.apt.Purge(ctx, packs...)
 }
 
@@ -227,6 +234,21 @@ var packageAliases = distVersionPackagesMap{
 		},
 	},
 	"ubuntu": {
+		"precise": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"trusty": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"xenial": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"bionic": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
+		"focal": {
+			Lib32GCCPackage: {"lib32gcc1"},
+		},
 		"jammy": {
 			Lib32GCCPackage: {"lib32gcc-s1"},
 		},
@@ -255,12 +277,10 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 	return replacedPacks
 }
 
-// nolint
 func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
 	updatedPacks := make([]string, 0, len(packs))
 
 	for _, pack := range packs {
-		// nolint
 		switch pack {
 		case PHPPackage:
 			err := e.installAPTRepositoriesDependencies(ctx)
@@ -299,15 +319,13 @@ func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 	return updatedPacks, nil
 }
 
-// nolint
 func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	for _, pack := range packs {
 		if pack == MySQLServerPackage &&
-			osInfo.Distribution == "ubuntu" &&
+			osInfo.Distribution == DistributionUbuntu &&
 			utils.Contains([]string{"focal", "jammy", "kinetic", "lunar"}, osInfo.DistributionCodename) {
-
 			err := e.Purge(ctx, "mysql-server-8.0")
 			if err != nil {
 				return err
@@ -359,10 +377,11 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		if len(pk) > 0 {
 			versionAvailable = "8.2"
 			log.Println("PHP 8.2 version found")
+
 			break
-		} else {
-			log.Println("PHP 8.2 version not found")
 		}
+
+		log.Println("PHP 8.2 version not found")
 
 		log.Println("Checking for PHP 8.1 version available...")
 		pk, err = e.apt.Search(ctx, "php8.1")
@@ -372,10 +391,11 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		if len(pk) > 0 {
 			versionAvailable = "8.1"
 			log.Println("PHP 8.1 version found")
+
 			break
-		} else {
-			log.Println("PHP 8.1 version not found")
 		}
+
+		log.Println("PHP 8.1 version not found")
 
 		pk, err = e.apt.Search(ctx, "php8.0")
 		if err != nil {
@@ -384,10 +404,11 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		if len(pk) > 0 {
 			versionAvailable = "8.0"
 			log.Println("PHP 8.0 version found")
+
 			break
-		} else {
-			log.Println("PHP 8.0 version not found")
 		}
+
+		log.Println("PHP 8.0 version not found")
 
 		pk, err = e.apt.Search(ctx, "php7.4")
 		if err != nil {
@@ -396,10 +417,11 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		if len(pk) > 0 {
 			versionAvailable = "7.4"
 			log.Println("PHP 7.4 version found")
+
 			break
-		} else {
-			log.Println("PHP 7.4 version not found")
 		}
+
+		log.Println("PHP 7.4 version not found")
 
 		pk, err = e.apt.Search(ctx, "php7.3")
 		if err != nil {
@@ -408,10 +430,11 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		if len(pk) > 0 {
 			versionAvailable = "7.3"
 			log.Println("PHP 7.3 version found")
+
 			break
-		} else {
-			log.Println("PHP 7.3 version not found")
 		}
+
+		log.Println("PHP 7.3 version not found")
 
 		added, err := e.addPHPRepositories(ctx)
 		if err != nil {
@@ -422,6 +445,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		}
 	}
 
+	//nolint:goconst
 	packages := []string{
 		"php" + versionAvailable + "-bcmath",
 		"php" + versionAvailable + "-bz2",
@@ -456,6 +480,7 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		return true, nil
 	}
 
@@ -498,7 +523,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to export nginx gpg key")
 	}
-	//nolint:gosec
+	//nolint:gosec,gomnd
 	err = os.WriteFile("/etc/apt/trusted.gpg.d/nginx.gpg", out, 0644)
 	if err != nil {
 		return errors.WithMessage(err, "failed to write nginx gpg key")

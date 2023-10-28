@@ -2,16 +2,16 @@ package service
 
 import "fmt"
 
-type ErrServiceNotFound struct {
+type NotFoundError struct {
 	ServiceName string
 }
 
-func NewErrServiceNotFound(serviceName string) *ErrServiceNotFound {
-	return &ErrServiceNotFound{
+func NewNotFoundError(serviceName string) *NotFoundError {
+	return &NotFoundError{
 		ServiceName: serviceName,
 	}
 }
 
-func (e *ErrServiceNotFound) Error() string {
+func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("service %s not found", e.ServiceName)
 }

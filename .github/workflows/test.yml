@@ -29,7 +29,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.50.1
+          version: v1.55.1
 
       - name: Unit Tests
         run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=coverage.out
@@ -45,7 +45,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:22.10', 'debian:buster', 'debian:bullseye' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'debian:buster', 'debian:bullseye' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [ 1.19.x ]
@@ -57,6 +57,9 @@ jobs:
             database: 'sqlite'
         include:
           - distro: 'ubuntu:23.04'
+            database: 'mysql'
+            experimental: true
+          - distro: 'ubuntu:23.10'
             database: 'mysql'
             experimental: true
           - distro: 'debian:sid'
@@ -88,11 +91,19 @@ jobs:
       - name: Set up dependencies
         run: go mod download
 
-      - name: Tests
+      - name: GameAP Installation Test
         run: |
           cd cmd/gameapctl/
           go build .
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+
+      - name: Daemon Installation Test
+        shell: bash
+        run: |
+          cd cmd/gameapctl/
+          go build .
+          echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | /var/www/gameap/artisan tinker || true          
+          ./gameapctl --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3

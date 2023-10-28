@@ -1,14 +1,18 @@
 package packagemanager
 
+const ApachePackage = "apache2"
 const CurlPackage = "curl"
 const GnuPGPackage = "gnupg"
-const MySQLServerPackage = "mysql-server"
-const MariaDBServerPackage = "mariadb-server"
 const Lib32GCCPackage = "lib32gcc"
-const PHPPackage = "php"
-const PHPExtensionsPackage = "php-extensions"
+const Lib32Stdc6Package = "lib32stdc++6"
+const Lib32z1Package = "lib32z1"
+const MariaDBServerPackage = "mariadb-server"
+const MySQLServerPackage = "mysql-server"
 const NginxPackage = "nginx"
-const ApachePackage = "apache2"
+const PHPExtensionsPackage = "php-extensions"
+const PHPPackage = "php"
+const UnzipPackage = "unzip"
+const XZUtilsPackage = "xz-utils"
 
 const DistributionDebian = "debian"
 const DistributionUbuntu = "ubuntu"

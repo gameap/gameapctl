@@ -10,6 +10,7 @@ func IsCommandAvailable(command string) bool {
 
 	if err == nil {
 		log.Printf("command '%s' available in '%s'\n", command, path)
+
 		return true
 	}
 

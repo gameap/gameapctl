@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -40,6 +41,18 @@ const (
 	noneWebServer   = "none"
 )
 
+const (
+	defaultMysqlUsername = "gameap"
+	defaultMysqlHost     = "localhost"
+	defaultMysqlDatabase = "gameap"
+)
+
+const (
+	defaultPasswordLen        = 16
+	defaultPasswordNumDigits  = 6
+	defaultPasswordNumSymbols = 2
+)
+
 var errEmptyPath = errors.New("empty path")
 var errEmptyHost = errors.New("empty host")
 var errEmptyDatabase = errors.New("empty database")
@@ -55,6 +68,8 @@ type panelInstallState struct {
 	Path           string
 	AdminPassword  string
 	WebServer      string
+	FromGithub     bool
+	Branch         string
 	Database       string
 	DBCreds        databaseCredentials
 	OSInfo         osinfo.Info
@@ -92,15 +107,23 @@ func PanelInstall(cliCtx *cli.Context) error {
 	}
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
 
+	state.FromGithub = cliCtx.Bool("github")
+	developBranch := cliCtx.Bool("develop")
+	if developBranch {
+		state.Branch = "develop"
+	} else {
+		state.Branch = cliCtx.String("branch")
+	}
+
 	fmt.Printf(
 		"Detected operating system as %s/%s.\n",
 		state.OSInfo.Distribution,
 		state.OSInfo.DistributionCodename,
 	)
 
-	// nolint:nestif
+	//nolint:nestif
 	if !state.NonInteractive {
-		needToAsk := make(map[string]struct{}, 4)
+		needToAsk := make(map[string]struct{}, 4) //nolint:gomnd
 		if state.Host == "" {
 			needToAsk["host"] = struct{}{}
 		}
@@ -440,8 +463,10 @@ func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]
 				fmt.Println("Okay!  ...")
 			default:
 				fmt.Println("Please answer 1-3.")
+
 				continue
 			}
+
 			break
 		}
 	}
@@ -491,8 +516,10 @@ func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]
 					fmt.Println("Okay!  ...")
 				default:
 					fmt.Println("Please answer 1-3.")
+
 					continue
 				}
+
 				break
 			}
 		}
@@ -669,18 +696,17 @@ func installMySQL(
 	return state, err
 }
 
-//nolint:funlen
 func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
 	if dbCreds.Username == "" {
-		dbCreds.Username = "gameap"
+		dbCreds.Username = defaultMysqlUsername
 	}
 
 	if dbCreds.DatabaseName == "" {
-		dbCreds.DatabaseName = "gameap"
+		dbCreds.DatabaseName = defaultMysqlDatabase
 	}
 
 	if dbCreds.Host == "" {
-		dbCreds.Host = "localhost"
+		dbCreds.Host = defaultMysqlHost
 	}
 
 	passwordGenerator, err := password.NewGenerator(&password.GeneratorInput{
@@ -691,14 +717,18 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 	}
 
 	if dbCreds.Password == "" {
-		dbCreds.Password, err = passwordGenerator.Generate(16, 6, 2, false, false)
+		dbCreds.Password, err = passwordGenerator.Generate(
+			defaultPasswordLen, defaultPasswordNumDigits, defaultPasswordNumSymbols, false, false,
+		)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
 	}
 
 	if dbCreds.RootPassword == "" {
-		dbCreds.RootPassword, err = passwordGenerator.Generate(16, 6, 2, false, false)
+		dbCreds.RootPassword, err = passwordGenerator.Generate(
+			defaultPasswordLen, defaultPasswordNumDigits, defaultPasswordNumSymbols, false, false,
+		)
 		if err != nil {
 			return dbCreds, errors.WithMessage(err, "failed to generate password")
 		}
@@ -755,13 +785,21 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 		err = db.Ping()
 		if err != nil {
 			log.Println(err)
+
 			continue
 		}
 
 		var rows *sql.Rows
+		//nolint:sqlclosecheck
 		rows, err = db.Query("SELECT VERSION()")
 		if err != nil {
 			log.Println(err)
+
+			continue
+		}
+		if rows.Err() != nil {
+			log.Println(err)
+
 			continue
 		}
 		defer func(rows *sql.Rows) {
@@ -776,11 +814,13 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 			err = rows.Scan(&version)
 			if err != nil {
 				log.Println(err)
+
 				continue
 			}
 		}
 
 		err = nil
+
 		break
 	}
 
@@ -827,7 +867,6 @@ func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant select privileges")
 	}
-	//nolint:gosec
 	_, err = db.Exec("GRANT ALL PRIVILEGES ON " + dbCreds.DatabaseName + ".* TO '" + dbCreds.Username + "'@'%'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant all privileges")
@@ -858,19 +897,13 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 }
 
 func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstallState, error) {
-	cmd := exec.Command("php", "-r", "echo implode(' ', get_loaded_extensions());")
-	buf := &bytes.Buffer{}
-	buf.Grow(1024)
-	cmd.Stdout = buf
-	cmd.Stderr = log.Writer()
-	log.Println("\n", cmd.String())
+	out, err := utils.ExecCommandWithOutput("php", "-r", "echo implode(' ', get_loaded_extensions());")
 
-	err := cmd.Run()
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to run php -r")
+		return state, errors.WithMessage(err, "failed to exec php -r")
 	}
 
-	extensions := strings.Split(buf.String(), " ")
+	extensions := strings.Split(out, " ")
 	for i := range extensions {
 		extensions[i] = strings.ToLower(strings.TrimSpace(extensions[i]))
 	}
@@ -902,7 +935,12 @@ func installGameAP(ctx context.Context, path string) error {
 	}(tempDir)
 
 	fmt.Println("Downloading GameAP ...")
-	err = utils.Download(ctx, "http://packages.gameap.ru/gameap/latest.tar.gz", tempDir)
+	downloadPath, err := url.JoinPath(gameapRepo(), "gameap/latest.tar.gz")
+	if err != nil {
+		return errors.WithMessage(err, "failed to join url")
+	}
+
+	err = utils.Download(ctx, downloadPath, tempDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
 	}
@@ -941,13 +979,13 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 
 	fmt.Println("Updating .env ...")
 
-	url := "http://" + state.Host
+	u := "http://" + state.Host
 	if state.HTTPS {
-		url = "https://" + state.Host
+		u = "https://" + state.Host
 	}
 
 	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
-		"APP_URL=":       "APP_URL=" + url,
+		"APP_URL=":       "APP_URL=" + u,
 		"DB_CONNECTION=": "DB_CONNECTION=" + state.Database,
 		"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
 		"DB_PORT=":       "DB_PORT=" + state.DBCreds.Port,
@@ -1171,6 +1209,7 @@ func configureCron(_ context.Context, state panelInstallState) error {
 
 	if utils.IsCommandAvailable("crontab") {
 		fmt.Println("Crontab is not available. Skip cron configuration")
+
 		return nil
 	}
 
@@ -1182,6 +1221,7 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	}
 
 	buf := bytes.NewBuffer(out)
+	//nolint:mirror
 	buf.Write([]byte(fmt.Sprintf("* * * * * cd %s && php artisan schedule:run >> /dev/null 2>&1\n", state.Path)))
 
 	tmpDir, err := os.MkdirTemp("", "gameap_cron")
@@ -1218,7 +1258,7 @@ func updateAdminPassword(_ context.Context, state panelInstallState) (panelInsta
 	if state.AdminPassword == "" {
 		fmt.Println("Generating admin password ...")
 
-		state.AdminPassword, err = password.Generate(18, 6, 0, false, false)
+		state.AdminPassword, err = password.Generate(defaultPasswordLen, defaultPasswordNumDigits, 0, false, false)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate password")
 		}
@@ -1277,12 +1317,12 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 		hostPort = state.Host + ":" + state.Port
 	}
 
-	url := "http://" + hostPort + "/api/healthz"
+	u := "http://" + hostPort + "/api/healthz"
 	if state.HTTPS {
-		url = "https://" + hostPort + "/api/healthz"
+		u = "https://" + hostPort + "/api/healthz"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return state, err
 	}
@@ -1326,6 +1366,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 	tried := map[int]struct{}{}
 	isTried := func(step int) bool {
 		_, ok := tried[step]
+
 		return ok
 	}
 
@@ -1379,7 +1420,6 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 		state, err = checkInstallation(ctx, state)
 		if err != nil {
 			log.Println(err)
-			continue
 		} else {
 			break
 		}
@@ -1391,7 +1431,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 func savePanelInstallationDetails(state panelInstallState) error {
 	saveStruct := struct {
 		Host                 string `json:"host"`
-		HostIP               string `json:"hostIP"`
+		HostIP               string `json:"hostIp"`
 		Port                 string `json:"port"`
 		Path                 string `json:"path"`
 		WebServer            string `json:"webServer"`

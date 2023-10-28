@@ -17,7 +17,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// nolint:funlen
+//nolint:funlen
 func Run(args []string) {
 	logfilepath := ""
 
@@ -54,9 +54,23 @@ func Run(args []string) {
 						Usage:       "Install daemon",
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
+
 							return nil
 						},
 						Action: actions.DaemonInstall,
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "token",
+								EnvVars: []string{"CREATE_TOKEN"},
+							},
+							&cli.StringFlag{
+								Name:    "host",
+								EnvVars: []string{"PANEL_HOST"},
+							},
+							&cli.StringFlag{
+								Name: "work-dir",
+							},
+						},
 					},
 					{
 						Name:        "upgrade",
@@ -101,6 +115,7 @@ func Run(args []string) {
 						Usage:       "Install panel",
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
+
 							return nil
 						},
 						Action: actions.PanelInstall,
@@ -125,6 +140,11 @@ func Run(args []string) {
 							&cli.BoolFlag{
 								Name:  "github",
 								Usage: "Install gameap from GitHub.",
+							},
+							&cli.StringFlag{
+								Name:   "branch",
+								Usage:  "Set specific GitHub branch.",
+								Hidden: true,
 							},
 							&cli.StringFlag{
 								Name:  "database",
@@ -167,6 +187,7 @@ func Run(args []string) {
 				Action: func(context *cli.Context) error {
 					fmt.Println("Version:", Version)
 					fmt.Println("Build Date:", BuildDate)
+
 					return nil
 				},
 			},
@@ -178,7 +199,7 @@ func Run(args []string) {
 	err := app.RunContext(ctx, args)
 	if err != nil && errors.Is(err, context.Canceled) {
 		fmt.Println("Terminated")
-		os.Exit(130)
+		os.Exit(130) //nolint:gomnd
 	}
 	if err != nil {
 		fmt.Println(err)

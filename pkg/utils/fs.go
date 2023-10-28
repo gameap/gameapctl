@@ -18,6 +18,7 @@ import (
 
 func IsFileExists(path string) bool {
 	_, err := os.Stat(path)
+
 	return err == nil
 }
 
@@ -202,6 +203,7 @@ func findLineAndReplaceOrAdd(
 				line = b.String()
 
 				delete(replaceMap, needle)
+
 				break
 			}
 		}

@@ -2,30 +2,30 @@ package packagemanager
 
 import "fmt"
 
-type ErrUnsupportedDistribution struct {
+type UnsupportedDistributionError struct {
 	distro string
 }
 
-func NewErrUnsupportedDistribution(distro string) *ErrUnsupportedDistribution {
-	return &ErrUnsupportedDistribution{
+func NewErrUnsupportedDistribution(distro string) *UnsupportedDistributionError {
+	return &UnsupportedDistributionError{
 		distro: distro,
 	}
 }
 
-func (e *ErrUnsupportedDistribution) Error() string {
+func (e *UnsupportedDistributionError) Error() string {
 	return fmt.Sprintf("unsupported distribution '%s'", e.distro)
 }
 
-type ErrInvalidDirContents struct {
+type InvalidDirContentsError struct {
 	path string
 }
 
-func NewErrInvalidDirContents(path string) *ErrInvalidDirContents {
-	return &ErrInvalidDirContents{
+func NewErrInvalidDirContents(path string) *InvalidDirContentsError {
+	return &InvalidDirContentsError{
 		path: path,
 	}
 }
 
-func (e *ErrInvalidDirContents) Error() string {
+func (e *InvalidDirContentsError) Error() string {
 	return fmt.Sprintf("invalid contents in '%s' directory", e.path)
 }
