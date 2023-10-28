@@ -828,10 +828,19 @@ func findReleaseURL(_ context.Context, kernel, platform string) (string, error) 
 
 	link, err := findRelease(resp.Body, strings.ToLower(kernel), strings.ToLower(platform))
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to find release")
+		return "", err
 	}
 
 	return link, nil
+}
+
+type failedToFindRelease struct {
+	OS   string
+	Arch string
+}
+
+func (e failedToFindRelease) Error() string {
+	return fmt.Sprintf("failed to find release for %s (arch: %s)", e.OS, e.Arch)
 }
 
 func findRelease(reader io.Reader, os string, arch string) (string, error) {
@@ -857,5 +866,5 @@ func findRelease(reader io.Reader, os string, arch string) (string, error) {
 		}
 	}
 
-	return "", nil
+	return "", failedToFindRelease{os, arch}
 }
