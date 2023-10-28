@@ -8,12 +8,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
 	"github.com/gameap/gameapctl/internal/actions/daemonstart"
+	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
 	"github.com/gameap/gameapctl/internal/actions/daemonstop"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -48,7 +48,6 @@ func Run(args []string) {
 				fmt.Println("DistributionVersion:", osInfo.DistributionVersion)
 				fmt.Println("DistributionCodename:", osInfo.DistributionCodename)
 				fmt.Println("Platform:", osInfo.Platform)
-				fmt.Println("Platform:", runtime.NumCPU())
 				fmt.Println("OS:", osInfo.OS)
 				fmt.Println("Hostname:", osInfo.Hostname)
 				fmt.Println("CPUs:", osInfo.CPUs)
@@ -124,6 +123,12 @@ func Run(args []string) {
 						Description: "Stop daemon",
 						Usage:       "Stop daemon",
 						Action:      daemonstop.Handle,
+					},
+					{
+						Name:        "status",
+						Description: "Daemon status",
+						Usage:       "Daemon status",
+						Action:      daemonstatus.Handle,
 					},
 					{
 						Name:        "restart",

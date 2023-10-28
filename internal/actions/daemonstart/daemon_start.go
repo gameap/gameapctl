@@ -2,6 +2,7 @@ package daemonstart
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/gameap/gameapctl/pkg/daemon"
 	"github.com/pkg/errors"
@@ -15,6 +16,17 @@ func Handle(cliCtx *cli.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to start daemon")
 	}
+
+	log.Println("Checking process status")
+	daemonProcess, err := daemon.FindProcess(cliCtx.Context)
+	if err != nil {
+		return errors.WithMessage(err, "failed to find daemon process")
+	}
+	if daemonProcess == nil {
+		return errors.New("daemon process not found")
+	}
+
+	log.Println("Success! Daemon process found with pid", daemonProcess.Pid)
 
 	return nil
 }

@@ -6,10 +6,17 @@ package daemon
 import (
 	"context"
 	"io/fs"
+	"log"
 	"os"
+	"time"
 
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/v3/process"
+)
+
+const (
+	defaultTerminateWaitTimeout = 30 * time.Second
 )
 
 func Stop(ctx context.Context) error {
@@ -26,7 +33,7 @@ func Stop(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return errors.WithMessage(err, "failed to start daemon")
+		return errors.WithMessage(err, "failed to stop daemon")
 	}
 
 	return nil
@@ -53,6 +60,56 @@ func stopDaemonSystemd(ctx context.Context) error {
 	return nil
 }
 
-func stopDaemonProcess(_ context.Context) error {
-	return errors.New("stopping daemon process is not implemented")
+func stopDaemonProcess(ctx context.Context) error {
+	p, err := FindProcess(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to find daemon process")
+	}
+	if p == nil {
+		return errors.New("daemon process not found")
+	}
+
+	log.Printf("Found daemon process with pid %d \n", p.Pid)
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTerminateWaitTimeout)
+	defer cancel()
+
+	err = terminateAndKillProcess(ctxWithTimeout, p)
+	if err != nil {
+		return errors.WithMessage(err, "failed to terminate/kill daemon process")
+	}
+
+	return nil
+}
+
+func terminateAndKillProcess(ctx context.Context, p *process.Process) error {
+	err := p.TerminateWithContext(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to terminate daemon process")
+	}
+
+	log.Println("Waiting for daemon process to terminate")
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTerminateWaitTimeout)
+	defer cancel()
+	ticker := time.NewTicker(1 * time.Second)
+
+	for stop := false; !stop; {
+		if isRunning, _ := p.IsRunning(); !isRunning {
+			return nil
+		}
+
+		select {
+		case <-ctxWithTimeout.Done():
+			stop = true
+		case <-ticker.C:
+			log.Println("Daemon process still running")
+		}
+	}
+
+	err = p.KillWithContext(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to kill daemon process")
+	}
+
+	return nil
 }

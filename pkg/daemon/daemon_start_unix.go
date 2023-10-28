@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/url"
@@ -57,17 +58,23 @@ func detectInit(ctx context.Context) (string, error) {
 		return "", errors.WithMessage(err, "failed to load process with pid 1")
 	}
 
+	processName, _ := p.Name()
+	log.Println("Found process name:", processName)
+
 	exe, err := p.Exe()
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to get executable path of the process")
 	}
 
-	exe, err = filepath.EvalSymlinks(exe)
+	originalExe, err := filepath.EvalSymlinks(exe)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to evaluate symlink")
+		log.Println(errors.WithMessage(err, "failed to evaluate symlink"))
 	}
 
-	_, filename := filepath.Split(exe)
+	filename := originalExe
+	if filename == "" {
+		filename = exe
+	}
 
 	switch filename {
 	case "systemd":
@@ -140,8 +147,23 @@ func daemonConfigureSystemd(ctx context.Context) error {
 	return nil
 }
 
-func startDaemonFork(_ context.Context) error {
+type daemonAlreadyRunningError int
+
+func (e daemonAlreadyRunningError) Error() string {
+	return fmt.Sprintf("daemon is already running with pid %d", e)
+}
+
+func startDaemonFork(ctx context.Context) error {
 	log.Println("Starting daemon (fork)")
+
+	daemonProcess, err := FindProcess(ctx)
+	if err != nil {
+		return daemonAlreadyRunningError(daemonProcess.Pid)
+	}
+
+	if daemonProcess != nil && daemonProcess.Pid != 0 {
+		return errors.New("daemon is already running")
+	}
 
 	exePath, err := exec.LookPath("gameap-daemon")
 	if err != nil {

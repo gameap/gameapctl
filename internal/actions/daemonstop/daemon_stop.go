@@ -16,5 +16,16 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
 
+	fmt.Println("Checking process status")
+	daemonProcess, err := daemon.FindProcess(cliCtx.Context)
+	if err != nil {
+		return errors.WithMessage(err, "failed to find daemon process")
+	}
+	if daemonProcess != nil {
+		return errors.New("daemon process already running")
+	}
+
+	fmt.Println("Success! Daemon process not found")
+
 	return nil
 }
