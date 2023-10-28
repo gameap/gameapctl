@@ -25,6 +25,10 @@ const (
 	initSystemd = "systemd"
 )
 
+const (
+	daemonSystemdConfigPath = "/etc/systemd/system/gameap-daemon.service"
+)
+
 func Start(ctx context.Context) error {
 	init, err := detectInit(ctx)
 	if err != nil {
@@ -77,7 +81,7 @@ func detectInit(ctx context.Context) (string, error) {
 }
 
 func startDaemonSystemd(ctx context.Context) error {
-	_, err := os.Stat("/etc/systemd/system/gameap-daemon.service")
+	_, err := os.Stat(daemonSystemdConfigPath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		err = daemonConfigureSystemd(ctx)
 		if err != nil {

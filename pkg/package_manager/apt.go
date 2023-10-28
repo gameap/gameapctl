@@ -16,6 +16,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	sourcesListNginx = "/etc/apt/sources.list.d/nginx.list"
+	sourcesListPHP   = "/etc/apt/sources.list.d/php.list"
+)
+
 type APT struct{}
 
 // Search list packages available in the system that match the search
@@ -485,15 +490,17 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	}
 
 	if osInfo.Distribution == DistributionDebian {
-		err := utils.WriteContentsToFile(
-			[]byte(fmt.Sprintf("deb https://packages.sury.org/php/ %s main", osInfo.DistributionCodename)),
-			"/etc/apt/sources.list.d/php.list",
-		)
-		if err != nil {
-			return false, err
+		if !utils.IsFileExists(sourcesListPHP) {
+			err := utils.WriteContentsToFile(
+				[]byte(fmt.Sprintf("deb https://packages.sury.org/php/ %s main", osInfo.DistributionCodename)),
+				sourcesListPHP,
+			)
+			if err != nil {
+				return false, err
+			}
 		}
 
-		err = utils.DownloadFile(ctx, "https://packages.sury.org/php/apt.gpg", "/etc/apt/trusted.gpg.d/php.gpg")
+		err := utils.DownloadFile(ctx, "https://packages.sury.org/php/apt.gpg", "/etc/apt/trusted.gpg.d/php.gpg")
 		if err != nil {
 			return false, err
 		}
@@ -529,20 +536,20 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
-	if osInfo.Distribution == DistributionUbuntu {
+	if osInfo.Distribution == DistributionUbuntu && !utils.IsFileExists(sourcesListNginx) {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
-			"/etc/apt/sources.list.d/nginx.list",
+			sourcesListNginx,
 		)
 		if err != nil {
 			return err
 		}
 	}
 
-	if osInfo.Distribution == DistributionDebian {
+	if osInfo.Distribution == DistributionDebian && !utils.IsFileExists(sourcesListNginx) {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
-			"/etc/apt/sources.list.d/nginx.list",
+			sourcesListNginx,
 		)
 		if err != nil {
 			return err

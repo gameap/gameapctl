@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
+	"github.com/gameap/gameapctl/internal/actions/daemonstart"
+	"github.com/gameap/gameapctl/internal/actions/daemonstop"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/pkg/errors"
@@ -78,22 +80,26 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Upgrade daemon to new version",
 						Usage:       "Upgrade daemon to new version",
+						Action:      notImplementedAction,
 					},
 					{
 						Name:        "uninstall",
 						Description: "Uninstall daemon",
 						Usage:       "Uninstall daemon",
+						Action:      notImplementedAction,
 					},
 					{
 						Name:        "start",
 						Aliases:     []string{"s"},
 						Description: "Start daemon",
 						Usage:       "Start daemon",
+						Action:      daemonstart.Handle,
 					},
 					{
 						Name:        "stop",
 						Description: "Stop daemon",
 						Usage:       "Stop daemon",
+						Action:      daemonstop.Handle,
 					},
 					{
 						Name:        "restart",
@@ -180,6 +186,7 @@ func Run(args []string) {
 						Usage: "Send all logs (daemon, web, nginx, php)",
 					},
 				},
+				Action: notImplementedAction,
 			},
 			{
 				Name:    "version",
@@ -253,4 +260,8 @@ func shutdownContext(ctx context.Context) context.Context {
 	}()
 
 	return ctx
+}
+
+func notImplementedAction(_ *cli.Context) error {
+	return errors.New("not implemented")
 }
