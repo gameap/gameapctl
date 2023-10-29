@@ -24,14 +24,15 @@ jobs:
         run: echo BUILD_TIME=$(date --iso-8601=seconds) >> ${GITHUB_ENV}
 
 
-      - uses: wangyoucao577/go-release-action@v1.35
+      - uses: wangyoucao577/go-release-action@v1.40
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: "https://dl.google.com/go/go1.18.9.linux-amd64.tar.gz"
+          goversion: 1.21
           md5sum: false
           overwrite: true
+          compress_assets: OFF
           project_path: "./cmd/gameapctl"
-          ldflags: -X "github.com/gameap/gameapctl/internal/app.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/gameapctl/internal/app.BuildDate=${{ env.BUILD_TIME }}"
+          ldflags: -X "github.com/gameap/gameapctl/pkg/gameap.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/gameapctl/pkg/gameap.BuildDate=${{ env.BUILD_TIME }}"
           binary_name: "gameapctl"

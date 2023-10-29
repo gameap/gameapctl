@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -30,10 +29,11 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -324,7 +324,7 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	daemonBinariesTmpDir := filepath.Join(tmpDir, "daemon")
 
-	downloadURL, err := findReleaseURL(ctx, runtime.GOOS, runtime.GOARCH)
+	downloadURL, err := findDaemonReleaseURL(ctx)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to find release")
 	}
@@ -802,68 +802,16 @@ type DaemonConfig struct {
 	Scripts DaemonConfigScripts
 }
 
-type releases struct {
-	TagName string  `json:"tag_name"` //nolint:tagliatelle
-	Assets  []asset `json:"assets"`
-}
-
-type asset struct {
-	URL                string `json:"url"`
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"` //nolint:tagliatelle
-}
-
-func findReleaseURL(_ context.Context, kernel, platform string) (string, error) {
-	resp, err := http.Get("https://api.github.com/repos/gameap/daemon/releases") //nolint:bodyclose,noctx
+func findDaemonReleaseURL(ctx context.Context) (string, error) {
+	release, err := releasefinder.Find(
+		ctx,
+		"https://api.github.com/repos/gameap/daemon/releases",
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to get releases")
-	}
-	defer func(body io.ReadCloser) {
-		err := body.Close()
-		if err != nil {
-			log.Println(err)
-		}
-	}(resp.Body)
-
-	link, err := findRelease(resp.Body, kernel, platform)
-	if err != nil {
-		return "", err
+		return "", errors.WithMessage(err, "failed to find release")
 	}
 
-	return link, nil
-}
-
-type failedToFindReleaseError struct {
-	OS   string
-	Arch string
-}
-
-func (e failedToFindReleaseError) Error() string {
-	return fmt.Sprintf("failed to find release for %s (arch: %s)", e.OS, e.Arch)
-}
-
-func findRelease(reader io.Reader, os string, arch string) (string, error) {
-	r := []releases{}
-	d := json.NewDecoder(reader)
-	err := d.Decode(&r)
-	if err != nil {
-		return "", err
-	}
-
-	for _, release := range r {
-		archiveName := fmt.Sprintf("gameap-daemon-%s-%s-%s.tar.gz", release.TagName, os, arch)
-		archiveNameWindows := fmt.Sprintf("gameap-daemon-%s-%s-%s.zip", release.TagName, os, arch)
-
-		for _, asset := range release.Assets {
-			if asset.Name == archiveName {
-				return asset.BrowserDownloadURL, nil
-			}
-
-			if os == "windows" && asset.Name == archiveNameWindows {
-				return asset.BrowserDownloadURL, nil
-			}
-		}
-	}
-
-	return "", failedToFindReleaseError{os, arch}
+	return release.URL, nil
 }

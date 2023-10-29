@@ -17,7 +17,9 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
 	"github.com/gameap/gameapctl/internal/actions/daemonstop"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
+	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -213,6 +215,17 @@ func Run(args []string) {
 				},
 			},
 			{
+				Name:        "self-update",
+				Description: "Update the gameapctl binary to the latest version",
+				Usage:       "Update the gameapctl binary to the latest version",
+				Action:      selfupdate.Handle,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name: "force",
+					},
+				},
+			},
+			{
 				Name:        "send-logs",
 				Description: "Send logs to GameAP support. You can specify log which you want to send.",
 				Usage:       "Send logs to GameAP support",
@@ -229,8 +242,8 @@ func Run(args []string) {
 				Usage:   "Print version information",
 				Aliases: []string{"v"},
 				Action: func(context *cli.Context) error {
-					fmt.Println("Version:", Version)
-					fmt.Println("Build Date:", BuildDate)
+					fmt.Println("Version:", gameap.Version)
+					fmt.Println("Build Date:", gameap.BuildDate)
 
 					return nil
 				},
