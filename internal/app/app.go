@@ -16,6 +16,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/daemonstart"
 	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
 	"github.com/gameap/gameapctl/internal/actions/daemonstop"
+	"github.com/gameap/gameapctl/internal/actions/daemonupdate"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -109,15 +110,9 @@ func Run(args []string) {
 					{
 						Name:        "upgrade",
 						Aliases:     []string{"update", "u"},
-						Description: "Upgrade daemon to new version",
-						Usage:       "Upgrade daemon to new version",
-						Action:      notImplementedAction,
-					},
-					{
-						Name:        "uninstall",
-						Description: "Uninstall daemon",
-						Usage:       "Uninstall daemon",
-						Action:      notImplementedAction,
+						Description: "Update daemon to a new version",
+						Usage:       "Update daemon to a new version",
+						Action:      daemonupdate.Handle,
 					},
 					{
 						Name:        "start",
