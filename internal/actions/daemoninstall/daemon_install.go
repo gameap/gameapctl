@@ -738,24 +738,24 @@ func chooseBestIP(ips []string) (string, error) {
 }
 
 type DaemonConfigScripts struct {
-	Install     string
-	Reinstall   string
-	Update      string
-	Start       string
-	Pause       string
-	Unpause     string
-	Stop        string
-	Kill        string
-	Restart     string
-	Status      string
-	GetConsole  string
-	SendCommand string
-	Delete      string
+	Install     string `yaml:"install,omitempty"`
+	Reinstall   string `yaml:"reinstall,omitempty"`
+	Update      string `yaml:"update,omitempty"`
+	Start       string `yaml:"start,omitempty"`
+	Pause       string `yaml:"pause,omitempty"`
+	Unpause     string `yaml:"unpause,omitempty"`
+	Stop        string `yaml:"stop,omitempty"`
+	Kill        string `yaml:"kill,omitempty"`
+	Restart     string `yaml:"restart,omitempty"`
+	Status      string `yaml:"status,omitempty"`
+	GetConsole  string `yaml:"get_console,omitempty"`  //nolint:tagliatelle
+	SendCommand string `yaml:"send_command,omitempty"` //nolint:tagliatelle
+	Delete      string `yaml:"delete,omitempty"`
 }
 
 type DaemonSteamConfig struct {
-	Login    string `yaml:"login"`
-	Password string `yaml:"password"`
+	Login    string `yaml:"login,omitempty"`
+	Password string `yaml:"password,omitempty"`
 }
 
 //nolint:tagliatelle
@@ -799,7 +799,7 @@ type DaemonConfig struct {
 
 	SteamConfig DaemonSteamConfig `yaml:"steam_config"`
 
-	Scripts DaemonConfigScripts
+	Scripts DaemonConfigScripts `yaml:"-"`
 }
 
 func findDaemonReleaseURL(ctx context.Context) (string, error) {
