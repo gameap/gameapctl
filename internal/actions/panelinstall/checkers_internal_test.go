@@ -52,8 +52,10 @@ func Test_checkHost(t *testing.T) {
 			expectedPort: "80",
 		},
 		{
-			name: "unknown_host",
-			host: "unknown_host",
+			name:         "unknown_host",
+			host:         "unknown_host",
+			expectedHost: "unknown_host",
+			expectedPort: "80",
 		},
 		{
 			name:          "url_address",
