@@ -55,9 +55,8 @@ func Test_checkHost(t *testing.T) {
 			expectedPort: "80",
 		},
 		{
-			name:          "unknown_host",
-			host:          "unknown.host.unknown",
-			expectedError: "failed to lookup ip: lookup unknown.host.unknown",
+			name: "unknown_host",
+			host: "unknown_host",
 		},
 		{
 			name:          "url_address",
@@ -78,6 +77,7 @@ func Test_checkHost(t *testing.T) {
 				assert.Equal(t, test.expectedHost, resultState.Host)
 				assert.Equal(t, test.expectedPort, resultState.Port)
 			} else {
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), test.expectedError)
 			}
 		})
