@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -41,31 +42,50 @@ func filterAndCheckHost(state panelInstallState) (panelInstallState, error) {
 		state.Port = port
 	}
 
-	//nolint:nestif
 	if utils.IsIPv4(state.Host) || utils.IsIPv6(state.Host) {
 		state.HostIP = state.Host
 	} else {
-		ips, err := net.LookupIP(state.Host)
+		ip, err := chooseIPFromHost(state.Host)
+		var dnsErr *net.DNSError
+		if err != nil && errors.As(err, &dnsErr) {
+			// Do nothing
+			return state, nil
+		}
 		if err != nil {
-			return state, errors.WithMessage(err, "failed to lookup ip")
+			return state, errors.WithMessage(err, "failed to choose IP from host")
 		}
 
-		if len(ips) == 0 {
-			return state, errors.New("no ip for chosen host")
-		}
-
-		for i := range ips {
-			if utils.IsIPv4(ips[i].String()) {
-				state.HostIP = ips[i].String()
-			}
-		}
-
-		if state.HostIP == "" {
-			state.HostIP = ips[0].String()
-		}
+		state.HostIP = ip
 	}
 
 	return state, nil
+}
+
+func chooseIPFromHost(host string) (string, error) {
+	var result string
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return "", errors.WithMessage(err, "failed to lookup ip")
+	}
+
+	if len(ips) == 0 {
+		return "", errors.New("no ip for chosen host")
+	}
+
+	for i := range ips {
+		if utils.IsIPv4(ips[i].String()) {
+			result = ips[i].String()
+
+			break
+		}
+	}
+
+	if result == "" {
+		result = ips[0].String()
+	}
+
+	return result, nil
 }
 
 func checkWebServers(ctx context.Context, state panelInstallState) (panelInstallState, error) {
@@ -74,11 +94,37 @@ func checkWebServers(ctx context.Context, state panelInstallState) (panelInstall
 	}
 
 	if state.WebServer == nginxWebServer {
-		_, err := exec.LookPath("nginx")
-		if err == nil || (err != nil && !errors.Is(err, exec.ErrNotFound)) {
+		return checkNginxWebServer(ctx, state)
+	}
+
+	if state.WebServer == apacheWebServer {
+		return checkApacheWebServer(ctx, state)
+	}
+
+	return state, nil
+}
+
+func checkNginxWebServer(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	_, err := exec.LookPath("nginx")
+	//nolint:nestif
+	if err == nil || (err != nil && !errors.Is(err, exec.ErrNotFound)) {
+		err = warning(ctx, state,
+			"Nginx is already installed. "+
+				"The existing nginx configuration may be overwritten. The panel installation may also fail.",
+		)
+		if err != nil {
+			return state, err
+		}
+	} else {
+		nginxConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "nginx_conf")
+		if err != nil {
+			return state, err
+		}
+		if utils.IsFileExists(nginxConfPath) {
 			err = warning(ctx, state,
-				"Nginx is already installed. "+
-					"The existing nginx configuration may be overwritten. The panel installation may also fail.",
+				fmt.Sprintf("Nginx configuration file is already exists (%s). ", nginxConfPath)+
+					"The existing nginx configuration will be overwritten. "+
+					"The panel installation may also fail.",
 			)
 			if err != nil {
 				return state, err
@@ -86,23 +132,75 @@ func checkWebServers(ctx context.Context, state panelInstallState) (panelInstall
 		}
 	}
 
-	if state.WebServer == apacheWebServer {
-		_, err := exec.LookPath("apache2")
-		if err == nil || (err != nil && !errors.Is(err, exec.ErrNotFound)) {
-			err = warning(ctx, state,
-				"Apache is already installed. "+
-					"The existing apache configuration may be overwritten. The panel installation may also fail.",
-			)
-			if err != nil {
-				return state, err
-			}
+	gameapConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "gameap_host_conf")
+	if err != nil {
+		return state, err
+	}
+	if utils.IsFileExists(gameapConfPath) {
+		err = warning(ctx, state,
+			fmt.Sprintf("GameAP configuration file for Nginx is already exists (%s). ", gameapConfPath)+
+				"The existing nginx configuration will be overwritten.",
+		)
+		if err != nil {
+			return state, err
 		}
 	}
 
 	return state, nil
 }
 
+func checkApacheWebServer(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	_, err := exec.LookPath("apache2")
+	if err == nil || (err != nil && !errors.Is(err, exec.ErrNotFound)) {
+		err = warning(ctx, state,
+			"Apache is already installed. "+
+				"The existing apache configuration may be overwritten. The panel installation may also fail.",
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	gameapConfPath, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.ApachePackage,
+		"gameap_host_conf",
+	)
+	if err != nil {
+		return state, err
+	}
+	if utils.IsFileExists(gameapConfPath) {
+		err = warning(ctx, state,
+			fmt.Sprintf(
+				"GameAP configuration file for Apache web server is already exists (%s)", gameapConfPath,
+			)+
+				"The existing nginx configuration will be overwritten.",
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	return state, nil
+}
+
+//nolint:funlen
 func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	_, err := net.LookupIP(state.Host)
+	var dnsErr *net.DNSError
+	if err != nil && errors.As(err, &dnsErr) {
+		err = warning(ctx, state,
+			fmt.Sprintf(
+				"Failed to resolve host: %s. "+
+					"Check that it is correct, without any typos. "+
+					"Further installation may fail.", state.Host, //nolint:goconst
+			),
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
 	client := http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
@@ -110,7 +208,6 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 			}).DialContext,
 		},
 	}
-
 	url := "http://" + state.Host + ":" + state.Port       //nolint:goconst
 	req, err := http.NewRequest(http.MethodHead, url, nil) //nolint:noctx
 	if err != nil {

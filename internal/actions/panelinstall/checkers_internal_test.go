@@ -1,8 +1,11 @@
 package panelinstall
 
 import (
+	"fmt"
+	"net"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,4 +82,18 @@ func Test_checkHost(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_chooseBestIP(t *testing.T) {
+	host := "unknown"
+	result, err := net.LookupIP(host)
+	var dnsErr *net.DNSError
+	if err != nil && !errors.As(err, &dnsErr) {
+		// Do nothing
+		fmt.Println(dnsErr)
+	}
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such host")
+	_ = result
 }
