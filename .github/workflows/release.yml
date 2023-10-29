@@ -32,7 +32,6 @@ jobs:
           goversion: 1.21
           md5sum: false
           overwrite: true
-          compress_assets: OFF
           project_path: "./cmd/gameapctl"
           ldflags: -X "github.com/gameap/gameapctl/pkg/gameap.Version=${{ env.APP_VERSION }}" -X "github.com/gameap/gameapctl/pkg/gameap.BuildDate=${{ env.BUILD_TIME }}"
           binary_name: "gameapctl"
