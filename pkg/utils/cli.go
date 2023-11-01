@@ -61,6 +61,7 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate Validat
 			}
 
 			fmt.Println(message)
+
 			continue
 		}
 

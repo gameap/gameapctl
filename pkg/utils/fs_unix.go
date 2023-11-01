@@ -30,6 +30,7 @@ func ChownR(path string, uid, gid int) error {
 	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
 		if err != nil {
 			// Ignore invalid
+			//nolint:nilerr
 			return nil
 		}
 
@@ -37,11 +38,13 @@ func ChownR(path string, uid, gid int) error {
 			symlinkFile, err := os.Readlink(name)
 			if err != nil {
 				// Ignore invalid symlink
+				//nolint:nilerr
 				return nil
 			}
 
 			if _, err = os.Stat(symlinkFile); err != nil {
 				// Ignore invalid symlink
+				//nolint:nilerr
 				return nil
 			}
 		}
