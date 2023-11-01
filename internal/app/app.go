@@ -19,6 +19,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/daemonupdate"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
+	"github.com/gameap/gameapctl/internal/actions/sendlogs"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/pkg/errors"
@@ -225,12 +226,12 @@ func Run(args []string) {
 				Description: "Send logs to GameAP support. You can specify log which you want to send.",
 				Usage:       "Send logs to GameAP support",
 				Flags: []cli.Flag{
-					&cli.BoolFlag{
-						Name:  "all",
-						Usage: "Send all logs (daemon, web, nginx, php)",
+					&cli.StringSliceFlag{
+						Name:  "include-logs",
+						Usage: "Send additional logs, for example: --include-logs=/var/log/nginx",
 					},
 				},
-				Action: notImplementedAction,
+				Action: sendlogs.Handle,
 			},
 			{
 				Name:    "version",
@@ -304,8 +305,4 @@ func shutdownContext(ctx context.Context) context.Context {
 	}()
 
 	return ctx
-}
-
-func notImplementedAction(_ *cli.Context) error {
-	return errors.New("not implemented")
 }
