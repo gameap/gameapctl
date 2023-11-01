@@ -122,5 +122,14 @@ var packageAliases = distVersionPackagesMap{
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
+		"mantic": {
+			"default": {
+				Lib32GCCPackage:      {"lib32gcc-s1"},
+				PHPExtensionsPackage: {""},
+			},
+			"arm64": {
+				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
+			},
+		},
 	},
 }

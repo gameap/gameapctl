@@ -12,3 +12,7 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 func serviceConfigure(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	return state, nil
 }
+
+func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	return state, nil
+}

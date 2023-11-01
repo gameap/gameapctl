@@ -141,6 +141,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to install archive managers")
 	}
 
+	fmt.Println("Set user privileges ...")
+	state, err = setUserPrivileges(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set user privileges")
+	}
+
 	fmt.Println("Generating GameAP Daemon certificates ...")
 	state, err = generateCertificates(cliCtx.Context, state)
 	if err != nil {
@@ -422,6 +428,8 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to choose best IP")
 	}
+
+	ips = removeLocalIPs(ips)
 
 	for _, ip := range ips {
 		fw, _ = w.CreateFormField("ip[]")
@@ -746,6 +754,28 @@ func chooseBestIP(ips []string) (string, error) {
 	}
 
 	return result, nil
+}
+
+func removeLocalIPs(ips []string) []string {
+	result := make([]string, 0, len(ips))
+
+	for _, ip := range ips {
+		if utils.IsIPv4(ip) {
+			if ip[:4] == "127." {
+				continue
+			}
+		}
+
+		if utils.IsIPv6(ip) {
+			if ip == "::1" {
+				continue
+			}
+		}
+
+		result = append(result, ip)
+	}
+
+	return result
 }
 
 type DaemonConfigScripts struct {
