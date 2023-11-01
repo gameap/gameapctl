@@ -243,6 +243,8 @@ func Handle(cliCtx *cli.Context) error {
 
 	state, err = checkPHPExtensions(cliCtx.Context, state)
 	if err != nil {
+		log.Println(err)
+
 		fmt.Println("Installing needed php extensions ...")
 		if err = pm.Install(cliCtx.Context, packagemanager.PHPExtensionsPackage); err != nil {
 			return errors.WithMessage(err, "failed to install php extensions")

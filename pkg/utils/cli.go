@@ -56,11 +56,12 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate Validat
 			if err != nil {
 				return "", err
 			}
-			if !ok {
-				fmt.Println(message)
-
-				continue
+			if ok {
+				return result, nil
 			}
+
+			fmt.Println(message)
+			continue
 		}
 
 		if result != "" {

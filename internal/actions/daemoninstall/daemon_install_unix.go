@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os/user"
+	"strconv"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -39,6 +40,30 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 		default:
 			return state, errors.WithMessage(err, "failed to lookup user")
 		}
+	}
+
+	return state, nil
+}
+
+func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	gameapUser, err := user.Lookup("gameap")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to lookup user")
+	}
+
+	uid, err := strconv.Atoi(gameapUser.Uid)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to convert uid to int")
+	}
+
+	gid, err := strconv.Atoi(gameapUser.Gid)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to convert gid to int")
+	}
+
+	err = utils.ChownR(state.WorkPath, uid, gid)
+	if err != nil {
+		return daemonsInstallState{}, err
 	}
 
 	return state, nil

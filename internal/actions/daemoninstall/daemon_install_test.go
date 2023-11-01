@@ -36,3 +36,28 @@ func Test_chooseBestIP(t *testing.T) {
 		})
 	}
 }
+
+func Test_removeLocalIPs(t *testing.T) {
+	tests := []struct {
+		name string
+		ips  []string
+		want []string
+	}{
+		{
+			name: "ipv4 only",
+			ips:  []string{"127.0.0.1", "8.8.8.8"},
+			want: []string{"8.8.8.8"},
+		},
+		{
+			name: "with ipv6",
+			ips:  []string{"127.0.0.1", "8.8.8.8", "::1", "fe80::a00:27ff:fe8e:8aa8"},
+			want: []string{"8.8.8.8", "fe80::a00:27ff:fe8e:8aa8"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := removeLocalIPs(test.ips)
+			assert.Equal(t, test.want, result)
+		})
+	}
+}
