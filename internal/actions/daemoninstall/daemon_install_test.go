@@ -50,8 +50,8 @@ func Test_removeLocalIPs(t *testing.T) {
 		},
 		{
 			name: "with ipv6",
-			ips:  []string{"127.0.0.1", "8.8.8.8", "::1", "fe80::a00:27ff:fe8e:8aa8"},
-			want: []string{"8.8.8.8", "fe80::a00:27ff:fe8e:8aa8"},
+			ips:  []string{"127.0.0.1", "8.8.8.8", "::1", "fe80::a00:27ff:fe8e:8aa8", "2001:4860:4860::8844"},
+			want: []string{"8.8.8.8", "2001:4860:4860::8844"},
 		},
 	}
 	for _, test := range tests {

@@ -767,7 +767,7 @@ func removeLocalIPs(ips []string) []string {
 		}
 
 		if utils.IsIPv6(ip) {
-			if ip == "::1" {
+			if ip == "::1" || ip[:2] == "fc" || ip[:2] == "fd" || ip[:2] == "fe" {
 				continue
 			}
 		}
