@@ -154,7 +154,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Downloading runner ...")
-	state, err = downloadRunner(cliCtx.Context, state)
+	state, err = downloadRunner(cliCtx.Context, state, pm)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download runner")
 	}
@@ -366,7 +366,18 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 	return state, nil
 }
 
-func downloadRunner(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func downloadRunner(
+	ctx context.Context,
+	state daemonsInstallState,
+	pm packagemanager.PackageManager,
+) (daemonsInstallState, error) {
+	if err := pm.Install(
+		ctx,
+		packagemanager.TmuxPackage,
+	); err != nil {
+		return state, errors.WithMessage(err, "failed to install tmux")
+	}
+
 	runnerFilePath := filepath.Join(gameap.DefaultToolsPath, "runner.sh")
 
 	err := utils.DownloadFile(

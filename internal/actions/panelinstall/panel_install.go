@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/go-sql-driver/mysql"
 
@@ -340,7 +340,7 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}
 
-	if err = savePanelInstallationDetails(state); err != nil {
+	if err = savePanelInstallationDetails(cliCtx.Context, state); err != nil {
 		fmt.Println("Failed to save installation details: ", err.Error())
 		log.Println("Failed to save installation details: ", err)
 	}
@@ -1239,16 +1239,8 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 	return state, nil
 }
 
-func savePanelInstallationDetails(state panelInstallState) error {
-	saveStruct := struct {
-		Host                 string `json:"host"`
-		HostIP               string `json:"hostIp"`
-		Port                 string `json:"port"`
-		Path                 string `json:"path"`
-		WebServer            string `json:"webServer"`
-		Database             string `json:"database"`
-		DatabaseWasInstalled bool   `json:"databaseWasInstalled"`
-	}{
+func savePanelInstallationDetails(ctx context.Context, state panelInstallState) error {
+	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 state.Port,
@@ -1256,34 +1248,5 @@ func savePanelInstallationDetails(state panelInstallState) error {
 		WebServer:            state.WebServer,
 		Database:             state.Database,
 		DatabaseWasInstalled: state.DatabaseWasInstalled,
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return errors.WithMessage(err, "failed to get user home dir")
-	}
-
-	saveFilePath := homeDir + string(os.PathSeparator) + ".gameapctl"
-	if _, err := os.Stat(saveFilePath); errors.Is(err, fs.ErrNotExist) {
-		err = os.Mkdir(saveFilePath, 0600)
-		if err != nil {
-			return err
-		}
-	}
-
-	b, err := json.Marshal(saveStruct)
-	if err != nil {
-		return errors.WithMessage(err, "failed to marshal json")
-	}
-
-	err = os.WriteFile(
-		homeDir+string(os.PathSeparator)+".gameapctl"+string(os.PathSeparator)+"panel_install.json",
-		b,
-		0600,
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to write file")
-	}
-
-	return nil
+	})
 }

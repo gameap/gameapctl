@@ -11,6 +11,7 @@ const MySQLServerPackage = "mysql-server"
 const NginxPackage = "nginx"
 const PHPExtensionsPackage = "php-extensions"
 const PHPPackage = "php"
+const TmuxPackage = "tmux"
 const UnzipPackage = "unzip"
 const XZUtilsPackage = "xz-utils"
 

@@ -57,6 +57,8 @@ func Handle(cliCtx *cli.Context) error {
 		err := f.Close()
 		if err != nil {
 			fmt.Println("Failed to close temp file")
+
+			return
 		}
 		err = os.Remove(f.Name())
 		if err != nil {

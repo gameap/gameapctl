@@ -3,9 +3,9 @@ package panelinstall
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
@@ -20,7 +20,7 @@ type askedParams struct {
 	webServer string
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,gocyclo
 func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]struct{}) (askedParams, error) {
 	var err error
 	result := askedParams{}
@@ -37,31 +37,45 @@ func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]
 			result.path, err = utils.Ask(
 				ctx,
 				pathText,
-				true,
+				false,
 				func(s string) (bool, string, error) {
-					if _, err := os.Stat(s); errors.Is(err, fs.ErrNotExist) {
-						return true, "", nil
+					if s == "" {
+						s = gameap.DefaultWebInstallationPath
+					}
+					if utils.IsFileExists(s) {
+						return false,
+							fmt.Sprintf("Directory '%s' already exists. Please provide another path", s),
+							nil
 					}
 
-					return false,
-						fmt.Sprintf("Directory '%s' already exists. Please provide another path", s),
-						nil
+					result.path = s
+
+					return true, "", nil
 				},
 			)
 			if err != nil {
 				return result, err
 			}
 		}
-
-		if result.path == "" {
-			result.path = gameap.DefaultWebInstallationPath
-		}
 	}
 
+	//nolint:nestif
 	if _, ok := needToAsk["host"]; ok {
+		exampleHost, err := os.Hostname()
+		if err != nil {
+			return result, err
+		}
+
+		if !strings.Contains(exampleHost, ".") {
+			exampleHost, err = chooseIPFromHost(exampleHost)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		result.host, err = utils.Ask(
 			ctx,
-			"Enter gameap host (Example: example.com): ",
+			fmt.Sprintf("Enter gameap host (Examples: %s, example.com): ", exampleHost),
 			false,
 			nil,
 		)
