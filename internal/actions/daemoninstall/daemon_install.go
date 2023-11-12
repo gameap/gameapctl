@@ -467,7 +467,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	fw, _ = w.CreateFormField("script_get_console")
 	_, _ = fw.Write([]byte("{node_work_path}/runner.sh get_console -d {dir} -n {uuid} -u {user}"))
 
-	fw, _ = w.CreateFormField("script_get_console")
+	fw, _ = w.CreateFormField("script_send_command")
 	_, _ = fw.Write([]byte("{node_work_path}/runner.sh send_command -d {dir} -n {uuid} -u {user} -c \"{command}\""))
 
 	client := http.Client{
