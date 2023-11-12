@@ -12,9 +12,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	"github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/go-sql-driver/mysql"
 
@@ -116,6 +118,10 @@ func Handle(cliCtx *cli.Context) error {
 		state.Branch = cliCtx.String("branch")
 	}
 
+	if state.Branch == "" {
+		state.Branch = "master"
+	}
+
 	fmt.Printf(
 		"Detected operating system as %s/%s.\n",
 		state.OSInfo.Distribution,
@@ -205,6 +211,10 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Database:", state.Database)
 	fmt.Println("Web server:", state.WebServer)
 	fmt.Println("Develop:", cliCtx.Bool("develop"))
+	if state.FromGithub {
+		fmt.Println("Installation from GitHub: yes")
+		fmt.Println("Branch:", state.Branch)
+	}
 	fmt.Println()
 
 	pm, err := packagemanager.Load(cliCtx.Context)
@@ -256,7 +266,13 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}
 
-	err = installGameAP(cliCtx.Context, state.Path)
+	if state.FromGithub {
+		fmt.Println("Installing GameAP from github ...")
+		state, err = installGameAPFromGithub(cliCtx.Context, pm, state)
+	} else {
+		fmt.Println("Installing GameAP ...")
+		state, err = installGameAP(cliCtx.Context, state)
+	}
 	if err != nil {
 		return err
 	}
@@ -279,12 +295,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to update .env")
 	}
 
-	err = generateEncryptionKey(state.Path)
+	err = panel.GenerateEncryptionKey(cliCtx.Context, state.Path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to generate encryption key")
 	}
 
-	err = runMigration(state)
+	err = panel.RunMigration(cliCtx.Context, state.Path, state.DatabaseWasInstalled)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run migration")
 	}
@@ -401,7 +417,7 @@ func installMySQL(
 	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		state.DBCreds.Port = "3306"
 	} else if state.DBCreds.Port == "" {
-		// Default port for windows
+		// ArchDefault port for windows
 		state.DBCreds.Port = "9306"
 	}
 
@@ -735,10 +751,12 @@ func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstal
 	return state, nil
 }
 
-func installGameAP(ctx context.Context, path string) error {
+func installGameAP(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	path := state.Path
+
 	tempDir, err := os.MkdirTemp("", "gameap")
 	if err != nil {
-		return errors.WithMessage(err, "failed to create temp dir")
+		return state, errors.WithMessage(err, "failed to create temp dir")
 	}
 	defer func(path string) {
 		err := os.RemoveAll(path)
@@ -750,41 +768,79 @@ func installGameAP(ctx context.Context, path string) error {
 	fmt.Println("Downloading GameAP ...")
 	downloadPath, err := url.JoinPath(gameap.Repository(), "gameap/latest.tar.gz")
 	if err != nil {
-		return errors.WithMessage(err, "failed to join url")
+		return state, errors.WithMessage(err, "failed to join url")
 	}
 
 	err = utils.Download(ctx, downloadPath, tempDir)
 	if err != nil {
-		return errors.WithMessage(err, "failed to download gameap")
+		return state, errors.WithMessage(err, "failed to download gameap")
 	}
 
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
 	if err != nil {
-		return errors.WithMessage(err, "failed to move gameap")
+		return state, errors.WithMessage(err, "failed to move gameap")
 	}
 
 	fmt.Println("Installing GameAP ...")
 	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
 	if err != nil {
-		return errors.WithMessage(err, "failed to copy .env.example")
+		return state, errors.WithMessage(err, "failed to copy .env.example")
 	}
 
-	return nil
+	return state, nil
 }
 
-func generateEncryptionKey(dir string) error {
-	fmt.Println("Generating encryption key ...")
-	cmd := exec.Command("php", "artisan", "key:generate", "--force")
-	cmd.Dir = dir
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-	err := cmd.Run()
-	log.Println('\n', cmd.String())
-	if err != nil {
-		return errors.WithMessage(err, "failed to execute key generate command")
+func installGameAPFromGithub(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
+	var err error
+
+	fmt.Println("Installing git ...")
+	if err = pm.Install(ctx, packagemanager.GitPackage); err != nil {
+		return state, errors.WithMessage(err, "failed to install git")
 	}
 
-	return nil
+	fmt.Println("Installing composer ...")
+	if err = pm.Install(ctx, packagemanager.ComposerPackage); err != nil {
+		return state, errors.WithMessage(err, "failed to install composer")
+	}
+
+	fmt.Println("Installing nodejs ...")
+	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
+		return state, errors.WithMessage(err, "failed to install nodejs")
+	}
+
+	fmt.Println("Installing npm ...")
+	if err = pm.Install(ctx, packagemanager.NPMPackage); err != nil {
+		return state, errors.WithMessage(err, "failed to install npm")
+	}
+
+	fmt.Println("Cloning gameap ...")
+	err = utils.ExecCommand(
+		"git", "clone", "-b", state.Branch, "https://github.com/et-nik/gameap.git", state.Path,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to clone gameap from github")
+	}
+
+	fmt.Println("Installing composer dependencies ...")
+	err = utils.ExecCommand(
+		"composer",
+		"update", "--no-dev", "--optimize-autoloader", "--no-interaction", "--working-dir", state.Path,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to run composer update")
+	}
+
+	fmt.Println("Building styles ...")
+	err = panel.BuildStyles(ctx, state.Path)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to build styles")
+	}
+
+	return state, nil
 }
 
 func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallState, error) {
@@ -792,12 +848,22 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 
 	fmt.Println("Updating .env ...")
 
+	envPath := filepath.Join(state.Path, ".env")
+
 	u := "http://" + state.Host
 	if state.HTTPS {
 		u = "https://" + state.Host
 	}
 
-	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
+	if !utils.IsFileExists(envPath) {
+		envExamplePath := filepath.Join(state.Path, ".env.example")
+		err = utils.Copy(envExamplePath, envPath)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	err = utils.FindLineAndReplace(ctx, envPath, map[string]string{
 		"APP_URL=":       "APP_URL=" + u,
 		"DB_CONNECTION=": "DB_CONNECTION=" + state.Database,
 		"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
@@ -811,27 +877,6 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 	}
 
 	return state, nil
-}
-
-func runMigration(state panelInstallState) error {
-	fmt.Println("Running migration ...")
-	var cmd *exec.Cmd
-	if state.DatabaseWasInstalled {
-		cmd = exec.Command("php", "artisan", "migrate", "--seed")
-	} else {
-		cmd = exec.Command("php", "artisan", "migrate")
-	}
-
-	cmd.Dir = state.Path
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-	log.Println('\n', cmd.String())
-	err := cmd.Run()
-	if err != nil {
-		return errors.WithMessage(err, "failed to execute key generate command")
-	}
-
-	return nil
 }
 
 //nolint:funlen
@@ -1092,27 +1137,10 @@ func updateAdminPassword(_ context.Context, state panelInstallState) (panelInsta
 	return state, nil
 }
 
-func clearGameAPCache(_ context.Context, state panelInstallState) (panelInstallState, error) {
-	cmd := exec.Command("php", "artisan", "config:cache")
-	log.Println('\n', cmd.String())
-	cmd.Dir = state.Path
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-
-	err := cmd.Run()
+func clearGameAPCache(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	err := panel.ClearCache(ctx, state.Path)
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to clear config cache")
-	}
-
-	cmd = exec.Command("php", "artisan", "view:cache")
-	log.Println('\n', cmd.String())
-	cmd.Dir = state.Path
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-
-	err = cmd.Run()
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to clear view cache")
+		return state, errors.WithMessage(err, "failed to clear cache")
 	}
 
 	return state, nil
@@ -1250,5 +1278,7 @@ func savePanelInstallationDetails(ctx context.Context, state panelInstallState) 
 		WebServer:            state.WebServer,
 		Database:             state.Database,
 		DatabaseWasInstalled: state.DatabaseWasInstalled,
+		FromGithub:           state.FromGithub,
+		Branch:               state.Branch,
 	})
 }

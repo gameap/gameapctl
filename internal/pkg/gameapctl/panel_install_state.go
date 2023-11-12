@@ -21,6 +21,9 @@ type PanelInstallState struct {
 	WebServer            string `json:"webServer"`
 	Database             string `json:"database"`
 	DatabaseWasInstalled bool   `json:"databaseWasInstalled"`
+	Develop              bool   `json:"develop"`
+	FromGithub           bool   `json:"fromGithub"`
+	Branch               string `json:"branch"`
 }
 
 func SavePanelInstallState(_ context.Context, state PanelInstallState) error {
