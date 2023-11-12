@@ -243,6 +243,7 @@ func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) (
 		funcsByDistroAndArch = installationFuncs[p]
 		if funcsByDistroAndArch == nil {
 			updatedPacks = append(updatedPacks, p)
+
 			continue
 		}
 
@@ -251,6 +252,7 @@ func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) (
 			funcsByArch = funcsByDistroAndArch[Default]
 			if funcsByArch == nil {
 				updatedPacks = append(updatedPacks, p)
+
 				continue
 			}
 		}
@@ -260,6 +262,7 @@ func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) (
 			f = funcsByArch[ArchDefault]
 			if f == nil {
 				updatedPacks = append(updatedPacks, p)
+
 				continue
 			}
 		}
@@ -563,12 +566,16 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 }
 
 func (e *ExtendedAPT) addNodeJSRepositories(_ context.Context) error {
-	err := utils.ExecCommand(
-		"bash", "-c",
-		"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg",
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to receive nodejs gpg key")
+	var err error
+	if !utils.IsFileExists("/etc/apt/keyrings/nodesource.gpg") {
+		err = utils.ExecCommand(
+			"bash", "-c",
+			"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |"+
+				" gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to receive nodejs gpg key")
+		}
 	}
 
 	err = utils.WriteContentsToFile(

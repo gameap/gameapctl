@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
@@ -210,6 +211,10 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Database:", state.Database)
 	fmt.Println("Web server:", state.WebServer)
 	fmt.Println("Develop:", cliCtx.Bool("develop"))
+	if state.FromGithub {
+		fmt.Println("Installation from GitHub: yes")
+		fmt.Println("Branch:", state.Branch)
+	}
 	fmt.Println()
 
 	pm, err := packagemanager.Load(cliCtx.Context)
@@ -807,6 +812,11 @@ func installGameAPFromGithub(
 		return state, errors.WithMessage(err, "failed to install nodejs")
 	}
 
+	fmt.Println("Installing npm ...")
+	if err = pm.Install(ctx, packagemanager.NPMPackage); err != nil {
+		return state, errors.WithMessage(err, "failed to install npm")
+	}
+
 	fmt.Println("Cloning gameap ...")
 	err = utils.ExecCommand(
 		"git", "clone", "-b", state.Branch, "https://github.com/et-nik/gameap.git", state.Path,
@@ -838,12 +848,22 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 
 	fmt.Println("Updating .env ...")
 
+	envPath := filepath.Join(state.Path, ".env")
+
 	u := "http://" + state.Host
 	if state.HTTPS {
 		u = "https://" + state.Host
 	}
 
-	err = utils.FindLineAndReplace(ctx, state.Path+"/.env", map[string]string{
+	if !utils.IsFileExists(envPath) {
+		envExamplePath := filepath.Join(state.Path, ".env.example")
+		err = utils.Copy(envExamplePath, envPath)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	err = utils.FindLineAndReplace(ctx, envPath, map[string]string{
 		"APP_URL=":       "APP_URL=" + u,
 		"DB_CONNECTION=": "DB_CONNECTION=" + state.Database,
 		"DB_HOST=":       "DB_HOST=" + state.DBCreds.Host,
@@ -1258,5 +1278,7 @@ func savePanelInstallationDetails(ctx context.Context, state panelInstallState) 
 		WebServer:            state.WebServer,
 		Database:             state.Database,
 		DatabaseWasInstalled: state.DatabaseWasInstalled,
+		FromGithub:           state.FromGithub,
+		Branch:               state.Branch,
 	})
 }
