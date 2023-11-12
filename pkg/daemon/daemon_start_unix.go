@@ -76,7 +76,7 @@ func detectInit(ctx context.Context) (string, error) {
 		filename = exe
 	}
 
-	switch filename {
+	switch filepath.Base(filename) {
 	case "systemd":
 		log.Println("Detected systemd init")
 		result = initSystemd
