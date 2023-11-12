@@ -3,45 +3,45 @@ package packagemanager
 type distVersionPackagesMap map[string]map[string]map[string]map[string][]string
 
 var packageAliases = distVersionPackagesMap{
-	"debian": {
+	DistributionDebian: {
 		"squeeze": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc1"},
 			},
 		},
 		"wheezy": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc1"},
 			},
 		},
 		"jessie": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc1"},
 			},
 		},
 		"stretch": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc1"},
 			},
 		},
 		"buster": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc1"},
 			},
 		},
 		"bullseye": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc-s1"},
 			},
 		},
 		"bookworm": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc-s1"},
 			},
@@ -52,7 +52,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"sid": {
-			"default": {
+			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc-s1"},
 			},
@@ -63,19 +63,19 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 	},
-	"ubuntu": {
+	DistributionUbuntu: {
 		"precise": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
 		},
 		"trusty": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
 		},
 		"xenial": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
 			"arm64": {
@@ -83,7 +83,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"bionic": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
 			"arm64": {
@@ -91,7 +91,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"focal": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
 			"arm64": {
@@ -99,7 +99,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"jammy": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
 			"arm64": {
@@ -107,7 +107,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"kinetic": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
 			"arm64": {
@@ -115,7 +115,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"lunar": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
 			"arm64": {
@@ -123,7 +123,7 @@ var packageAliases = distVersionPackagesMap{
 			},
 		},
 		"mantic": {
-			"default": {
+			ArchDefault: {
 				Lib32GCCPackage:      {"lib32gcc-s1"},
 				PHPExtensionsPackage: {""},
 			},

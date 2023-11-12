@@ -19,6 +19,7 @@ import (
 const (
 	sourcesListNginx = "/etc/apt/sources.list.d/nginx.list"
 	sourcesListPHP   = "/etc/apt/sources.list.d/php.list"
+	sourcesListNode  = "/etc/apt/sources.list.d/nodesource.list"
 )
 
 type APT struct{}
@@ -173,9 +174,14 @@ func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) error {
 	var err error
 	packs = e.replaceAliases(ctx, packs)
 
-	packs, err = e.preInstallationSteps(ctx, packs...)
+	packs, err = e.findAndRunViaFuncs(ctx, packs...)
 	if err != nil {
 		return err
+	}
+
+	packs, err = e.preInstallationSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run pre installation steps")
 	}
 
 	return e.apt.Install(ctx, packs...)
@@ -225,6 +231,48 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 	return replacedPacks
 }
 
+func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	var funcsByDistroAndArch map[string]map[string]installationFunc
+	var funcsByArch map[string]installationFunc
+
+	updatedPacks := make([]string, 0, len(packs))
+
+	for _, p := range packs {
+		funcsByDistroAndArch = installationFuncs[p]
+		if funcsByDistroAndArch == nil {
+			updatedPacks = append(updatedPacks, p)
+			continue
+		}
+
+		funcsByArch = funcsByDistroAndArch[osInfo.Distribution]
+		if funcsByArch == nil {
+			funcsByArch = funcsByDistroAndArch[Default]
+			if funcsByArch == nil {
+				updatedPacks = append(updatedPacks, p)
+				continue
+			}
+		}
+
+		f := funcsByArch[osInfo.Platform]
+		if f == nil {
+			f = funcsByArch[ArchDefault]
+			if f == nil {
+				updatedPacks = append(updatedPacks, p)
+				continue
+			}
+		}
+
+		err := f(ctx)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to run installation func for package %s", p)
+		}
+	}
+
+	return updatedPacks, nil
+}
+
 func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
 	updatedPacks := make([]string, 0, len(packs))
 
@@ -259,6 +307,18 @@ func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 			if err != nil {
 				return nil, errors.WithMessage(err, "failed to process apache packages")
 			}
+		case NodeJSPackage:
+			err := e.addNodeJSRepositories(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			err = e.apt.CheckForUpdates(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			updatedPacks = append(updatedPacks, pack)
 		default:
 			updatedPacks = append(updatedPacks, pack)
 		}
@@ -502,6 +562,26 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	return nil
 }
 
+func (e *ExtendedAPT) addNodeJSRepositories(_ context.Context) error {
+	err := utils.ExecCommand(
+		"bash", "-c",
+		"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to receive nodejs gpg key")
+	}
+
+	err = utils.WriteContentsToFile(
+		[]byte("deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_16.x nodistro main"),
+		sourcesListNode,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (e *ExtendedAPT) apachePackageProcess(ctx context.Context) error {
 	phpVersion, err := DefinePHPVersion()
 	if err != nil {
@@ -514,4 +594,24 @@ func (e *ExtendedAPT) apachePackageProcess(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+type installationFunc func(ctx context.Context) error
+
+var installationFuncs = map[string]map[string]map[string]installationFunc{
+	ComposerPackage: {
+		Default: {
+			ArchDefault: func(ctx context.Context) error {
+				err := utils.ExecCommand(
+					"bash", "-c",
+					"curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
+				)
+				if err != nil {
+					return errors.WithMessage(err, "failed to install composer")
+				}
+
+				return nil
+			},
+		},
+	},
 }
