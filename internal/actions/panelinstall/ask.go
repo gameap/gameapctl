@@ -48,11 +48,14 @@ func askUser(ctx context.Context, state panelInstallState, needToAsk map[string]
 							nil
 					}
 
-					result.path = s
-
 					return true, "", nil
 				},
 			)
+
+			if result.path == "" {
+				result.path = gameap.DefaultWebInstallationPath
+			}
+
 			if err != nil {
 				return result, err
 			}
