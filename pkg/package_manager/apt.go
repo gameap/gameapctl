@@ -567,6 +567,13 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 
 func (e *ExtendedAPT) addNodeJSRepositories(_ context.Context) error {
 	var err error
+	if !utils.IsFileExists("/etc/apt/keyrings") {
+		err = os.Mkdir("/etc/apt/keyrings", 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create /etc/apt/keyrings directory")
+		}
+	}
+
 	if !utils.IsFileExists("/etc/apt/keyrings/nodesource.gpg") {
 		err = utils.ExecCommand(
 			"bash", "-c",
