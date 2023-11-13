@@ -15,47 +15,31 @@ import (
 )
 
 func filterAndCheckHost(state panelInstallState) (panelInstallState, error) {
-	if idx := strings.Index(state.Host, "http://"); idx >= 0 {
-		state.Host = state.Host[7:]
-	} else if idx = strings.Index(state.Host, "https://"); idx >= 0 {
-		state.Host = state.Host[8:]
-	}
+	state.Host = strings.TrimPrefix(state.Host, "http://")
+	state.Host = strings.TrimPrefix(state.Host, "https://")
+	state.Host = strings.TrimRight(state.Host, "/?&")
 
 	if state.Port == "" {
 		state.Port = "80"
 	}
 
-	state.Host = strings.TrimRight(state.Host, "/?&")
-
-	var invalidChars = []int32{'/', '?', '&'}
-	for _, s := range state.Host {
-		if utils.Contains(invalidChars, s) {
-			return state, errors.New("invalid host")
-		}
+	if strings.ContainsAny(state.Host, "/?&") {
+		return state, errors.New("invalid host")
 	}
 
-	host, port, err := net.SplitHostPort(state.Host)
-	if err != nil { //nolint:revive
-		// Do nothing
-	} else {
+	if host, port, err := net.SplitHostPort(state.Host); err == nil {
 		state.Host = host
 		state.Port = port
 	}
 
-	if utils.IsIPv4(state.Host) || utils.IsIPv6(state.Host) {
-		state.HostIP = state.Host
-	} else {
-		ip, err := chooseIPFromHost(state.Host)
-		var dnsErr *net.DNSError
-		if err != nil && errors.As(err, &dnsErr) {
-			// Do nothing
-			return state, nil
-		}
-		if err != nil {
+	if !utils.IsIPv4(state.Host) && !utils.IsIPv6(state.Host) {
+		if ip, err := chooseIPFromHost(state.Host); err == nil {
+			state.HostIP = ip
+		} else if !errors.As(err, new(*net.DNSError)) {
 			return state, errors.WithMessage(err, "failed to choose IP from host")
 		}
-
-		state.HostIP = ip
+	} else {
+		state.HostIP = state.Host
 	}
 
 	return state, nil
