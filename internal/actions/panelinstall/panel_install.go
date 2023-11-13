@@ -797,8 +797,6 @@ func installGameAPFromGithub(
 ) (panelInstallState, error) {
 	var err error
 
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
 	fmt.Println("Installing git ...")
 	if err = pm.Install(ctx, packagemanager.GitPackage); err != nil {
 		return state, errors.WithMessage(err, "failed to install git")
@@ -812,13 +810,6 @@ func installGameAPFromGithub(
 	fmt.Println("Installing nodejs ...")
 	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
 		return state, errors.WithMessage(err, "failed to install nodejs")
-	}
-
-	if osInfo.Distribution == packagemanager.DistributionDebian {
-		fmt.Println("Installing npm ...")
-		if err = pm.Install(ctx, packagemanager.NPMPackage); err != nil {
-			return state, errors.WithMessage(err, "failed to install npm")
-		}
 	}
 
 	fmt.Println("Cloning gameap ...")
