@@ -32,6 +32,7 @@ func (apt *APT) Search(_ context.Context, packName string) ([]PackageInfo, error
 		"show",
 		packName,
 	)
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 
 	out, err := cmd.CombinedOutput()
