@@ -94,6 +94,8 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 // from the repositories.
 func (apt *APT) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
+
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
 
 	log.Println('\n', cmd.String())
@@ -113,7 +115,10 @@ func (apt *APT) Install(_ context.Context, packs ...string) error {
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
+
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
@@ -131,7 +136,10 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
+
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
@@ -149,7 +157,10 @@ func (apt *APT) Purge(_ context.Context, packs ...string) error {
 		args = append(args, pack)
 	}
 	cmd := exec.Command("apt-get", args...)
+
+	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
