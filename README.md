@@ -8,12 +8,15 @@ gameapctl is available for Linux, macOS and Windows.
 
 ## Supported OS
 
+Autotests were performed on the following operating systems. 
+Other operating systems may work as well, if they can run the required dependencies.
+
 ### Debian
 
 | Version       | Supported | Notes                                   |
 |---------------|-----------|-----------------------------------------|
 | 12 (bookworm) | ✔         | Latest manual test (v0.4.1): 12.11.2023 |
-| 11 (bullseye) | ✔         |                                         |
+| 11 (bullseye) | ✔         | Latest manual test (v0.4.3): 13.11.2023 |
 | 10 (buster)   | ✔         |                                         |
 | 9 (stretch)   | ✔         |                                         | 
 
