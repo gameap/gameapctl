@@ -60,6 +60,16 @@ func DefinePHPExtensions() ([]string, error) {
 	return extensions, nil
 }
 
+func DefinePHPCommandAndArgs(args ...string) (string, []string, error) {
+	if _, statErr := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); statErr == nil {
+		resultArgs := append([]string{chrootPHPPath, "/usr/bin/php"}, args...)
+
+		return "chroot", resultArgs, nil
+	}
+
+	return "php", args, nil
+}
+
 func parsePHPVersion(s string) (string, error) {
 	version := ""
 

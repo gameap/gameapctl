@@ -65,6 +65,7 @@ func (ch *chRoot) Install(ctx context.Context, packs ...string) error {
 	return nil
 }
 
+//nolint:funlen
 func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	if _, ok := skipChrootPackages[pack]; ok {
 		return nil
@@ -128,6 +129,13 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download chroot systemd unit")
+	}
+
+	if p.AfterInstallFunc != nil {
+		err = p.AfterInstallFunc(ctx)
+		if err != nil {
+			return errors.WithMessage(err, "failed to run after install function")
+		}
 	}
 
 	return nil
@@ -207,6 +215,7 @@ type chrootPackage struct {
 	SystemdUnitURL   string
 	InstallationPath string
 	PackageInfo      PackageInfo
+	AfterInstallFunc func(ctx context.Context) error
 }
 
 //nolint:gomnd

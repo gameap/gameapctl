@@ -737,12 +737,20 @@ func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstal
 	for _, extension := range []string{
 		"bcmath", "bz2", "curl", "fileinfo", "gd", "gmp",
 		"intl", "json", "mbstring", "openssl", "pdo",
-		"pdo_mysql", "pdo_sqlite", "tokenizer", "readline",
+		"tokenizer", "readline",
 		"xml", "zip",
 	} {
 		if !utils.Contains(extensions, extension) {
 			return state, errors.Errorf("PHP extension %s not found", extension)
 		}
+	}
+
+	if state.Database == mysqlDatabase && !utils.Contains(extensions, "pdo_mysql") {
+		return state, errors.New("pdo_mysql extension not found")
+	}
+
+	if state.Database == sqliteDatabase && !utils.Contains(extensions, "pdo_sqlite") {
+		return state, errors.New("pdo_sqlite extension not found")
 	}
 
 	return state, nil
@@ -1054,6 +1062,7 @@ func installApache(
 	return state, nil
 }
 
+//nolint:funlen
 func configureCron(_ context.Context, state panelInstallState) error {
 	fmt.Println("Configuring cron ...")
 
@@ -1070,9 +1079,24 @@ func configureCron(_ context.Context, state panelInstallState) error {
 		return errors.WithMessage(err, "failed to get crontab")
 	}
 
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(state.Path, "artisan"), "schedule:run",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	cronCMDBuilder := strings.Builder{}
+	cronCMDBuilder.WriteString("* * * * * ")
+	cronCMDBuilder.WriteString(cmdName)
+	for _, arg := range args {
+		cronCMDBuilder.WriteString(" ")
+		cronCMDBuilder.WriteString(arg)
+	}
+	cronCMDBuilder.WriteString(" >> /dev/null 2>&1\n")
+
 	buf := bytes.NewBuffer(out)
-	//nolint:mirror
-	buf.Write([]byte(fmt.Sprintf("* * * * * cd %s && php artisan schedule:run >> /dev/null 2>&1\n", state.Path)))
+	buf.WriteString(cronCMDBuilder.String())
 
 	tmpDir, err := os.MkdirTemp("", "gameap_cron")
 	if err != nil {
@@ -1103,27 +1127,22 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	return nil
 }
 
-func updateAdminPassword(_ context.Context, state panelInstallState) (panelInstallState, error) {
+func updateAdminPassword(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	var err error
 	if state.AdminPassword == "" {
 		fmt.Println("Generating admin password ...")
 
-		state.AdminPassword, err = password.Generate(defaultPasswordLen, defaultPasswordNumDigits, 0, false, false)
+		state.AdminPassword, err = password.Generate(
+			defaultPasswordLen, defaultPasswordNumDigits, 0, false, false,
+		)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate password")
 		}
 	}
 
-	//nolint:gosec
-	cmd := exec.Command("php", "artisan", "user:change-password", "admin", state.AdminPassword)
-	log.Println('\n', "php artisan user:change-password admin ********")
-	cmd.Dir = state.Path
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-
-	err = cmd.Run()
+	err = panel.ChangePassword(ctx, state.Path, "admin", state.AdminPassword)
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to execute artisan command")
+		return state, errors.WithMessage(err, "failed to change admin password")
 	}
 
 	return state, nil

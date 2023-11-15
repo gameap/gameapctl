@@ -5,17 +5,27 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"path/filepath"
 
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/pkg/errors"
 )
 
 func GenerateEncryptionKey(_ context.Context, dir string) error {
 	fmt.Println("Generating encryption key ...")
-	cmd := exec.Command("php", "artisan", "key:generate", "--force")
+
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(dir, "artisan"), "key:generate", "--force",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	cmd := exec.Command(cmdName, args...)
 	cmd.Dir = dir
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
-	err := cmd.Run()
+	err = cmd.Run()
 	log.Println('\n', cmd.String())
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute key generate command")
@@ -28,9 +38,23 @@ func RunMigration(_ context.Context, path string, withSeed bool) error {
 	fmt.Println("Running migration ...")
 	var cmd *exec.Cmd
 	if withSeed {
-		cmd = exec.Command("php", "artisan", "migrate", "--seed")
+		cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+			filepath.Join(path, "artisan"), "migrate", "--seed",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to define php command and args")
+		}
+
+		cmd = exec.Command(cmdName, args...)
 	} else {
-		cmd = exec.Command("php", "artisan", "migrate")
+		cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+			filepath.Join(path, "artisan"), "migrate",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to define php command and args")
+		}
+
+		cmd = exec.Command(cmdName, args...)
 	}
 
 	cmd.Dir = path
@@ -46,18 +70,33 @@ func RunMigration(_ context.Context, path string, withSeed bool) error {
 }
 
 func ClearCache(_ context.Context, path string) error {
-	cmd := exec.Command("php", "artisan", "config:cache")
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(path, "artisan"), "key:generate", "--force",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	cmd := exec.Command(cmdName, args...)
+
 	log.Println('\n', cmd.String())
 	cmd.Dir = path
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return errors.WithMessage(err, "failed to clear config cache")
 	}
 
-	cmd = exec.Command("php", "artisan", "view:cache")
+	cmdName, args, err = packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(path, "artisan"), "view:cache",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	cmd = exec.Command(cmdName, args...)
 	log.Println('\n', cmd.String())
 	cmd.Dir = path
 	cmd.Stdout = log.Writer()
@@ -66,6 +105,29 @@ func ClearCache(_ context.Context, path string) error {
 	err = cmd.Run()
 	if err != nil {
 		return errors.WithMessage(err, "failed to clear view cache")
+	}
+
+	return nil
+}
+
+func ChangePassword(_ context.Context, path, username, password string) error {
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(path, "artisan"), "user:change-password", username, password,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	cmd := exec.Command(cmdName, args...)
+
+	log.Println('\n', fmt.Sprintf("php artisan user:change-password %s ********", username))
+	cmd.Dir = path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute artisan command")
 	}
 
 	return nil
