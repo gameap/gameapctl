@@ -43,6 +43,19 @@ func GetOSInfo() (Info, error) {
 		result.Platform = runtime.GOARCH
 	}
 
+	switch result.Platform {
+	case "x86_64":
+		result.Platform = "amd64"
+	case "i686":
+		result.Platform = "386"
+	case "i386":
+		result.Platform = "386"
+	case "aarch64":
+		result.Platform = "arm64"
+	case "armv7l":
+		result.Platform = "arm"
+	}
+
 	if gi.OS == "GNU/Linux" {
 		info, err := detectLinuxDist()
 		if err != nil {

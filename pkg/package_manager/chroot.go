@@ -73,6 +73,11 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 		return NewErrPackageNotFound(pack)
 	}
 
+	if _, err := os.Stat(filepath.Join(p.InstallationPath, packageMarkFile)); err == nil {
+		// Package already installed
+		return nil
+	}
+
 	log.Println("Downloading ", p.ArchiveURL)
 	err := utils.Download(
 		ctx,
