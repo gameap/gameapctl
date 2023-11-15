@@ -116,7 +116,7 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	}
 
 	log.Println("Downloading ", p.SystemdUnitURL)
-	err = utils.DownloadFile(
+	err = utils.DownloadFileOrArchive(
 		ctx,
 		p.SystemdUnitURL,
 		filepath.Join("/etc/systemd/system", path.Base(p.SystemdUnitURL)),
