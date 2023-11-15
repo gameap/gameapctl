@@ -114,7 +114,7 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 
 	log.Println("Extracting ", path.Base(p.ArchiveURL))
 	err = utils.ExecCommand(
-		"tar", "-xzf", filepath.Join(tmpDir, path.Base(p.ArchiveURL)), "-C", p.InstallationPath,
+		"tar", "-xvf", filepath.Join(tmpDir, path.Base(p.ArchiveURL)), "-C", p.InstallationPath,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to extract chroot package")

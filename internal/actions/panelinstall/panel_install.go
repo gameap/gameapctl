@@ -123,7 +123,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Printf(
-		"Detected operating system as %s/%s:%s.\n",
+		"Detected operating system as %s/%s (%s).\n",
 		state.OSInfo.Distribution,
 		state.OSInfo.DistributionCodename,
 		state.OSInfo.Platform,
