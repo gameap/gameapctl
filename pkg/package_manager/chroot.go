@@ -181,8 +181,8 @@ type chrootPackage struct {
 var chrootPackages = map[string]map[string]chrootPackage{
 	PHPPackage: {
 		ArchAMD64: {
-			ArchiveURL:       filepath.Join(gameap.Repository(), "chroots/php/php8.1-amd64.tar.gz"),
-			SystemdUnitURL:   filepath.Join(gameap.Repository(), "chroots/php/php8.1-fpm.service"),
+			ArchiveURL:       gameap.Repository() + "/chroots/php/php8.1-amd64.tar.gz",
+			SystemdUnitURL:   gameap.Repository() + "/chroots/php/php8.1-fpm.service",
 			InstallationPath: "/opt/php",
 			PackageInfo: PackageInfo{
 				Name:            "php",
