@@ -2,11 +2,16 @@ package packagemanager
 
 import (
 	"bufio"
+	"context"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
+	"github.com/d-tux/go-fstab"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -68,6 +73,100 @@ func DefinePHPCommandAndArgs(args ...string) (string, []string, error) {
 	}
 
 	return "php", args, nil
+}
+
+func IsPHPCommandAvailable(_ context.Context) bool {
+	return utils.IsCommandAvailable("php") || isChrootPHPAvailable()
+}
+
+func isChrootPHPAvailable() bool {
+	_, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile))
+	if err != nil {
+		return false
+	}
+
+	_, err = os.Stat(filepath.Join(chrootPHPPath, "usr/bin/php"))
+
+	return err == nil
+}
+
+var bindMu = sync.Mutex{}
+
+//nolint:funlen
+func TryBindPHPDirectories(_ context.Context, source string) error {
+	bindMu.Lock()
+	defer bindMu.Unlock()
+
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err != nil {
+		// No chroot php package
+		//nolint:nilerr
+		return nil
+	}
+
+	dest := filepath.Join(chrootPHPPath, source)
+	if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+		err := os.MkdirAll(dest, 0755)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	mounts, err := fstab.ParseProc()
+	if err != nil {
+		return errors.WithMessage(err, "failed to parse proc")
+	}
+
+	for _, mount := range mounts {
+		if mount.File == dest {
+			// Already mounted
+			return nil
+		}
+	}
+
+	mounts, err = fstab.ParseSystem()
+	if err != nil {
+		return errors.WithMessage(err, "failed to parse fstab")
+	}
+
+	for _, mount := range mounts {
+		if mount.File == dest {
+			err = utils.ExecCommand("mount", dest)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
+	m := fstab.Mount{
+		Spec:    source,
+		File:    dest,
+		VfsType: "none",
+		MntOps: map[string]string{
+			"defaults": "",
+			"bind":     "",
+		},
+	}
+
+	log.Println("Updating fstab")
+	err = utils.AppendContentsToFile(append([]byte{'\n'}, []byte(m.String())...), "/etc/fstab")
+	if err != nil {
+		return errors.WithMessage(err, "failed to append contents to fstab")
+	}
+
+	err = utils.ExecCommand("mount", dest)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func parsePHPVersion(s string) (string, error) {

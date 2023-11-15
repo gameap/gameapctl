@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -157,4 +158,46 @@ func Test_findLineAndReplaceOrAddRegex(t *testing.T) {
 		"extension=bz2\nextension=curl\nextension=gd2\n;extension=gettext\nextension=exif\n",
 		w.String(),
 	)
+}
+
+func Test_AppendContentsToFile_AppendsContentToExistingFile(t *testing.T) {
+	// Create a temporary file
+	tmpfile, err := os.CreateTemp("", "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}(tmpfile.Name()) // clean up
+
+	// Write initial content to the file
+	if _, err := tmpfile.WriteString("Hello, "); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Append content to the file
+	err = AppendContentsToFile([]byte("World!"), tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read the file
+	content, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert the file content
+	assert.Equal(t, "Hello, World!", string(content))
+}
+
+func Test_AppendContentsToFile_ReturnsErrorWhenFileDoesNotExist(t *testing.T) {
+	err := AppendContentsToFile([]byte("Hello, World!"), "/path/to/non/existent/file")
+	assert.Error(t, err)
 }

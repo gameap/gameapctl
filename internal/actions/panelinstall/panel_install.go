@@ -245,11 +245,9 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Checking for php ...")
-	if !utils.IsCommandAvailable("php") || state.OSInfo.Distribution == packagemanager.DistributionWindows {
-		fmt.Println("Installing php ...")
-		if err = pm.Install(cliCtx.Context, packagemanager.PHPPackage); err != nil {
-			return errors.WithMessage(err, "failed to install php")
-		}
+	state, err = checkAndInstallPHP(cliCtx.Context, pm, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check and install php")
 	}
 
 	state, err = checkPHPExtensions(cliCtx.Context, state)
@@ -722,6 +720,24 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 
 	state.DBCreds.DatabaseName = dbPath
 	state.DatabaseWasInstalled = true
+
+	return state, nil
+}
+
+func checkAndInstallPHP(
+	ctx context.Context, pm packagemanager.PackageManager, state panelInstallState,
+) (panelInstallState, error) {
+	if !packagemanager.IsPHPCommandAvailable(ctx) || state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		fmt.Println("Installing php ...")
+		if err := pm.Install(ctx, packagemanager.PHPPackage); err != nil {
+			return state, errors.WithMessage(err, "failed to install php")
+		}
+	}
+
+	err := packagemanager.TryBindPHPDirectories(ctx, state.Path)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to bind php directories")
+	}
 
 	return state, nil
 }

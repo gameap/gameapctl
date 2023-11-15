@@ -85,6 +85,26 @@ func WriteContentsToFile(contents []byte, path string) error {
 	return nil
 }
 
+func AppendContentsToFile(contents []byte, path string) error {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(file)
+
+	_, err = file.Write(contents)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func FindLineAndReplace(ctx context.Context, path string, replaceMap map[string]string) error {
 	return findInFileAndReplaceOrAdd(ctx, path, replaceMap, false)
 }
