@@ -765,10 +765,11 @@ func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstal
 	log.Println("Found PHP extensions:", extensions)
 
 	for _, extension := range []string{
-		"bcmath", "bz2", "curl", "fileinfo", "gd", "gmp",
-		"intl", "json", "mbstring", "openssl", "pdo",
-		"tokenizer", "readline",
-		"xml", "zip",
+		"bcmath", "bz2", "curl", "dom",
+		"fileinfo", "gd", "gmp", "intl",
+		"json", "mbstring", "openssl", "pdo",
+		"tokenizer", "readline", "sockets",
+		"session", "xml", "zip",
 	} {
 		if !utils.Contains(extensions, extension) {
 			return state, errors.Errorf("PHP extension %s not found", extension)
