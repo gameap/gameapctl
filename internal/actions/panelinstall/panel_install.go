@@ -304,7 +304,7 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to generate encryption key")
 	}
 
-	err = panel.RunMigration(cliCtx.Context, state.Path, state.DatabaseWasInstalled)
+	state, err = runMigrationWithRetry(cliCtx.Context, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run migration")
 	}
@@ -568,6 +568,20 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 	}
 
 	return dbCreds, nil
+}
+
+func runMigrationWithRetry(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	err := panel.RunMigration(ctx, state.Path, state.DatabaseWasInstalled)
+	if err != nil && state.DBCreds.Host == "localhost" {
+		state.DBCreds.Host = "127.0.0.1"
+		state, err = updateDotEnv(ctx, state)
+		if err != nil {
+			return state, err
+		}
+		err = panel.RunMigration(ctx, state.Path, state.DatabaseWasInstalled)
+	}
+
+	return state, err
 }
 
 //nolint:funlen
