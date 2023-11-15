@@ -54,8 +54,8 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 	PHPPackage: {
 		DistributionDebian: {
 			"fpm_sock": func(_ context.Context) (string, error) {
-				if _, err := os.Stat("/opt/php/" + packageMarkFile); err == nil {
-					return "unix:/opt/php/php-fpm.sock", nil
+				if _, err := os.Stat(chrootPHPPath + packageMarkFile); err == nil {
+					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
 
 				phpVerion, err := DefinePHPVersion()
@@ -68,8 +68,8 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 		},
 		DistributionUbuntu: {
 			"fpm_sock": func(_ context.Context) (string, error) {
-				if _, err := os.Stat("/opt/php/" + packageMarkFile); err == nil {
-					return "unix:/opt/php/php-fpm.sock", nil
+				if _, err := os.Stat(chrootPHPPath + packageMarkFile); err == nil {
+					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
 
 				phpVerion, err := DefinePHPVersion()

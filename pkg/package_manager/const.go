@@ -31,3 +31,6 @@ const ArchARM64 = "arm64"
 const Default = "default"
 
 const packageMarkFile = ".gameap-package"
+
+// chroot package locations.
+const chrootPHPPath = "/opt/php"

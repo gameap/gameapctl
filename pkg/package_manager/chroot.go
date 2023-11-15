@@ -191,7 +191,7 @@ var chrootPackages = map[string]map[string]chrootPackage{
 		ArchAMD64: {
 			ArchiveURL:       gameap.Repository() + "/chroots/php/php8.1-amd64.tar.gz",
 			SystemdUnitURL:   gameap.Repository() + "/chroots/php/php8.1-fpm.service",
-			InstallationPath: "/opt/php",
+			InstallationPath: chrootPHPPath,
 			PackageInfo: PackageInfo{
 				Name:            "php",
 				Architecture:    ArchAMD64,
@@ -204,7 +204,7 @@ var chrootPackages = map[string]map[string]chrootPackage{
 	},
 }
 
-// Package will be skipped from chroot installation without errors
+// Package will be skipped from chroot installation without errors.
 var skipChrootPackages = map[string]struct{}{
 	PHPExtensionsPackage: {}, // PHP extensions will be installed with PHP
 }

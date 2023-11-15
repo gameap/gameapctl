@@ -2,13 +2,24 @@ package packagemanager
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 func DefinePHPVersion() (string, error) {
+	if _, err := os.Stat(chrootPHPPath + packageMarkFile); err == nil {
+		out, err := utils.ExecCommandWithOutput("chroot", chrootPHPPath, "/usr/bin/php", "--version")
+		if err != nil {
+			return "", errors.WithMessage(err, "failed to check php version")
+		}
+
+		return parsePHPVersion(out)
+	}
+
 	phpPath, err := exec.LookPath("php")
 	if err != nil {
 		return "", errors.WithMessage(err, "php command not found")
@@ -21,6 +32,31 @@ func DefinePHPVersion() (string, error) {
 	}
 
 	return parsePHPVersion(string(out))
+}
+
+func DefinePHPExtensions() ([]string, error) {
+	var out string
+	var err error
+
+	if _, statErr := os.Stat(chrootPHPPath + packageMarkFile); statErr == nil {
+		out, err = utils.ExecCommandWithOutput(
+			"chroot", chrootPHPPath, "/usr/bin/php", "-r", "echo implode(' ', get_loaded_extensions());",
+		)
+	} else {
+		out, err = utils.ExecCommandWithOutput(
+			"php", "-r", "echo implode(' ', get_loaded_extensions());",
+		)
+	}
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to exec php -r")
+	}
+
+	extensions := strings.Split(out, " ")
+	for i := range extensions {
+		extensions[i] = strings.ToLower(strings.TrimSpace(extensions[i]))
+	}
+
+	return extensions, nil
 }
 
 func parsePHPVersion(s string) (string, error) {

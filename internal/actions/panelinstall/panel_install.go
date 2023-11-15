@@ -726,16 +726,12 @@ func installSqlite(_ context.Context, state panelInstallState) (panelInstallStat
 }
 
 func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstallState, error) {
-	out, err := utils.ExecCommandWithOutput("php", "-r", "echo implode(' ', get_loaded_extensions());")
-
+	extensions, err := packagemanager.DefinePHPExtensions()
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to exec php -r")
+		return state, errors.WithMessage(err, "failed to define php extensions")
 	}
 
-	extensions := strings.Split(out, " ")
-	for i := range extensions {
-		extensions[i] = strings.ToLower(strings.TrimSpace(extensions[i]))
-	}
+	log.Println("Found PHP extensions:", extensions)
 
 	for _, extension := range []string{
 		"bcmath", "bz2", "curl", "fileinfo", "gd", "gmp",
