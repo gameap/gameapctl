@@ -25,5 +25,9 @@ const DistributionCentOS = "centos"
 const DistributionWindows = "windows"
 
 const ArchDefault = "default"
+const ArchAMD64 = "amd64"
+const ArchARM64 = "arm64"
 
 const Default = "default"
+
+const packageMarkFile = ".gameap-package"

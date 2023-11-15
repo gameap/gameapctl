@@ -22,11 +22,11 @@ const (
 	sourcesListNode  = "/etc/apt/sources.list.d/nodesource.list"
 )
 
-type APT struct{}
+type apt struct{}
 
 // Search list packages available in the system that match the search
 // pattern.
-func (apt *APT) Search(_ context.Context, packName string) ([]PackageInfo, error) {
+func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error) {
 	cmd := exec.Command(
 		"apt-cache",
 		"show",
@@ -92,7 +92,7 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 
 // CheckForUpdates runs an apt update to retrieve new packages available
 // from the repositories.
-func (apt *APT) CheckForUpdates(_ context.Context) error {
+func (apt *apt) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
 
 	cmd.Env = os.Environ()
@@ -106,7 +106,7 @@ func (apt *APT) CheckForUpdates(_ context.Context) error {
 }
 
 // Install installs a set of packages.
-func (apt *APT) Install(_ context.Context, packs ...string) error {
+func (apt *apt) Install(_ context.Context, packs ...string) error {
 	args := []string{"install", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -127,7 +127,7 @@ func (apt *APT) Install(_ context.Context, packs ...string) error {
 }
 
 // Remove removes a set of packages.
-func (apt *APT) Remove(_ context.Context, packs ...string) error {
+func (apt *apt) Remove(_ context.Context, packs ...string) error {
 	args := []string{"remove", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -148,7 +148,7 @@ func (apt *APT) Remove(_ context.Context, packs ...string) error {
 }
 
 // Remove removes a set of packages.
-func (apt *APT) Purge(_ context.Context, packs ...string) error {
+func (apt *apt) Purge(_ context.Context, packs ...string) error {
 	args := []string{"purge", "-y"}
 	for _, pack := range packs {
 		if pack == "" || pack == " " {
@@ -168,21 +168,21 @@ func (apt *APT) Purge(_ context.Context, packs ...string) error {
 	return cmd.Run()
 }
 
-type ExtendedAPT struct {
-	apt *APT
+type extendedAPT struct {
+	apt *apt
 }
 
-func NewExtendedAPT(apt *APT) *ExtendedAPT {
-	return &ExtendedAPT{
+func newExtendedAPT(apt *apt) *extendedAPT {
+	return &extendedAPT{
 		apt: apt,
 	}
 }
 
-func (e *ExtendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, error) {
+func (e *extendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, error) {
 	return e.apt.Search(ctx, name)
 }
 
-func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) error {
+func (e *extendedAPT) Install(ctx context.Context, packs ...string) error {
 	var err error
 	packs = e.replaceAliases(ctx, packs)
 
@@ -199,11 +199,11 @@ func (e *ExtendedAPT) Install(ctx context.Context, packs ...string) error {
 	return e.apt.Install(ctx, packs...)
 }
 
-func (e *ExtendedAPT) CheckForUpdates(ctx context.Context) error {
+func (e *extendedAPT) CheckForUpdates(ctx context.Context) error {
 	return e.apt.CheckForUpdates(ctx)
 }
 
-func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
+func (e *extendedAPT) Remove(ctx context.Context, packs ...string) error {
 	err := e.preRemovingSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed preRemovingSteps")
@@ -213,7 +213,7 @@ func (e *ExtendedAPT) Remove(ctx context.Context, packs ...string) error {
 	return e.apt.Remove(ctx, packs...)
 }
 
-func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
+func (e *extendedAPT) Purge(ctx context.Context, packs ...string) error {
 	err := e.preRemovingSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed preRemovingSteps")
@@ -223,7 +223,7 @@ func (e *ExtendedAPT) Purge(ctx context.Context, packs ...string) error {
 	return e.apt.Purge(ctx, packs...)
 }
 
-func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []string {
+func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []string {
 	replacedPacks := make([]string, 0, len(packs))
 
 	osInfo := contextInternal.OSInfoFromContext(ctx)
@@ -243,7 +243,7 @@ func (e *ExtendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 	return replacedPacks
 }
 
-func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
+func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	var funcsByDistroAndArch map[string]map[string]installationFunc
@@ -288,7 +288,7 @@ func (e *ExtendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) (
 	return updatedPacks, nil
 }
 
-func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
+func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
 	updatedPacks := make([]string, 0, len(packs))
 
 	for _, pack := range packs {
@@ -342,7 +342,7 @@ func (e *ExtendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 	return updatedPacks, nil
 }
 
-func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) error {
+func (e *extendedAPT) preRemovingSteps(ctx context.Context, packs ...string) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	for _, pack := range packs {
@@ -359,7 +359,7 @@ func (e *ExtendedAPT) preRemovingSteps(ctx context.Context, packs ...string) err
 	return nil
 }
 
-func (e *ExtendedAPT) installAPTRepositoriesDependencies(ctx context.Context) error {
+func (e *extendedAPT) installAPTRepositoriesDependencies(ctx context.Context) error {
 	installPackages := make([]string, 0, 2)
 
 	pk, err := e.apt.Search(ctx, "software-properties-common")
@@ -387,7 +387,7 @@ func (e *ExtendedAPT) installAPTRepositoriesDependencies(ctx context.Context) er
 }
 
 //nolint:funlen
-func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
+func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 	var versionAvailable string
 	log.Println("Searching for PHP packages...")
 
@@ -493,7 +493,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 	return packages, nil
 }
 
-func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
+func (e *extendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	if osInfo.Distribution == DistributionUbuntu {
@@ -531,7 +531,7 @@ func (e *ExtendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
+func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	err := utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
@@ -579,7 +579,7 @@ func (e *ExtendedAPT) addNginxRepositories(ctx context.Context) error {
 	return nil
 }
 
-func (e *ExtendedAPT) addNodeJSRepositories(_ context.Context) error {
+func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
 	var err error
 	if !utils.IsFileExists("/etc/apt/keyrings") {
 		err = os.Mkdir("/etc/apt/keyrings", 0755)
@@ -610,7 +610,7 @@ func (e *ExtendedAPT) addNodeJSRepositories(_ context.Context) error {
 	return nil
 }
 
-func (e *ExtendedAPT) apachePackageProcess(ctx context.Context) error {
+func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {
 	phpVersion, err := DefinePHPVersion()
 	if err != nil {
 		return errors.WithMessage(err, "failed to define php version")

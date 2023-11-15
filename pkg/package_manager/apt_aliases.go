@@ -46,7 +46,7 @@ var packageAliases = distVersionPackagesMap{
 				Lib32GCCPackage:    {"lib32gcc-s1"},
 				NodeJSPackage:      {"nodejs", "npm"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32z1Package:    {""},
 				Lib32GCCPackage:   {"lib32gcc-s1-amd64-cross"},
 				Lib32Stdc6Package: {"lib32stdc++6-amd64-cross"},
@@ -58,7 +58,7 @@ var packageAliases = distVersionPackagesMap{
 				MySQLServerPackage: {"default-mysql-server"},
 				Lib32GCCPackage:    {"lib32gcc-s1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32z1Package:    {""},
 				Lib32GCCPackage:   {"lib32gcc-s1-amd64-cross"},
 				Lib32Stdc6Package: {"lib32stdc++6-amd64-cross"},
@@ -80,7 +80,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -88,7 +88,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -96,7 +96,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -104,7 +104,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -112,7 +112,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -120,7 +120,7 @@ var packageAliases = distVersionPackagesMap{
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc-s1"},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
@@ -129,7 +129,7 @@ var packageAliases = distVersionPackagesMap{
 				Lib32GCCPackage:      {"lib32gcc-s1"},
 				PHPExtensionsPackage: {""},
 			},
-			"arm64": {
+			ArchARM64: {
 				Lib32GCCPackage: {"lib32gcc-s1-amd64-cross"},
 			},
 		},
