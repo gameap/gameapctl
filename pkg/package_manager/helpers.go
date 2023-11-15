@@ -75,6 +75,16 @@ func DefinePHPCommandAndArgs(args ...string) (string, []string, error) {
 	return "php", args, nil
 }
 
+func DefinePHPComposerCommandAndArgs(args ...string) (string, []string, error) {
+	if _, statErr := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); statErr == nil {
+		resultArgs := append([]string{chrootPHPPath, "/usr/local/bin/composer"}, args...)
+
+		return "chroot", resultArgs, nil
+	}
+
+	return "composer", args, nil
+}
+
 func IsPHPCommandAvailable(_ context.Context) bool {
 	return utils.IsCommandAvailable("php") || isChrootPHPAvailable()
 }

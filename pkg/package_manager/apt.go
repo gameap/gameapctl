@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -630,6 +631,10 @@ var installationFuncs = map[string]map[string]map[string]installationFunc{
 	ComposerPackage: {
 		Default: {
 			ArchDefault: func(ctx context.Context) error {
+				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
+					return nil
+				}
+
 				err := utils.ExecCommand(
 					"bash", "-c",
 					"curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",

@@ -857,10 +857,15 @@ func installGameAPFromGithub(
 	}
 
 	fmt.Println("Installing composer dependencies ...")
-	err = utils.ExecCommand(
-		"composer",
+
+	cmdName, args, err := packagemanager.DefinePHPComposerCommandAndArgs(
 		"update", "--no-dev", "--optimize-autoloader", "--no-interaction", "--working-dir", state.Path,
 	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to define php composer command and args")
+	}
+
+	err = utils.ExecCommand(cmdName, args...)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to run composer update")
 	}

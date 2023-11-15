@@ -17,10 +17,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const defaultPanelInstallPath = "/var/www/gameap"
-
-const apiPath = "https://api.gameap.io/send-logs"
-
 //nolint:funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
@@ -34,6 +30,11 @@ func Handle(cliCtx *cli.Context) error {
 			log.Println(errors.WithMessagef(err, "failed to remove temporary directory"))
 		}
 	}()
+
+	err = collectGameapCTLLogs(ctx, tmpDir)
+	if err != nil {
+		return errors.WithMessage(err, "failed to collect gameapctl logs")
+	}
 
 	err = collectDaemonLogs(ctx, tmpDir)
 	if err != nil {
@@ -91,8 +92,28 @@ func Handle(cliCtx *cli.Context) error {
 	return nil
 }
 
+func collectGameapCTLLogs(_ context.Context, destinationDir string) error {
+	if !utils.IsFileExists(logsPathGamectl) {
+		// skip
+		return nil
+	}
+
+	destinationDir = filepath.Join(destinationDir, "gameapctl")
+	err := os.Mkdir(destinationDir, 0755)
+	if err != nil {
+		return errors.WithMessage(err, "failed to create daemon logs directory")
+	}
+
+	err = utils.Copy(logsPathGamectl, destinationDir)
+	if err != nil {
+		return errors.WithMessage(err, "failed to copy gameapctl logs")
+	}
+
+	return nil
+}
+
 func collectDaemonLogs(_ context.Context, destinationDir string) error {
-	if !utils.IsFileExists("/var/log/gameap-daemon") {
+	if !utils.IsFileExists(logsPathDaemon) {
 		// skip
 		return nil
 	}
@@ -103,7 +124,7 @@ func collectDaemonLogs(_ context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to create daemon logs directory")
 	}
 
-	err = utils.Copy("/var/log/gameap-daemon", destinationDir)
+	err = utils.Copy(logsPathDaemon, destinationDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to copy daemon logs")
 	}
