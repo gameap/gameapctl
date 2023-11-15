@@ -276,6 +276,11 @@ func Handle(cliCtx *cli.Context) error {
 		return err
 	}
 
+	err = packagemanager.TryBindPHPDirectories(cliCtx.Context, state.Path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to bind php directories")
+	}
+
 	switch state.Database {
 	case mysqlDatabase:
 		state, err = installMySQL(cliCtx.Context, pm, state)
@@ -732,11 +737,6 @@ func checkAndInstallPHP(
 		if err := pm.Install(ctx, packagemanager.PHPPackage); err != nil {
 			return state, errors.WithMessage(err, "failed to install php")
 		}
-	}
-
-	err := packagemanager.TryBindPHPDirectories(ctx, state.Path)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to bind php directories")
 	}
 
 	return state, nil

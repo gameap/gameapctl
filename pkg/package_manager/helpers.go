@@ -94,9 +94,6 @@ var bindMu = sync.Mutex{}
 
 //nolint:funlen
 func TryBindPHPDirectories(_ context.Context, source string) error {
-	bindMu.Lock()
-	defer bindMu.Unlock()
-
 	if runtime.GOOS != "linux" {
 		return nil
 	}
@@ -106,6 +103,9 @@ func TryBindPHPDirectories(_ context.Context, source string) error {
 		//nolint:nilerr
 		return nil
 	}
+
+	bindMu.Lock()
+	defer bindMu.Unlock()
 
 	dest := filepath.Join(chrootPHPPath, source)
 	if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
