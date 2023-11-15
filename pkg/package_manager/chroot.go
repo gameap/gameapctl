@@ -86,14 +86,33 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 		return nil
 	}
 
+	tmpDir, err := os.MkdirTemp("", "gameapctl-package-manager")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temp dir")
+	}
+	defer func() {
+		err := os.RemoveAll(tmpDir)
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
 	log.Println("Downloading ", p.ArchiveURL)
-	err := utils.Download(
+	err = utils.DownloadFile(
 		ctx,
 		p.ArchiveURL,
-		p.InstallationPath,
+		filepath.Join(tmpDir, path.Base(p.ArchiveURL)),
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to download chroot package")
+	}
+
+	log.Println("Extracting ", path.Base(p.ArchiveURL))
+	err = utils.ExecCommand(
+		"tar", "-xzf", filepath.Join(tmpDir, path.Base(p.ArchiveURL)), "-C", p.InstallationPath,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to extract chroot package")
 	}
 
 	log.Println("Downloading ", p.SystemdUnitURL)
