@@ -41,6 +41,10 @@ func (ch *chRoot) Install(ctx context.Context, packs ...string) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	for _, pack := range packs {
+		if _, ok := skipChrootPackages[pack]; ok {
+			continue
+		}
+
 		if _, ok := chrootPackages[pack]; !ok {
 			return NewErrPackageNotFound(pack)
 		}
@@ -62,6 +66,10 @@ func (ch *chRoot) Install(ctx context.Context, packs ...string) error {
 }
 
 func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
+	if _, ok := skipChrootPackages[pack]; ok {
+		return nil
+	}
+
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	if _, ok := chrootPackages[pack]; !ok {
@@ -194,4 +202,9 @@ var chrootPackages = map[string]map[string]chrootPackage{
 			},
 		},
 	},
+}
+
+// Package will be skipped from chroot installation without errors
+var skipChrootPackages = map[string]struct{}{
+	PHPExtensionsPackage: {}, // PHP extensions will be installed with PHP
 }
