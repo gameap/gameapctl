@@ -22,8 +22,8 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### Ubuntu
 
-| Version     | Supported | Notes                                   |
-|-------------|-----------|-----------------------------------------|
-| 22.04       | ✔         | Latest manual test (v0.4.1): 12.11.2023 |
-| 20.04       | ✔         |                                         |
-| 18.04       | ✔         |                                         |
+| Version     | Supported | Notes                                                                                           |
+|-------------|----------|-------------------------------------------------------------------------------------------------|
+| 22.04       | ✔        | Latest manual test (v0.4.1): 12.11.2023                                                         |
+| 20.04       | ✔        |                                                                                                 |
+| 18.04       | ✖        | Latest manual test (v0.4.5): 14.11.2023, web panel installation is not supported due to php 7.2 |
