@@ -107,6 +107,11 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 		return errors.WithMessage(err, "failed to download chroot package")
 	}
 
+	err = os.MkdirAll(p.InstallationPath, 0755)
+	if err != nil {
+		return errors.WithMessage(err, "failed to create chroot package installation path")
+	}
+
 	log.Println("Extracting ", path.Base(p.ArchiveURL))
 	err = utils.ExecCommand(
 		"tar", "-xzf", filepath.Join(tmpDir, path.Base(p.ArchiveURL)), "-C", p.InstallationPath,
