@@ -98,7 +98,7 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	}()
 
 	log.Println("Downloading ", p.ArchiveURL)
-	err = utils.DownloadFile(
+	err = utils.DownloadFileOrArchive(
 		ctx,
 		p.ArchiveURL,
 		filepath.Join(tmpDir, path.Base(p.ArchiveURL)),
@@ -116,7 +116,7 @@ func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	}
 
 	log.Println("Downloading ", p.SystemdUnitURL)
-	err = utils.DownloadFileOrArchive(
+	err = utils.DownloadFile(
 		ctx,
 		p.SystemdUnitURL,
 		filepath.Join("/etc/systemd/system", path.Base(p.SystemdUnitURL)),
