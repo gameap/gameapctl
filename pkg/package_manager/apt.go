@@ -391,6 +391,7 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 	var versionAvailable string
 	log.Println("Searching for PHP packages...")
 
+	var repoAdded bool
 	for {
 		log.Println("Checking for PHP 8.2 version available...")
 		pk, err := e.apt.Search(ctx, "php8.2")
@@ -459,12 +460,13 @@ func (e *ExtendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 
 		log.Println("PHP 7.3 version not found")
 
-		added, err := e.addPHPRepositories(ctx)
+		if repoAdded {
+			return nil, errors.New("php version not found")
+		}
+
+		repoAdded, err = e.addPHPRepositories(ctx)
 		if err != nil {
 			return nil, err
-		}
-		if !added {
-			break
 		}
 	}
 
