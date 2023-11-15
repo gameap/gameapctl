@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -11,7 +12,7 @@ import (
 )
 
 func DefinePHPVersion() (string, error) {
-	if _, err := os.Stat(chrootPHPPath + packageMarkFile); err == nil {
+	if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
 		out, err := utils.ExecCommandWithOutput("chroot", chrootPHPPath, "/usr/bin/php", "--version")
 		if err != nil {
 			return "", errors.WithMessage(err, "failed to check php version")
@@ -38,7 +39,7 @@ func DefinePHPExtensions() ([]string, error) {
 	var out string
 	var err error
 
-	if _, statErr := os.Stat(chrootPHPPath + packageMarkFile); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); statErr == nil {
 		out, err = utils.ExecCommandWithOutput(
 			"chroot", chrootPHPPath, "/usr/bin/php", "-r", "echo implode(' ', get_loaded_extensions());",
 		)
