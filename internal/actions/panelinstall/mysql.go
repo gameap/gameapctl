@@ -102,6 +102,20 @@ func mysqlIsDatabaseExists(ctx context.Context, db *sql.DB, database string) (bo
 	return exists, nil
 }
 
+func mysqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, database string) (bool, error) {
+	var exists bool
+
+	err := db.QueryRowContext(
+		ctx,
+		"EXISTS(SELECT 1 FROM "+database+".games LIMIT 1)",
+	).Scan(&exists)
+	if err != nil {
+		return false, errors.WithMessage(err, "failed to execute query")
+	}
+
+	return !exists, nil
+}
+
 func mysqlCreateDatabase(ctx context.Context, db *sql.DB, database string) error {
 	_, err := db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+database)
 	if err != nil {

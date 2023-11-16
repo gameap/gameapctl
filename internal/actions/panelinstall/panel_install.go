@@ -77,6 +77,7 @@ type panelInstallState struct {
 
 	// Installation variables
 	DatabaseWasInstalled bool
+	DatabaseIsNotEmpty   bool
 }
 
 type databaseCredentials struct {
@@ -533,6 +534,15 @@ func checkMySQLConnection(
 		return state, errors.WithMessage(err, "failed to execute MySQL query")
 	}
 
+	isDatabaseEmpty, err := mysqlIsDatabaseEmpty(ctx, db, state.DBCreds.DatabaseName)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to check database")
+	}
+
+	if !isDatabaseEmpty {
+		state.DatabaseIsNotEmpty = true
+	}
+
 	return state, nil
 }
 
@@ -578,14 +588,16 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 }
 
 func runMigrationWithRetry(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	err := panel.RunMigration(ctx, state.Path, state.DatabaseWasInstalled)
+	withSeed := state.DatabaseWasInstalled && !state.DatabaseIsNotEmpty
+
+	err := panel.RunMigration(ctx, state.Path, withSeed)
 	if err != nil && state.DBCreds.Host == "localhost" {
 		state.DBCreds.Host = "127.0.0.1"
 		state, err = updateDotEnv(ctx, state)
 		if err != nil {
 			return state, err
 		}
-		err = panel.RunMigration(ctx, state.Path, state.DatabaseWasInstalled)
+		err = panel.RunMigration(ctx, state.Path, withSeed)
 	}
 
 	return state, err
@@ -857,6 +869,11 @@ func installNginx(
 	)
 	if err != nil {
 		return state, err
+	}
+
+	err = os.Remove(gameapHostConfPath)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to remove gameap nginx config")
 	}
 
 	err = utils.DownloadFile(
