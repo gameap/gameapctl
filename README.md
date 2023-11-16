@@ -22,8 +22,9 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### Ubuntu
 
-| Version     | Supported | Notes                                                             |
-|-------------|----------|-------------------------------------------------------------------|
-| 22.04       | ✔        | Latest manual test (v0.4.1): 12.11.2023                           |
-| 20.04       | ✔        | Latest manual test (v0.5.1): 16.11.2023                           |
-| 18.04       | ✔        | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
+| Version | Supported | Notes                                                              |
+|---------|----------|--------------------------------------------------------------------|
+| 22.04   | ✔        | Latest manual test (v0.4.1): 12.11.2023                            |
+| 20.04   | ✔        | Latest manual test (v0.5.1): 16.11.2023                            |
+| 18.04   | ✔        | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
+| 16.04   | ✔        | Latest manual test (v0.5.6): 16.11.2023, used chrooted php package |
