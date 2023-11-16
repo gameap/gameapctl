@@ -103,17 +103,32 @@ func mysqlIsDatabaseExists(ctx context.Context, db *sql.DB, database string) (bo
 }
 
 func mysqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, database string) (bool, error) {
-	var exists bool
+	var tableExists bool
 
-	err := db.QueryRowContext(
+	err := db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1
+		FROM INFORMATION_SCHEMA.TABLES 
+		WHERE TABLE_SCHEMA = ?
+		AND TABLE_NAME = ?
+	)`, database, "games").Scan(&tableExists)
+	if err != nil {
+		return false, errors.WithMessage(err, "failed to execute query")
+	}
+	if !tableExists {
+		return true, nil
+	}
+
+	var recodsExists bool
+
+	err = db.QueryRowContext(
 		ctx,
 		"SELECT EXISTS(SELECT 1 FROM "+database+".games LIMIT 1)",
-	).Scan(&exists)
+	).Scan(&recodsExists)
 	if err != nil {
 		return false, errors.WithMessage(err, "failed to execute query")
 	}
 
-	return !exists, nil
+	return !recodsExists, nil
 }
 
 func mysqlCreateDatabase(ctx context.Context, db *sql.DB, database string) error {
