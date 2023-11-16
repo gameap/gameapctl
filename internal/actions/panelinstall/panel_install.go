@@ -15,12 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
-	"github.com/go-sql-driver/mysql"
-
-	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/service"
@@ -425,12 +423,9 @@ func installMySQL(
 		state.DBCreds.Port = "9306"
 	}
 
-	var needToCreateDababaseAndUser bool
-
 	//nolint:nestif
 	if state.DBCreds.Host == "" {
 		if !isMySQLInstalled(ctx) {
-			needToCreateDababaseAndUser = true
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
@@ -487,12 +482,17 @@ func installMySQL(
 		}
 	}
 
-	if needToCreateDababaseAndUser {
-		fmt.Println("Configuring MySQL ...")
-		err = configureMysql(ctx, state.DBCreds)
+	fmt.Println("Configuring MySQL ...")
+	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
+		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
+	}
+
+	err = configureMysql(ctx, state.DBCreds)
+	if err != nil {
+		return state, err
 	}
 
 	return checkMySQLConnection(ctx, state)
@@ -591,150 +591,67 @@ func runMigrationWithRetry(ctx context.Context, state panelInstallState) (panelI
 	return state, err
 }
 
-//nolint:funlen
-func configureMysql(_ context.Context, dbCreds databaseCredentials) error {
-	mysqlCfgs := []mysql.Config{
-		{
-			User:                 "root",
-			Passwd:               dbCreds.RootPassword,
-			Net:                  "unix",
-			Addr:                 "/var/run/mysqld/mysqld.sock",
-			DBName:               "mysql",
-			AllowNativePasswords: true,
-		},
-		{
-			User:                 "root",
-			Net:                  "tcp",
-			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
-			DBName:               "mysql",
-			AllowNativePasswords: true,
-		},
-		{
-			User:                 "root",
-			Passwd:               dbCreds.RootPassword,
-			Net:                  "tcp",
-			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
-			DBName:               "mysql",
-			AllowNativePasswords: true,
-		},
-	}
-
-	var err error
-	var version string
-	var db *sql.DB
-	for _, cfg := range mysqlCfgs {
-		db, err = sql.Open("mysql", cfg.FormatDSN())
-		if err != nil {
-			continue
-		}
-		defer func(db *sql.DB) {
-			err := db.Close()
-			if err != nil {
-				log.Println(err)
-			}
-		}(db)
-
-		log.Printf("Cheking database %s\n", cfg.FormatDSN())
-
-		err = db.Ping()
-		if err != nil {
-			log.Println(err)
-
-			continue
-		}
-
-		var rows *sql.Rows
-		//nolint:sqlclosecheck
-		rows, err = db.Query("SELECT VERSION()")
-		if err != nil {
-			log.Println(err)
-
-			continue
-		}
-		if rows.Err() != nil {
-			log.Println(err)
-
-			continue
-		}
-		defer func(rows *sql.Rows) {
-			err = rows.Close()
-			if err != nil {
-				log.Println(err)
-			}
-		}(rows)
-
-		var version string
-		for rows.Next() {
-			err = rows.Scan(&version)
-			if err != nil {
-				log.Println(err)
-
-				continue
-			}
-		}
-
-		err = nil
-
-		break
-	}
-
+func configureMysql(ctx context.Context, dbCreds databaseCredentials) error {
+	db, err := mysqlMakeAdminConnection(ctx, dbCreds)
 	if err != nil {
-		return errors.WithMessage(err, "failed to get MySQL version")
+		return errors.WithMessage(err, "failed to make admin connection")
 	}
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(db)
 
-	majorVersion := strings.Split(version, ".")[0]
-
+	var databaseExists bool
+	databaseExists, err = mysqlIsDatabaseExists(ctx, db, dbCreds.DatabaseName)
 	if err != nil {
-		return errors.WithMessage(err, "failed to connect to MySQL")
+		return errors.WithMessage(err, "failed to check database")
 	}
 
-	fmt.Println("Creating database ...")
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + dbCreds.DatabaseName)
+	if !databaseExists {
+		fmt.Println("Creating database ...")
+		err = mysqlCreateDatabase(ctx, db, dbCreds.DatabaseName)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create database")
+		}
+	}
+
+	var userExists bool
+	userExists, err = mysqlIsUsereExists(ctx, db, dbCreds.Username, dbCreds.Host)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create database")
 	}
 
-	fmt.Println("Creating user ...")
-
-	if majorVersion == "8" {
-		_, err = db.Exec(
-			"CREATE USER IF NOT EXISTS " +
-				dbCreds.Username +
-				"@'%' IDENTIFIED WITH mysql_native_password BY '" +
-				dbCreds.Password + "'",
-		)
+	if !userExists {
+		fmt.Println("Creating user ...")
+		err = mysqlCreateUser(ctx, db, dbCreds.Username, dbCreds.Password)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create user")
+		}
 	} else {
-		_, err = db.Exec(
-			"CREATE USER IF NOT EXISTS " +
-				dbCreds.Username +
-				"@'%' IDENTIFIED BY '" +
-				dbCreds.Password + "'",
-		)
+		fmt.Printf("User '%s' already exists\n", dbCreds.Username)
 	}
-	if err != nil {
-		return errors.WithMessage(err, "failed to create user")
+
+	if userExists && dbCreds.Username == "gameap" {
+		fmt.Println("Changing mysql gameap user password ...")
+		err = mysqlChangeUserPassword(ctx, db, dbCreds.Username, dbCreds.Password)
+		if err != nil {
+			return errors.WithMessage(err, "failed to change user password")
+		}
 	}
 
 	fmt.Println("Granting privileges ...")
-	//nolint:gosec
-	_, err = db.Exec("GRANT SELECT ON *.* TO '" + dbCreds.Username + "'@'%'")
+	err = mysqlGrantPrivileges(ctx, db, dbCreds.Username, dbCreds.DatabaseName)
 	if err != nil {
-		return errors.WithMessage(err, "failed to grant select privileges")
-	}
-	_, err = db.Exec("GRANT ALL PRIVILEGES ON " + dbCreds.DatabaseName + ".* TO '" + dbCreds.Username + "'@'%'")
-	if err != nil {
-		return errors.WithMessage(err, "failed to grant all privileges")
-	}
-	_, err = db.Exec("FLUSH PRIVILEGES")
-	if err != nil {
-		return errors.WithMessage(err, "failed to flush privileges")
+		return errors.WithMessage(err, "failed to grant privileges")
 	}
 
 	return nil
 }
 
 func installSqlite(_ context.Context, state panelInstallState) (panelInstallState, error) {
-	dbPath := state.Path + string(os.PathSeparator) + "database.sqlite"
+	dbPath := filepath.Join(state.Path, "database.sqlite")
 	f, err := os.Create(dbPath)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to database.sqlite")
