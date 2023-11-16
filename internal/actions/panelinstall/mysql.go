@@ -107,7 +107,7 @@ func mysqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, database string) (boo
 
 	err := db.QueryRowContext(
 		ctx,
-		"EXISTS(SELECT 1 FROM "+database+".games LIMIT 1)",
+		"SELECT EXISTS(SELECT 1 FROM "+database+".games LIMIT 1)",
 	).Scan(&exists)
 	if err != nil {
 		return false, errors.WithMessage(err, "failed to execute query")

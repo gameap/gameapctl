@@ -871,9 +871,11 @@ func installNginx(
 		return state, err
 	}
 
-	err = os.Remove(gameapHostConfPath)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to remove gameap nginx config")
+	if utils.IsFileExists(gameapHostConfPath) {
+		err = os.Remove(gameapHostConfPath)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to remove gameap nginx config")
+		}
 	}
 
 	err = utils.DownloadFile(
