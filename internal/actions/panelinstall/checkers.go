@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
@@ -191,14 +193,23 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 				Timeout: 2 * time.Second,
 			}).DialContext,
 		},
+		Timeout: 2 * time.Second,
 	}
-	url := "http://" + state.Host + ":" + state.Port       //nolint:goconst
-	req, err := http.NewRequest(http.MethodHead, url, nil) //nolint:noctx
+	url := "http://" + state.Host + ":" + state.Port //nolint:goconst
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return state, err
 	}
+
+	var netErr net.Error
+	var sysErr *os.SyscallError
+
 	resp, err := client.Do(req)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+	if err != nil &&
+		(errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, context.Canceled) ||
+			(errors.As(err, &netErr) && netErr.Timeout()) ||
+			(errors.As(err, &sysErr) && sysErr.Err == syscall.ECONNREFUSED)) {
 		// OK
 		return state, nil
 	}
@@ -216,6 +227,11 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 			return state, err
 		}
 	} else {
+		err = resp.Body.Close()
+		if err != nil {
+			fmt.Println("Failed to close a response body: ", err)
+		}
+
 		err = warning(ctx, state,
 			fmt.Sprintf(
 				"Host %s:%s is already in use. "+
@@ -226,11 +242,6 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		if err != nil {
 			return state, err
 		}
-	}
-
-	err = resp.Body.Close()
-	if err != nil {
-		fmt.Println("Failed to close a response body: ", err)
 	}
 
 	return state, nil
