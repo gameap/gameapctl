@@ -209,7 +209,7 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		(errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(err, context.Canceled) ||
 			(errors.As(err, &netErr) && netErr.Timeout()) ||
-			(errors.As(err, &sysErr) && sysErr.Err == syscall.ECONNREFUSED)) {
+			(errors.As(err, &sysErr) && errors.Is(sysErr.Err, syscall.ECONNREFUSED))) {
 		// OK
 		return state, nil
 	}
