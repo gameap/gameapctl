@@ -35,7 +35,12 @@ func GenerateEncryptionKey(_ context.Context, dir string) error {
 }
 
 func RunMigration(_ context.Context, path string, withSeed bool) error {
-	fmt.Println("Running migration ...")
+	if withSeed {
+		fmt.Println("Running migration with seed ...")
+	} else {
+		fmt.Println("Running migration ...")
+	}
+
 	var cmd *exec.Cmd
 	if withSeed {
 		cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
