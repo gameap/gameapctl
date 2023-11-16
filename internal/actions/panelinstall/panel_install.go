@@ -421,7 +421,7 @@ func installMySQL(
 	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		state.DBCreds.Port = "3306"
 	} else if state.DBCreds.Port == "" {
-		// ArchDefault port for windows
+		// Default port for windows
 		state.DBCreds.Port = "9306"
 	}
 
@@ -495,6 +495,13 @@ func installMySQL(
 		}
 	}
 
+	return checkMySQLConnection(ctx, state)
+}
+
+func checkMySQLConnection(
+	ctx context.Context,
+	state panelInstallState,
+) (panelInstallState, error) {
 	fmt.Println("Checking MySQL connection ...")
 	db, err := sql.Open(
 		mysqlDatabase,
@@ -516,17 +523,17 @@ func installMySQL(
 			log.Println(err)
 		}
 	}(db)
-	err = db.Ping()
+	err = db.PingContext(ctx)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to connect to MySQL")
 	}
 
-	_, err = db.Exec("SELECT 1")
+	_, err = db.ExecContext(ctx, "SELECT 1")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to execute MySQL query")
 	}
 
-	return state, err
+	return state, nil
 }
 
 func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
