@@ -294,7 +294,7 @@ func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 
 	for _, pack := range packs {
 		switch pack {
-		case PHPPackage:
+		case PHPPackage, PHPExtensionsPackage:
 			err := e.installAPTRepositoriesDependencies(ctx)
 			if err != nil {
 				return nil, err
