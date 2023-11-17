@@ -348,8 +348,11 @@ func Handle(cliCtx *cli.Context) error {
 		users := []string{"www-data", "nginx", "apache"}
 
 		for _, u := range users {
-			if _, err := user.Lookup(u); err != nil {
-				err = utils.ExecCommand("chown", "-R", fmt.Sprintf("%s:%s", u, u), state.Path)
+			if uinfo, err := user.Lookup(u); err == nil {
+				err = utils.ExecCommand(
+					"chown", "-R",
+					fmt.Sprintf("%s:%s", uinfo.Uid, uinfo.Gid), state.Path,
+				)
 				if err != nil {
 					return errors.WithMessage(err, "failed to change owner")
 				}
