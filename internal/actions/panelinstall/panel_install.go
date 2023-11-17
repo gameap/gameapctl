@@ -410,7 +410,9 @@ func Handle(cliCtx *cli.Context) error {
 }
 
 func isMySQLInstalled(_ context.Context) bool {
-	return utils.IsCommandAvailable("mysqld")
+	return utils.IsCommandAvailable("mysqld") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mysql.service") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
 }
 
 //nolint:funlen,gocognit
@@ -502,7 +504,15 @@ func installMySQL(
 		return state, err
 	}
 
-	return checkMySQLConnection(ctx, state)
+	state, err = checkMySQLConnection(ctx, state)
+	if err != nil {
+		if state.DBCreds.Host == "localhost" {
+			state.DBCreds.Host = "127.0.0.1"
+		}
+		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	return state, err
 }
 
 func checkMySQLConnection(
