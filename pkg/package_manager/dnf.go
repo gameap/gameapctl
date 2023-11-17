@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/pkg/errors"
 )
 
 type dnf struct{}
@@ -131,7 +133,13 @@ func newExtendedDNF(d *dnf) *extendedDNF {
 }
 
 func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
+	var err error
 	packs = d.replaceAliases(ctx, packs)
+
+	packs, err = d.preInstallationSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run pre-installation steps")
+	}
 
 	return d.dnf.Install(ctx, packs...)
 }
@@ -180,4 +188,43 @@ func replaceAliases(ctx context.Context, aliasesMap distVersionPackagesMap, pack
 	}
 
 	return replacedPacks
+}
+
+func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
+	updatedPacks := make([]string, 0, len(packs))
+
+	for _, pack := range packs {
+		//nolint:gocritic
+		switch pack {
+		case PHPPackage:
+			err := d.addPHPRepository(ctx)
+			if err != nil {
+				return nil, errors.WithMessage(err, "failed to add PHP repository")
+			}
+
+			updatedPacks = append(updatedPacks, pack)
+		}
+	}
+
+	return updatedPacks, nil
+}
+
+func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	//nolint:gocritic
+	switch {
+	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "8":
+		err := utils.ExecCommand("dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm")
+		if err != nil {
+			return errors.WithMessage(err, "failed to install remirepo")
+		}
+
+		err = utils.ExecCommand("dnf", "-y", "switch-to", "php:remi-8.2")
+		if err != nil {
+			return errors.WithMessage(err, "failed to switch to remirepo")
+		}
+	}
+
+	return nil
 }

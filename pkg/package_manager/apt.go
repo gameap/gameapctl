@@ -334,7 +334,7 @@ func (e *extendedAPT) preRemovingSteps(ctx context.Context, packs ...string) err
 	for _, pack := range packs {
 		if pack == MySQLServerPackage &&
 			osInfo.Distribution == DistributionUbuntu &&
-			utils.Contains([]string{"focal", "jammy", "kinetic", "lunar"}, osInfo.DistributionCodename) {
+			utils.Contains([]string{"focal", "jammy", "kinetic", "lunar", "mantic"}, osInfo.DistributionCodename) {
 			err := e.Purge(ctx, "mysql-server-8.0")
 			if err != nil {
 				return err
