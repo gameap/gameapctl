@@ -966,7 +966,8 @@ func installNginx(
 	}
 
 	phpServiceName := "php-fpm"
-	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+	if state.OSInfo.Distribution == packagemanager.DistributionDebian ||
+		state.OSInfo.Distribution == packagemanager.DistributionUbuntu {
 		phpVersion, err := packagemanager.DefinePHPVersion()
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to define php version")
