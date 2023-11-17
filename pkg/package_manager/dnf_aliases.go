@@ -20,6 +20,7 @@ var dnfPackageAliases = distVersionPackagesMap{
 				Lib32GCCPackage:   {"libgcc.i686"},
 				Lib32Stdc6Package: {"libstdc++.i686"},
 				Lib32z1Package:    {"zlib.i686"},
+				XZUtilsPackage:    {"xz"},
 				PHPPackage:        {"php-cli", "php-common", "php-fpm"},
 				PHPExtensionsPackage: {
 					"php-bcmath", "php-gd", "php-gmp", "php-intl",
