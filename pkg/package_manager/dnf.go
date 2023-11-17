@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -183,7 +184,16 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 			return errors.WithMessage(err, "failed to switch to remirepo")
 		}
 	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "7":
-		err := utils.ExecCommand("yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm")
+		repolistOut, err := utils.ExecCommandWithOutput("yum", "repolist")
+		if err != nil {
+			return errors.WithMessage(err, "failed to get repolist")
+		}
+
+		if strings.Contains(repolistOut, "remi-php82") {
+			return nil
+		}
+
+		err = utils.ExecCommand("yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm")
 		if err != nil {
 			return errors.WithMessage(err, "failed to install remirepo")
 		}
@@ -195,7 +205,7 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 
 		err = utils.ExecCommand("yum-config-manager", "--enable", "remi-php82")
 		if err != nil {
-			return errors.WithMessage(err, "failed to install yum-utils")
+			return errors.WithMessage(err, "failed to enable remi-php82 repository")
 		}
 	}
 
