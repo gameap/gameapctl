@@ -63,9 +63,14 @@ var staticConfigs = map[string]map[string]map[string]string{
 var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionCentOS: {
-			"fpm_sock": func(_ context.Context) (string, error) { //nolint:unparam
+			"fpm_sock": func(ctx context.Context) (string, error) { //nolint:unparam
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
+				}
+
+				osInfo := contextInternal.OSInfoFromContext(ctx)
+				if osInfo.DistributionCodename == "7" {
+					return "127.0.0.1:9000", nil
 				}
 
 				return "unix:/run/php-fpm/www.sock", nil
