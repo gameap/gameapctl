@@ -134,13 +134,15 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 	}
 
 	// Static config
-	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; !ok {
-		if _, ok = staticConfigs[packName][Default][configName]; !ok {
-			return "", ErrConfigNotFound
-		}
+	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; ok {
+		return staticConfigs[packName][osInfo.Distribution][configName], nil
 	}
 
-	return staticConfigs[packName][osInfo.Distribution][configName], nil
+	if _, ok := staticConfigs[packName][Default][configName]; ok {
+		return staticConfigs[packName][Default][configName], nil
+	}
+
+	return "", ErrConfigNotFound
 }
 
 func defineNginxPath(ctx context.Context) (string, error) {
