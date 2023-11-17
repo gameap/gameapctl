@@ -588,7 +588,7 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 }
 
 func runMigrationWithRetry(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	withSeed := state.DatabaseWasInstalled && !state.DatabaseIsNotEmpty
+	withSeed := !state.DatabaseIsNotEmpty
 
 	err := panel.RunMigration(ctx, state.Path, withSeed)
 	if err != nil && state.DBCreds.Host == "localhost" {
