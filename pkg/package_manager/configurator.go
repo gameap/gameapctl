@@ -52,7 +52,7 @@ var staticConfigs = map[string]map[string]map[string]string{
 	},
 	PHPPackage: {
 		Default: {
-			"fpm_sock": "/run/php-fpm/www.sock",
+			"fpm_sock": "unix:/run/php-fpm/www.sock",
 		},
 		DistributionWindows: {
 			"fpm_sock": "127.0.0.1:9934",
@@ -68,7 +68,7 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
 
-				return "/run/php-fpm/www.sock", nil
+				return "unix:/run/php-fpm/www.sock", nil
 			},
 		},
 		DistributionDebian: {
