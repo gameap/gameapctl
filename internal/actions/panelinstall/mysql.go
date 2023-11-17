@@ -7,12 +7,14 @@ import (
 	"log"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 )
 
 // Some mysql helpers
 
+//nolint:funlen
 func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) (*sql.DB, error) {
 	mysqlCfgs := []mysql.Config{
 		{
@@ -20,6 +22,14 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Passwd:               dbCreds.RootPassword,
 			Net:                  "unix",
 			Addr:                 "/var/run/mysqld/mysqld.sock",
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
+		{
+			User:                 "root",
+			Passwd:               dbCreds.RootPassword,
+			Net:                  "unix",
+			Addr:                 "/var/lib/mysql/mysql.sock",
 			DBName:               "mysql",
 			AllowNativePasswords: true,
 		},
@@ -43,6 +53,9 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 	var err error
 	var db *sql.DB
 	for _, cfg := range mysqlCfgs {
+		if cfg.Net == "unix" && !utils.IsFileExists(cfg.Addr) {
+			continue
+		}
 		db, err = sql.Open("mysql", cfg.FormatDSN())
 		if err != nil {
 			continue
@@ -168,7 +181,7 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 	if majorVersion == "8" {
 		_, err = db.ExecContext(
 			ctx,
-			"CREATE USER IF NOT EXISTS "+
+			"CREATE USER "+
 				username+
 				"@'%' IDENTIFIED WITH mysql_native_password BY '"+
 				password+"'",
@@ -190,10 +203,27 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 }
 
 func mysqlChangeUserPassword(ctx context.Context, db *sql.DB, username, password string) error {
-	_, err := db.ExecContext(
-		ctx,
-		"ALTER USER '"+username+"'@'%' IDENTIFIED BY '"+password+"'",
-	)
+	var err error
+
+	version, err := mysqlVersion(ctx, db)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get mysql version")
+	}
+
+	majorVersion := strings.Split(version, ".")[0]
+
+	if majorVersion == "8" {
+		_, err = db.ExecContext(
+			ctx,
+			"ALTER USER '"+username+"'@'%' IDENTIFIED BY '"+password+"'",
+		)
+	} else {
+		_, err = db.ExecContext(
+			ctx,
+			"UPDATE mysql.user SET password=PASSWORD(?) WHERE user =?",
+			password, username,
+		)
+	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute query")
 	}
