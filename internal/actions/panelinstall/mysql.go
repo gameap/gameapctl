@@ -181,7 +181,7 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 	if majorVersion == "8" {
 		_, err = db.ExecContext(
 			ctx,
-			"CREATE USER "+
+			"CREATE USER "+ //nolint:goconst
 				username+
 				"@'%' IDENTIFIED WITH mysql_native_password BY '"+
 				password+"'",
@@ -192,6 +192,17 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 			"CREATE USER "+
 				username+
 				"@'%' IDENTIFIED BY '"+
+				password+"'",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to execute query")
+		}
+
+		_, err = db.ExecContext(
+			ctx,
+			"CREATE USER "+
+				username+
+				"@'localhost' IDENTIFIED BY '"+
 				password+"'",
 		)
 	}
@@ -238,6 +249,15 @@ func mysqlGrantPrivileges(ctx context.Context, db *sql.DB, username, databaseNam
 		return errors.WithMessage(err, "failed to grant select privileges")
 	}
 	_, err = db.ExecContext(ctx, "GRANT ALL PRIVILEGES ON "+databaseName+".* TO '"+username+"'@'%'")
+	if err != nil {
+		return errors.WithMessage(err, "failed to grant all privileges")
+	}
+	//nolint:gosec
+	_, err = db.ExecContext(ctx, "GRANT SELECT ON *.* TO '"+username+"'@'localhost'")
+	if err != nil {
+		return errors.WithMessage(err, "failed to grant select privileges")
+	}
+	_, err = db.ExecContext(ctx, "GRANT ALL PRIVILEGES ON "+databaseName+".* TO '"+username+"'@'localhost'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant all privileges")
 	}
