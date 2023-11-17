@@ -937,7 +937,9 @@ func installNginx(
 		return state, errors.WithMessage(err, "failed to get nginx_conf")
 	}
 
-	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+	switch {
+	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+
 		err = os.Rename(nginxMainConf, nginxMainConf+".old")
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to rename config")
@@ -951,18 +953,16 @@ func installNginx(
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to download nginx config")
 		}
-	} else {
+
+	case state.OSInfo.Distribution == packagemanager.DistributionUbuntu,
+		state.OSInfo.Distribution == packagemanager.DistributionDebian:
+
 		err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
 			"user": "user www-data;",
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to update nginx config")
 		}
-	}
-
-	err = service.Start(ctx, "nginx")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to start nginx")
 	}
 
 	phpServiceName := "php-fpm"
@@ -977,6 +977,11 @@ func installNginx(
 	err = service.Start(ctx, phpServiceName)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to start php-fpm")
+	}
+
+	err = service.Start(ctx, "nginx")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start nginx")
 	}
 
 	return state, nil
