@@ -93,7 +93,7 @@ func detectLinuxDist() (distInfo, error) {
 		// /etc/lsb-release exists, read it
 		data, err := os.ReadFile(etcLsbRelease)
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 
 		// extract ID and VERSION_ID from /etc/lsb-release
@@ -116,7 +116,7 @@ func detectLinuxDist() (distInfo, error) {
 		// /etc/os-release exists, read it
 		data, err := os.ReadFile(etcOsRelease)
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 
 		// extract ID and VERSION_CODENAME from /etc/os-release
@@ -145,7 +145,7 @@ func detectLinuxDist() (distInfo, error) {
 		cmd.Stderr = os.Stderr
 		out, err := cmd.Output()
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 		result.VersionCodename = strings.Split(string(out), ":")[1]
 		result.VersionCodename = strings.TrimSpace(result.VersionCodename)
@@ -155,7 +155,7 @@ func detectLinuxDist() (distInfo, error) {
 		cmd.Stderr = os.Stderr
 		out, err = cmd.Output()
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 		result.Name = strings.Split(string(out), ":")[1]
 		result.Name = strings.TrimSpace(result.Name)
@@ -168,7 +168,7 @@ func detectLinuxDist() (distInfo, error) {
 		// extract os from /etc/issue
 		data, err := os.ReadFile("/etc/issue")
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 		result.Name = strings.Split(string(data), " ")[0]
 		result.Name = strings.TrimSpace(result.Name)
@@ -177,7 +177,7 @@ func detectLinuxDist() (distInfo, error) {
 		// extract dist from /etc/debian_version
 		data, err = os.ReadFile("/etc/debian_version")
 		if err != nil {
-			panic(err)
+			return distInfo{}, err
 		}
 		result.VersionCodename = strings.Split(string(data), "/")[0]
 		result.VersionCodename = strings.TrimSpace(result.VersionCodename)
@@ -185,12 +185,14 @@ func detectLinuxDist() (distInfo, error) {
 
 	if result.VersionCodename == "" {
 		// unknown os
-		panic("unknown operating system")
+		return distInfo{}, errors.New("unknown operating system")
 	}
 
 	// cleanup
 	result.Name = strings.ReplaceAll(result.Name, " ", "")
 	result.VersionCodename = strings.ReplaceAll(result.VersionCodename, " ", "")
+	result.Name = strings.Trim(result.Name, "\"")
+	result.VersionCodename = strings.Trim(result.Name, "\"")
 
 	// lowercase
 	result.Name = strings.ToLower(result.Name)

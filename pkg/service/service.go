@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
-	"github.com/pkg/errors"
 )
 
 var service Service
@@ -79,7 +78,7 @@ func Load(ctx context.Context) (srv Service, err error) {
 		case "windows":
 			service = NewWindows()
 		default:
-			err = errors.New("unsupported distribution")
+			err = NewErrUnsupportedDistribution(osInfo.Distribution)
 		}
 	})
 
