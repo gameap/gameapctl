@@ -79,7 +79,7 @@ type distInfo struct {
 	VersionCodename string
 }
 
-//nolint:funlen,unparam
+//nolint:funlen
 func detectLinuxDist() (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"

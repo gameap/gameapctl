@@ -878,6 +878,13 @@ func installNginx(
 		}
 	}
 
+	if !utils.IsFileExists(filepath.Dir(gameapHostConfPath)) {
+		err = os.MkdirAll(filepath.Dir(gameapHostConfPath), os.ModePerm)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to create directory")
+		}
+	}
+
 	err = utils.DownloadFile(
 		ctx,
 		"https://raw.githubusercontent.com/gameap/auto-install-scripts/master/web-server-configs/nginx-no-ssl.conf",
