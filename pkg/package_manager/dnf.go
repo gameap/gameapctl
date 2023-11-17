@@ -203,6 +203,8 @@ func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string)
 			}
 
 			updatedPacks = append(updatedPacks, pack)
+		default:
+			updatedPacks = append(updatedPacks, pack)
 		}
 	}
 
