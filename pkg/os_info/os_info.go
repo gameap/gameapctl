@@ -192,7 +192,7 @@ func detectLinuxDist() (distInfo, error) {
 	result.Name = strings.ReplaceAll(result.Name, " ", "")
 	result.VersionCodename = strings.ReplaceAll(result.VersionCodename, " ", "")
 	result.Name = strings.Trim(result.Name, "\"")
-	result.VersionCodename = strings.Trim(result.Name, "\"")
+	result.VersionCodename = strings.Trim(result.VersionCodename, "\"")
 
 	// lowercase
 	result.Name = strings.ToLower(result.Name)
