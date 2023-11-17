@@ -745,7 +745,7 @@ func installGameAP(ctx context.Context, state panelInstallState) (panelInstallSt
 
 	err = utils.Download(ctx, downloadPath, tempDir)
 	if err != nil {
-		return state, errors.WithMessage(err, "failed to download gameap")
+		return state, errors.WithMessagef(err, "failed to download gameap from '%s'", downloadPath)
 	}
 
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
