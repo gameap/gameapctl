@@ -244,6 +244,14 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}
 
+	fmt.Println("Checking for tar ...")
+	if !utils.IsCommandAvailable("tar") {
+		fmt.Println("Installing tar ...")
+		if err = pm.Install(cliCtx.Context, packagemanager.TarPackage); err != nil {
+			return errors.WithMessage(err, "failed to install tar")
+		}
+	}
+
 	fmt.Println("Checking for php ...")
 	state, err = checkAndInstallPHP(cliCtx.Context, pm, state)
 	if err != nil {

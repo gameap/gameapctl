@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_parseDnfInfoOutput(t *testing.T) {
+func Test_parseYumInfoOutput(t *testing.T) {
 	out := []byte(`
 Last metadata expiration check: 0:09:02 ago on Fri 17 Nov 2023 04:11:17 AM UTC.
 Available Packages
@@ -40,7 +40,7 @@ Description  : The mysql-common package provides the essential shared files for 
              : MySQL package.
 
 	`)
-	parsed, err := parseDnfInfoOutput(out)
+	parsed, err := parseYumInfoOutput(out)
 
 	require.NoError(t, err)
 	require.Equal(t, []PackageInfo{

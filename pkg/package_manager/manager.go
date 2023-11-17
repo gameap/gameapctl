@@ -76,7 +76,11 @@ func loadCentOSPackageManager(
 	_ context.Context,
 	_ osinfo.Info,
 ) (PackageManager, error) {
-	return newExtendedDNF(&dnf{}), nil
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return newExtendedDNF(&dnf{}), nil
+	}
+
+	return newExtendedDNF(&yum{}), nil
 }
 
 //nolint:ireturn,nolintlint
@@ -89,6 +93,10 @@ func detectAndLoadPackageManager(
 
 	if _, err := exec.LookPath("dnf"); err == nil {
 		return newExtendedDNF(&dnf{}), nil
+	}
+
+	if _, err := exec.LookPath("yum"); err == nil {
+		return newExtendedDNF(&yum{}), nil
 	}
 
 	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)

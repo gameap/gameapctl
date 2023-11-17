@@ -1,13 +1,11 @@
 package packagemanager
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -30,52 +28,7 @@ func (d *dnf) Search(_ context.Context, name string) ([]PackageInfo, error) {
 		return nil, err
 	}
 
-	return parseDnfInfoOutput(out)
-}
-
-func parseDnfInfoOutput(out []byte) ([]PackageInfo, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-
-	var packages []PackageInfo
-	var currentPackage *PackageInfo
-
-	for scanner.Scan() {
-		parts := strings.SplitN(scanner.Text(), ":", 2)
-		if len(parts) < 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		switch key {
-		case "Name":
-			if currentPackage != nil {
-				packages = append(packages, *currentPackage)
-			}
-			currentPackage = &PackageInfo{}
-
-			currentPackage.Name = value
-		case "Version":
-			currentPackage.Version = value
-		case "Architecture":
-			currentPackage.Architecture = value
-		case "Size":
-			currentPackage.Size = value
-		case "Description":
-			currentPackage.Description = value
-		case "":
-			if value != "" && currentPackage != nil {
-				currentPackage.Description += " " + value
-			}
-		}
-	}
-
-	if currentPackage != nil {
-		packages = append(packages, *currentPackage)
-	}
-
-	return packages, nil
+	return parseYumInfoOutput(out)
 }
 
 func (d *dnf) Install(_ context.Context, packs ...string) error {
@@ -125,11 +78,11 @@ func (d *dnf) Purge(ctx context.Context, packs ...string) error {
 }
 
 type extendedDNF struct {
-	*dnf
+	underlined PackageManager
 }
 
-func newExtendedDNF(d *dnf) *extendedDNF {
-	return &extendedDNF{d}
+func newExtendedDNF(underlined PackageManager) *extendedDNF {
+	return &extendedDNF{underlined: underlined}
 }
 
 func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
@@ -142,23 +95,27 @@ func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
 
 	packs = d.replaceAliases(ctx, packs)
 
-	return d.dnf.Install(ctx, packs...)
+	return d.underlined.Install(ctx, packs...)
 }
 
 func (d *extendedDNF) CheckForUpdates(ctx context.Context) error {
-	return d.dnf.CheckForUpdates(ctx)
+	return d.underlined.CheckForUpdates(ctx)
 }
 
 func (d *extendedDNF) Remove(ctx context.Context, packs ...string) error {
 	packs = d.replaceAliases(ctx, packs)
 
-	return d.dnf.Remove(ctx, packs...)
+	return d.underlined.Remove(ctx, packs...)
 }
 
 func (d *extendedDNF) Purge(ctx context.Context, packs ...string) error {
 	packs = d.replaceAliases(ctx, packs)
 
-	return d.dnf.Purge(ctx, packs...)
+	return d.underlined.Purge(ctx, packs...)
+}
+
+func (d *extendedDNF) Search(ctx context.Context, name string) ([]PackageInfo, error) {
+	return d.underlined.Search(ctx, name)
 }
 
 func (d *extendedDNF) replaceAliases(ctx context.Context, packs []string) []string {
@@ -195,7 +152,6 @@ func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string)
 	updatedPacks := make([]string, 0, len(packs))
 
 	for _, pack := range packs {
-		//nolint:gocritic
 		switch pack {
 		case PHPPackage:
 			err := d.addPHPRepository(ctx)
@@ -215,7 +171,6 @@ func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string)
 func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	//nolint:gocritic
 	switch {
 	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "8":
 		err := utils.ExecCommand("dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm")
@@ -226,6 +181,21 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 		err = utils.ExecCommand("dnf", "-y", "module", "switch-to", "php:remi-8.2")
 		if err != nil {
 			return errors.WithMessage(err, "failed to switch to remirepo")
+		}
+	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "7":
+		err := utils.ExecCommand("yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm")
+		if err != nil {
+			return errors.WithMessage(err, "failed to install remirepo")
+		}
+
+		err = utils.ExecCommand("yum", "-y", "install", "yum-utils")
+		if err != nil {
+			return errors.WithMessage(err, "failed to install yum-utils")
+		}
+
+		err = utils.ExecCommand("yum-config-manager", "--enable", "remi-php82")
+		if err != nil {
+			return errors.WithMessage(err, "failed to install yum-utils")
 		}
 	}
 
