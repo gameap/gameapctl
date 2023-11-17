@@ -19,6 +19,10 @@ var ErrConfigNotFound = errors.New("config not found")
 
 var staticConfigs = map[string]map[string]map[string]string{
 	NginxPackage: {
+		Default: {
+			"nginx_conf":       "/etc/nginx/nginx.conf",
+			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
+		},
 		DistributionDebian: {
 			"nginx_conf":       "/etc/nginx/nginx.conf",
 			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
@@ -33,6 +37,9 @@ var staticConfigs = map[string]map[string]map[string]string{
 		},
 	},
 	ApachePackage: {
+		Default: {
+			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
+		},
 		DistributionDebian: {
 			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
 		},
@@ -107,32 +114,30 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	// Dynamic config
-	//nolint:nestif
-	if _, ok := dynamicConfig[packName]; ok {
-		if _, ok = dynamicConfig[packName][osInfo.Distribution]; ok {
-			if _, ok = dynamicConfig[packName][osInfo.Distribution][configName]; ok {
-				config, err := dynamicConfig[packName][osInfo.Distribution][configName](ctx)
-				if err != nil {
-					return "", errors.WithMessage(err, "failed to get dynamic config")
-				}
-				if config != "" {
-					return config, nil
-				}
-			}
+	if configFunc, ok := dynamicConfig[packName][osInfo.Distribution][configName]; ok {
+		config, err := configFunc(ctx)
+		if err != nil {
+			return "", errors.WithMessage(err, "failed to get dynamic config")
+		}
+		if config != "" {
+			return config, nil
+		}
+	}
+	if configFunc, ok := dynamicConfig[packName][Default][configName]; ok {
+		config, err := configFunc(ctx)
+		if err != nil {
+			return "", errors.WithMessage(err, "failed to get dynamic config")
+		}
+		if config != "" {
+			return config, nil
 		}
 	}
 
 	// Static config
-	if _, ok := staticConfigs[packName]; !ok {
-		return "", ErrConfigNotFound
-	}
-
-	if _, ok := staticConfigs[packName][osInfo.Distribution]; !ok {
-		return "", ErrConfigNotFound
-	}
-
 	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; !ok {
-		return "", ErrConfigNotFound
+		if _, ok = staticConfigs[packName][Default][configName]; !ok {
+			return "", ErrConfigNotFound
+		}
 	}
 
 	return staticConfigs[packName][osInfo.Distribution][configName], nil
