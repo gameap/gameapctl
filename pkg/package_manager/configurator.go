@@ -51,6 +51,9 @@ var staticConfigs = map[string]map[string]map[string]string{
 		},
 	},
 	PHPPackage: {
+		Default: {
+			"fpm_sock": "/run/php-fpm/www.sock",
+		},
 		DistributionWindows: {
 			"fpm_sock": "127.0.0.1:9934",
 		},
@@ -59,6 +62,15 @@ var staticConfigs = map[string]map[string]map[string]string{
 
 var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
+		DistributionCentOS: {
+			"fpm_sock": func(_ context.Context) (string, error) { //nolint:unparam
+				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
+					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
+				}
+
+				return "/run/php-fpm/www.sock", nil
+			},
+		},
 		DistributionDebian: {
 			"fpm_sock": func(_ context.Context) (string, error) {
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
