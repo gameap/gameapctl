@@ -1149,7 +1149,7 @@ func chownRGameapDirectory(_ context.Context, state panelInstallState) (panelIns
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Updating files permissions ...")
 
-		users := []string{"www-data", "nginx", "apache"}
+		users := []string{"www-data", "apache", "nginx"}
 
 		for _, u := range users {
 			if uinfo, err := user.Lookup(u); err == nil {
