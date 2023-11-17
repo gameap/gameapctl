@@ -3,6 +3,7 @@ module github.com/gameap/gameapctl
 go 1.21
 
 require (
+	github.com/d-tux/go-fstab v0.0.0-20141204152952-eb4090f26517
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/gopherclass/go-shellquote v0.0.0-20200814145606-fab22d094485
 	github.com/hashicorp/go-getter v1.7.3
@@ -14,6 +15,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.9
 	github.com/stretchr/testify v1.8.4
 	github.com/urfave/cli/v2 v2.25.7
+	go.uber.org/multierr v1.11.0
 	golang.org/x/mod v0.13.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -27,7 +29,6 @@ require (
 	github.com/aws/aws-sdk-go v1.44.122 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
-	github.com/d-tux/go-fstab v0.0.0-20141204152952-eb4090f26517 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -54,7 +55,6 @@ require (
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
@@ -68,3 +68,5 @@ require (
 	google.golang.org/grpc v1.50.1 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
+
+replace aead.dev/minisign v0.2.0 => github.com/aead/minisign v0.2.0
