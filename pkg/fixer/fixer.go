@@ -34,8 +34,13 @@ func RunFixer(ctx context.Context, checkFunc CheckFunc, items []Item) error {
 		if err != nil {
 			log.Println(err)
 		} else {
-			break
+			return nil
 		}
+	}
+
+	err := checkFunc(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "no more options left to fix the problem")
 	}
 
 	return nil

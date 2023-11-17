@@ -359,7 +359,6 @@ func Handle(cliCtx *cli.Context) error {
 		fmt.Println("Checking panel installation ...")
 		if state, err = checkInstallation(cliCtx.Context, state); err != nil {
 			fmt.Println("Installation checking failed")
-			log.Println("Installation checking failed")
 			log.Println(err)
 			if state, err = tryToFixPanelInstallation(cliCtx.Context, state); err != nil {
 				return errors.WithMessage(err, "failed to check and fixpanel installation")
