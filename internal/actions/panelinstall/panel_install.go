@@ -506,8 +506,11 @@ func installMySQL(
 
 	state, err = checkMySQLConnection(ctx, state)
 	if err != nil {
+		log.Println(err)
 		if state.DBCreds.Host == "localhost" {
 			state.DBCreds.Host = "127.0.0.1"
+		} else if state.DBCreds.Host == "127.0.0.1" {
+			state.DBCreds.Host = "localhost"
 		}
 		state, err = checkMySQLConnection(ctx, state)
 	}

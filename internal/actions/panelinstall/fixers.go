@@ -73,12 +73,12 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 		},
 		{
 			Condition: func(ctx context.Context) (bool, error) {
-				return utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost", nil
+				return utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost", nil //nolint:goconst
 			},
 			FixFunc: func(ctx context.Context) error {
 				log.Print("Replacing localhost to 127.0.0.1 in .env")
 
-				state.DBCreds.Host = "127.0.0.1"
+				state.DBCreds.Host = "127.0.0.1" //nolint:goconst
 				state, err = updateDotEnv(ctx, state)
 				if err != nil {
 					return errors.WithMessage(err, "failed to update .env")
