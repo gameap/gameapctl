@@ -539,9 +539,7 @@ func checkMySQLConnection(
 		return state, errors.WithMessage(err, "failed to check database")
 	}
 
-	if !isDatabaseEmpty {
-		state.DatabaseIsNotEmpty = true
-	}
+	state.DatabaseIsNotEmpty = !isDatabaseEmpty
 
 	return state, nil
 }
