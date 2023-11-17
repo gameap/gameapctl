@@ -176,7 +176,7 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 	} else {
 		_, err = db.ExecContext(
 			ctx,
-			"CREATE USER IF NOT EXISTS "+
+			"CREATE USER "+
 				username+
 				"@'%' IDENTIFIED BY '"+
 				password+"'",
