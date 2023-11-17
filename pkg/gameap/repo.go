@@ -14,6 +14,7 @@ var repoOnce sync.Once
 func Repository() string {
 	repoOnce.Do(func() {
 		repos := []string{
+			"https://gameap.s3.eu-central-1.amazonaws.com",
 			"https://packages.gameap.ru",
 			"http://packages.hz1.gameap.io",
 		}

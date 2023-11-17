@@ -2,7 +2,7 @@ package packagemanager
 
 type distVersionPackagesMap map[string]map[string]map[string]map[string][]string
 
-var packageAliases = distVersionPackagesMap{
+var aptPackageAliases = distVersionPackagesMap{
 	DistributionDebian: {
 		"squeeze": {
 			ArchDefault: {

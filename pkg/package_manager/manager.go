@@ -2,6 +2,7 @@ package packagemanager
 
 import (
 	"context"
+	"os/exec"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -33,11 +34,13 @@ func Load(ctx context.Context) (PackageManager, error) {
 		return loadDebianPackageManager(ctx, osInfo)
 	case DistributionUbuntu:
 		return loadUbuntuPackageManager(ctx, osInfo)
+	case DistributionCentOS:
+		return loadCentOSPackageManager(ctx, osInfo)
 	case DistributionWindows:
 		return NewWindowsPackageManager(), nil
 	}
 
-	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)
+	return detectAndLoadPackageManager(ctx, osInfo)
 }
 
 //nolint:ireturn,nolintlint
@@ -66,4 +69,27 @@ func loadUbuntuPackageManager(_ context.Context, osInfo osinfo.Info) (PackageMan
 			newChRoot(),
 		), nil
 	}
+}
+
+//nolint:ireturn,nolintlint
+func loadCentOSPackageManager(
+	_ context.Context,
+	_ osinfo.Info,
+) (PackageManager, error) {
+	return newExtendedDNF(&dnf{}), nil
+}
+
+//nolint:ireturn,nolintlint
+func detectAndLoadPackageManager(
+	_ context.Context, osInfo osinfo.Info,
+) (PackageManager, error) {
+	if _, err := exec.LookPath("apt"); err == nil {
+		return newExtendedAPT(&apt{}), nil
+	}
+
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return newExtendedDNF(&dnf{}), nil
+	}
+
+	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)
 }

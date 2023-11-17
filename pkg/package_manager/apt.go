@@ -55,12 +55,13 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 
 	var packageInfos []PackageInfo
 
-	info := PackageInfo{}
 	for scanner.Scan() {
 		parts := strings.SplitN(scanner.Text(), ":", 2)
 		if len(parts) < 2 {
 			continue
 		}
+
+		info := PackageInfo{}
 
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
@@ -225,23 +226,7 @@ func (e *extendedAPT) Purge(ctx context.Context, packs ...string) error {
 }
 
 func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []string {
-	replacedPacks := make([]string, 0, len(packs))
-
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	for _, pack := range packs {
-		if aliases, exists :=
-			packageAliases[osInfo.Distribution][osInfo.DistributionCodename][osInfo.Platform][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			packageAliases[osInfo.Distribution][osInfo.DistributionCodename]["default"][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else {
-			replacedPacks = append(replacedPacks, pack)
-		}
-	}
-
-	return replacedPacks
+	return replaceAliases(ctx, aptPackageAliases, packs)
 }
 
 func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
