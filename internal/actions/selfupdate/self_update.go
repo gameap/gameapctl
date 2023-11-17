@@ -30,7 +30,7 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Last version is", release.Tag)
 	fmt.Println("You version is", gameap.Version)
 
-	if len(gameap.Version) >= 3 && gameap.Version[0:3] == "dev" && cliCtx.Bool("force") {
+	if len(gameap.Version) >= 3 && gameap.Version[0:3] == "dev" && !cliCtx.Bool("force") {
 		fmt.Println(
 			"You use development version. " +
 				"Update is not available. " +
