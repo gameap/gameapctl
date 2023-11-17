@@ -223,7 +223,7 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 			return errors.WithMessage(err, "failed to install remirepo")
 		}
 
-		err = utils.ExecCommand("dnf", "-y", "switch-to", "php:remi-8.2")
+		err = utils.ExecCommand("dnf", "-y", "module", "switch-to", "php:remi-8.2")
 		if err != nil {
 			return errors.WithMessage(err, "failed to switch to remirepo")
 		}
