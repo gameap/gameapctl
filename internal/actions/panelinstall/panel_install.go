@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -343,9 +344,16 @@ func Handle(cliCtx *cli.Context) error {
 
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Updating files permissions ...")
-		err = utils.ExecCommand("chown", "-R", "www-data:www-data", state.Path)
-		if err != nil {
-			return errors.WithMessage(err, "failed to change owner")
+
+		users := []string{"www-data", "nginx", "apache"}
+
+		for _, u := range users {
+			if _, err := user.Lookup(u); err != nil {
+				err = utils.ExecCommand("chown", "-R", fmt.Sprintf("%s:%s", u, u), state.Path)
+				if err != nil {
+					return errors.WithMessage(err, "failed to change owner")
+				}
+			}
 		}
 	}
 
