@@ -342,22 +342,9 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to clear panel cache")
 	}
 
-	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		fmt.Println("Updating files permissions ...")
-
-		users := []string{"www-data", "nginx", "apache"}
-
-		for _, u := range users {
-			if uinfo, err := user.Lookup(u); err == nil {
-				err = utils.ExecCommand(
-					"chown", "-R",
-					fmt.Sprintf("%s:%s", uinfo.Uid, uinfo.Gid), state.Path,
-				)
-				if err != nil {
-					return errors.WithMessage(err, "failed to change owner")
-				}
-			}
-		}
+	state, err = chownRGameapDirectory(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to chown gameap directory")
 	}
 
 	if state.WebServer != noneWebServer {
@@ -1158,6 +1145,30 @@ func clearGameAPCache(ctx context.Context, state panelInstallState) (panelInstal
 	return state, nil
 }
 
+func chownRGameapDirectory(_ context.Context, state panelInstallState) (panelInstallState, error) {
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Updating files permissions ...")
+
+		users := []string{"www-data", "nginx", "apache"}
+
+		for _, u := range users {
+			if uinfo, err := user.Lookup(u); err == nil {
+				err = utils.ExecCommand(
+					"chown", "-R",
+					fmt.Sprintf("%s:%s", uinfo.Uid, uinfo.Gid), state.Path,
+				)
+				if err != nil {
+					return state, errors.WithMessage(err, "failed to change owner")
+				}
+
+				break
+			}
+		}
+	}
+
+	return state, nil
+}
+
 func checkInstallation(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	var err error
 	state, err = clearGameAPCache(ctx, state)
@@ -1227,9 +1238,15 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 
 	for {
 		switch {
-		case !isTried(0) &&
-			state.WebServer == "nginx" && utils.IsFileExists("/etc/nginx/conf.d/default.conf"):
+		case !isTried(0):
 			tried[0] = struct{}{}
+			state, err = chownRGameapDirectory(ctx, state)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to chown gameap directory")
+			}
+		case !isTried(1) &&
+			state.WebServer == "nginx" && utils.IsFileExists("/etc/nginx/conf.d/default.conf"):
+			tried[1] = struct{}{}
 
 			log.Println("Disabling nginx default.conf config")
 
@@ -1241,9 +1258,9 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to restart nginx")
 			}
-		case !isTried(1) &&
+		case !isTried(2) &&
 			state.WebServer == apacheWebServer:
-			tried[1] = struct{}{}
+			tried[2] = struct{}{}
 
 			log.Println("Disabling apache 000-default site")
 
@@ -1256,8 +1273,9 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to restart apache")
 			}
-		case !isTried(2) && utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost":
-			tried[2] = struct{}{}
+		//nolint:gomnd
+		case !isTried(3) && utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost":
+			tried[3] = struct{}{}
 
 			log.Print("Replacing localhost to 127.0.0.1 in .env")
 
