@@ -134,12 +134,13 @@ func newExtendedDNF(d *dnf) *extendedDNF {
 
 func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
 	var err error
-	packs = d.replaceAliases(ctx, packs)
 
 	packs, err = d.preInstallationSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre-installation steps")
 	}
+
+	packs = d.replaceAliases(ctx, packs)
 
 	return d.dnf.Install(ctx, packs...)
 }
