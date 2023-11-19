@@ -469,7 +469,9 @@ func installMariaDB(
 	var err error
 
 	//nolint:nestif
-	if state.DBCreds.Host == "" {
+	if state.DBCreds.Host == "" ||
+		state.DBCreds.Host == "localhost" ||
+		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMySQLInstalled(ctx) {
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
@@ -543,7 +545,9 @@ func installMySQL(
 	var err error
 
 	//nolint:nestif
-	if state.DBCreds.Host == "" {
+	if state.DBCreds.Host == "" ||
+		state.DBCreds.Host == "localhost" ||
+		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMySQLInstalled(ctx) {
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
