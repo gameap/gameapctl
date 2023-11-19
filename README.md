@@ -28,3 +28,11 @@ Other operating systems may work as well, if they can run the required dependenc
 | 20.04   | ✔        | Latest manual test (v0.5.1): 16.11.2023                            |
 | 18.04   | ✔        | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
 | 16.04   | ✔        | Latest manual test (v0.5.6): 16.11.2023, used chrooted php package |
+
+### CentOS
+
+| Version  | Supported | Notes                                  |
+|----------|----------|----------------------------------------|
+| Stream 9 | ✔        | Lates manual test (v0.6.1): 17.11.2023 |
+| Stream 8 | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
+| 7        | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
