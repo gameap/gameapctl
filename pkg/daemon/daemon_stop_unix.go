@@ -22,7 +22,7 @@ const (
 func Stop(ctx context.Context) error {
 	init, err := detectInit(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to detect init")
+		log.Println("Failed to detect init:", err)
 	}
 
 	switch init {

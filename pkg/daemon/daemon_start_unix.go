@@ -33,7 +33,7 @@ const (
 func Start(ctx context.Context) error {
 	init, err := detectInit(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to detect init")
+		log.Println("Failed to detect init:", err)
 	}
 
 	switch init {
@@ -55,7 +55,7 @@ func detectInit(ctx context.Context) (string, error) {
 
 	p, err := process.NewProcessWithContext(ctx, 1)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to load process with pid 1")
+		return result, errors.WithMessage(err, "failed to load process with pid 1")
 	}
 
 	processName, _ := p.Name()
@@ -63,7 +63,7 @@ func detectInit(ctx context.Context) (string, error) {
 
 	exe, err := p.Exe()
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to get executable path of the process")
+		return result, errors.WithMessage(err, "failed to get executable path of the process")
 	}
 
 	originalExe, err := filepath.EvalSymlinks(exe)
