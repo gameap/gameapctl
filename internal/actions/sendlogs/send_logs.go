@@ -114,6 +114,11 @@ func collectGameapCTLLogs(_ context.Context, destinationDir string) error {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
 	}
 
+	err = os.Chmod(destinationDir, 0755)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to change permissions"))
+	}
+
 	return nil
 }
 
@@ -137,6 +142,11 @@ func collectDaemonLogs(_ context.Context, destinationDir string) error {
 	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
+	}
+
+	err = os.Chmod(destinationDir, 0755)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to change permissions"))
 	}
 
 	return nil
@@ -174,6 +184,11 @@ func collectPanelLogs(ctx context.Context, destinationDir string) error {
 	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
+	}
+
+	err = os.Chmod(destinationDir, 0755)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to change permissions"))
 	}
 
 	return nil
@@ -257,6 +272,11 @@ func collectAdditionalLogs(_ context.Context, logs []string, destinationDir stri
 	err := utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
+	}
+
+	err = os.Chmod(destinationDir, 0755)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to change permissions"))
 	}
 
 	return nil
