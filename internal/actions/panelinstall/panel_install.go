@@ -77,8 +77,9 @@ type panelInstallState struct {
 	OSInfo        osinfo.Info
 
 	// Installation variables
-	DatabaseWasInstalled bool
-	DatabaseIsNotEmpty   bool
+	DatabaseWasInstalled     bool
+	DatabaseDirExistedBefore bool
+	DatabaseIsNotEmpty       bool
 }
 
 type databaseCredentials struct {
@@ -291,7 +292,7 @@ func Handle(cliCtx *cli.Context) error {
 
 	switch state.Database {
 	case mysqlDatabase:
-		state, err = installMySQL(cliCtx.Context, pm, state)
+		state, err = installMySQLOrMariaDB(cliCtx.Context, pm, state)
 		if err != nil {
 			return err
 		}
@@ -414,6 +415,123 @@ func isMySQLInstalled(_ context.Context) bool {
 		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
 }
 
+func installMySQLOrMariaDB(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
+	var err error
+
+	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		state.DBCreds.Port = "3306"
+	} else if state.DBCreds.Port == "" {
+		// Default port for windows
+		state.DBCreds.Port = "9306"
+	}
+
+	state, err = installMySQL(ctx, pm, state)
+	//nolint:nestif
+	if err != nil {
+		fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
+		log.Println(err)
+
+		fmt.Println("Removing MySQL server ...")
+		err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to remove MySQL server")
+		}
+
+		//nolint:goconst
+		if state.OSInfo.OS == "GNU/Linux" && !state.DatabaseDirExistedBefore && utils.IsFileExists("/var/lib/mysql") {
+			err := os.RemoveAll("/var/lib/mysql")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to remove MySQL data directory")
+			}
+		}
+
+		state, err = installMariaDB(ctx, pm, state)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to install MariaDB")
+		}
+	}
+
+	return state, nil
+}
+
+//nolint:funlen,gocognit
+func installMariaDB(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
+	fmt.Println("Installing MariaDB ...")
+
+	var err error
+
+	//nolint:nestif
+	if state.DBCreds.Host == "" {
+		if !isMySQLInstalled(ctx) {
+			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			if err != nil {
+				return state, err
+			}
+
+			state.DatabaseDirExistedBefore = true
+			if state.OSInfo.OS == "GNU/Linux" {
+				_, err := os.Stat("/var/lib/mysql")
+				if err != nil && os.IsNotExist(err) {
+					state.DatabaseDirExistedBefore = false
+				}
+			}
+
+			fmt.Println("Installing MariaDB server ...")
+			err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to install MariaDB server")
+			}
+
+			state.DatabaseWasInstalled = true
+		} else {
+			fmt.Println("MariaDB already installed")
+		}
+	}
+
+	fmt.Println("Starting MariaDB server ...")
+	if err = service.Start(ctx, "mariadb"); err != nil {
+		if err = service.Start(ctx, "mysqld"); err != nil {
+			if err = service.Start(ctx, "mysql"); err != nil {
+				return state, errors.WithMessage(err, "failed to start MariaDB server")
+			}
+		}
+	}
+
+	fmt.Println("Configuring MariaDB ...")
+	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
+		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	err = configureMysql(ctx, state.DBCreds)
+	if err != nil {
+		return state, err
+	}
+
+	state, err = checkMySQLConnection(ctx, state)
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Host == "localhost" {
+			state.DBCreds.Host = "127.0.0.1"
+		} else if state.DBCreds.Host == "127.0.0.1" {
+			state.DBCreds.Host = "localhost"
+		}
+		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	return state, err
+}
+
 //nolint:funlen,gocognit
 func installMySQL(
 	ctx context.Context,
@@ -424,13 +542,6 @@ func installMySQL(
 
 	var err error
 
-	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		state.DBCreds.Port = "3306"
-	} else if state.DBCreds.Port == "" {
-		// Default port for windows
-		state.DBCreds.Port = "9306"
-	}
-
 	//nolint:nestif
 	if state.DBCreds.Host == "" {
 		if !isMySQLInstalled(ctx) {
@@ -439,11 +550,11 @@ func installMySQL(
 				return state, err
 			}
 
-			isDataDirExistsBefore := true
+			state.DatabaseDirExistedBefore = true
 			if state.OSInfo.OS == "GNU/Linux" {
 				_, err := os.Stat("/var/lib/mysql")
 				if err != nil && os.IsNotExist(err) {
-					isDataDirExistsBefore = false
+					state.DatabaseDirExistedBefore = false
 				}
 			}
 
@@ -451,32 +562,12 @@ func installMySQL(
 				if state.OSInfo.Distribution == packagemanager.DistributionWindows {
 					return state, errors.WithMessage(err, "failed to install mysql")
 				}
-
-				fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
-				log.Println(err)
-
-				fmt.Println("Removing MySQL server ...")
-				err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
-				if err != nil {
-					return state, errors.WithMessage(err, "failed to remove MySQL server")
-				}
-
-				if state.OSInfo.OS == "GNU/Linux" && !isDataDirExistsBefore {
-					err := os.RemoveAll("/var/lib/mysql")
-					if err != nil {
-						return state, errors.WithMessage(err, "failed to remove MySQL data directory")
-					}
-				}
-
-				fmt.Println("Installing MariaDB server ...")
-				err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
-				if err != nil {
-					return state, errors.WithMessage(err, "failed to install MariaDB server")
-				}
 			}
 
 			state.DatabaseWasInstalled = true
 		} else {
+			state.DatabaseDirExistedBefore = true
+
 			fmt.Println("MySQL already installed")
 		}
 	}
