@@ -243,8 +243,15 @@ func mysqlChangeUserPassword(ctx context.Context, db *sql.DB, username, password
 }
 
 func mysqlGrantPrivileges(ctx context.Context, db *sql.DB, username, databaseName string) error {
+	version, err := mysqlVersion(ctx, db)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get mysql version")
+	}
+
+	majorVersion := strings.Split(version, ".")[0]
+
 	//nolint:gosec
-	_, err := db.ExecContext(ctx, "GRANT SELECT ON *.* TO '"+username+"'@'%'")
+	_, err = db.ExecContext(ctx, "GRANT SELECT ON *.* TO '"+username+"'@'%'")
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant select privileges")
 	}
@@ -252,15 +259,19 @@ func mysqlGrantPrivileges(ctx context.Context, db *sql.DB, username, databaseNam
 	if err != nil {
 		return errors.WithMessage(err, "failed to grant all privileges")
 	}
-	//nolint:gosec
-	_, err = db.ExecContext(ctx, "GRANT SELECT ON *.* TO '"+username+"'@'localhost'")
-	if err != nil {
-		return errors.WithMessage(err, "failed to grant select privileges")
+
+	if majorVersion != "8" {
+		//nolint:gosec
+		_, err = db.ExecContext(ctx, "GRANT SELECT ON *.* TO '"+username+"'@'localhost'")
+		if err != nil {
+			return errors.WithMessage(err, "failed to grant select privileges")
+		}
+		_, err = db.ExecContext(ctx, "GRANT ALL PRIVILEGES ON "+databaseName+".* TO '"+username+"'@'localhost'")
+		if err != nil {
+			return errors.WithMessage(err, "failed to grant all privileges")
+		}
 	}
-	_, err = db.ExecContext(ctx, "GRANT ALL PRIVILEGES ON "+databaseName+".* TO '"+username+"'@'localhost'")
-	if err != nil {
-		return errors.WithMessage(err, "failed to grant all privileges")
-	}
+
 	_, err = db.ExecContext(ctx, "FLUSH PRIVILEGES")
 	if err != nil {
 		return errors.WithMessage(err, "failed to flush privileges")
