@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"io/fs"
+	"log"
 	"os"
 
 	"github.com/gameap/gameapctl/pkg/service"
@@ -15,7 +16,7 @@ import (
 func Restart(ctx context.Context) error {
 	init, err := detectInit(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to detect init")
+		log.Println("Failed to detect init:", err)
 	}
 
 	switch init {
