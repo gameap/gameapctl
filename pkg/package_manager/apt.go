@@ -333,11 +333,10 @@ func (e *extendedAPT) preRemovingSteps(ctx context.Context, packs ...string) err
 
 	for _, pack := range packs {
 		if pack == MySQLServerPackage &&
-			osInfo.Distribution == DistributionUbuntu &&
-			utils.Contains([]string{"focal", "jammy", "kinetic", "lunar", "mantic"}, osInfo.DistributionCodename) {
-			err := e.Purge(ctx, "mysql-server-8.0")
+			(osInfo.Distribution == DistributionUbuntu || osInfo.Distribution == DistributionDebian) {
+			err := e.apt.Purge(ctx, "mysql*")
 			if err != nil {
-				return err
+				return errors.WithMessage(err, "failed to purge mysql packages")
 			}
 		}
 	}
