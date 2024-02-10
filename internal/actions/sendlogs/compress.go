@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // https://gist.github.com/mimoo/25fc9716e0f1353791f5908f94d6e726
@@ -31,6 +32,7 @@ func compress(src string, buf io.Writer) error {
 
 		// must provide real name
 		// (see https://golang.org/src/archive/tar/common.go?#L626)
+		header.Name = strings.TrimPrefix(header.Name, src)
 		header.Name = filepath.ToSlash(file)
 
 		// write header

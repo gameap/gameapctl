@@ -61,7 +61,7 @@ func Load(ctx context.Context) (srv Service, err error) {
 	once := sync.Once{}
 	once.Do(func() {
 		switch osInfo.Distribution {
-		case "debian", "ubuntu", "centos":
+		case "debian", "ubuntu", "centos", "almalinux", "rocky", "fedora", "rhel", "opensuse", "sles":
 			_, err = exec.LookPath("service")
 			if err == nil {
 				service = NewBasic()
