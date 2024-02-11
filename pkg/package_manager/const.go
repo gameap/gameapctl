@@ -23,6 +23,7 @@ const XZUtilsPackage = "xz-utils"
 const DistributionDebian = "debian"
 const DistributionUbuntu = "ubuntu"
 const DistributionCentOS = "centos"
+const DistributionAmazon = "amzn"
 const DistributionAlmaLinux = "almalinux"
 const DistributionWindows = "windows"
 
