@@ -155,22 +155,23 @@ func collectDaemonLogs(_ context.Context, destinationDir string) error {
 func collectPanelLogs(ctx context.Context, destinationDir string) error {
 	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to load panel install state")
+		// Just log the error and continue
+		log.Println(errors.WithMessage(err, "failed to load panel install state"))
 	}
 
 	destinationDir = filepath.Join(destinationDir, "panel")
 
-	path := state.Path
-	if path == "" {
-		path = defaultPanelInstallPath
+	panelPath := state.Path
+	if panelPath == "" {
+		panelPath = defaultPanelInstallPath
 	}
 
-	if !utils.IsFileExists(path) {
+	if !utils.IsFileExists(panelPath) {
 		// skip
 		return nil
 	}
 
-	logPath := filepath.Join(path, "storage", "logs")
+	logPath := filepath.Join(panelPath, "storage", "logs")
 	if !utils.IsFileExists(logPath) {
 		// skip
 		return nil
