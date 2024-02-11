@@ -214,3 +214,36 @@ func warning(ctx context.Context, state panelInstallState, text string) error {
 
 	return err
 }
+
+func warningAskForAction(
+	ctx context.Context,
+	state panelInstallState,
+	text string,
+	actionText string,
+	action func(context.Context) error,
+) error {
+	fmt.Println()
+	fmt.Println(text)
+
+	if state.SkipWarnings || state.NonInteractive {
+		return nil
+	}
+
+	_, err := utils.Ask(ctx, actionText, false, func(s string) (bool, string, error) {
+		if s == "y" || s == "Y" {
+			err := action(ctx)
+			if err != nil {
+				return false, err.Error(), err
+			}
+
+			return true, "", nil
+		}
+		if s == "n" || s == "N" {
+			return true, "", nil
+		}
+
+		return false, "Please answer y or n.", nil
+	})
+
+	return err
+}

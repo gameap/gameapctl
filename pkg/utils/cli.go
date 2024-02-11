@@ -29,6 +29,8 @@ func readStdin(ctx context.Context) string {
 	}
 }
 
+// ValidateFunc is a function that validates the input string.
+// It returns a boolean indicating whether the input is valid, a message to display to the user, and an error.
 type ValidateFunc func(string) (ok bool, message string, err error)
 
 func Ask(ctx context.Context, question string, allowEmpty bool, validate ValidateFunc) (string, error) {

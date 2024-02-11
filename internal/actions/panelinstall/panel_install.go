@@ -224,6 +224,11 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
+	state, err = checkSELinux(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check selinux")
+	}
+
 	fmt.Println("Checking for updates ...")
 	if err = pm.CheckForUpdates(cliCtx.Context); err != nil {
 		return errors.WithMessage(err, "failed to check for updates")

@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/gameap/gameapctl/pkg/fixer"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -238,6 +240,38 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 					"You can specify other available port. "+
 					"Further installation may fail.", state.Host, state.Port,
 			),
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	return state, nil
+}
+
+func checkSELinux(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	if runtime.GOOS == "windows" {
+		return state, nil
+	}
+
+	enabled, err := fixer.IsSELinuxEnabled(ctx)
+	if err != nil {
+		return state, err
+	}
+
+	if enabled {
+		err := warningAskForAction(ctx, state,
+			"SELinux is enabled. "+
+				"The panel installation may fail due to the lack of necessary permissions.",
+			"Do you want to disable SELinux? (Y/n): ",
+			func(ctx context.Context) error {
+				err := fixer.DisableSELinux(ctx)
+				if err != nil {
+					return errors.WithMessage(err, "failed to disable SELinux")
+				}
+
+				return nil
+			},
 		)
 		if err != nil {
 			return state, err
