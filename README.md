@@ -31,14 +31,20 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### CentOS
 
-| Version  | Supported | Notes                                  |
-|----------|----------|----------------------------------------|
-| Stream 9 | ✔        | Lates manual test (v0.6.1): 17.11.2023 |
-| Stream 8 | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
-| 7        | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
+| Version  | Supported | Notes                                   |
+|----------|----------|-----------------------------------------|
+| Stream 9 | ✔        | Latest manual test (v0.6.1): 17.11.2023 |
+| Stream 8 | ✔        | Latest manual test (v0.6.2): 17.11.2023 |
+| 7        | ✔        | Latest manual test (v0.6.2): 17.11.2023 |
 
 ### AlmaLinux
 
-| Version | Supported | Notes                                     |
-|---------|----------|-------------------------------------------|
-| 9       | ✔        | Lates manual test (v0.6.10): 12.02.2024   |
+| Version | Supported | Notes                                    |
+|---------|----------|------------------------------------------|
+| 9       | ✔        | Latest manual test (v0.6.10): 12.02.2024 |
+
+### Amazon Linux
+
+| Version | Supported | Notes                                                                                                                                      |
+|---------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| 2023    | ⚠️        | Latest manual test (v0.7.1): 12.02.2024<br/>Web part tested with SQLite Database<br/>Amazon Linux 2023 no longer ships any i686 user space |
