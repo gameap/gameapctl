@@ -45,20 +45,29 @@ func Move(src string, dst string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		err = copy.Copy(src, dst)
-		if err != nil {
-			return errors.WithMessage(err, "failed to copy files")
-		}
-
-		err = os.RemoveAll(src)
-		if err != nil {
-			return errors.WithMessage(err, "failed to remove files from source directory")
-		}
-
-		return nil
+		return moveCrossDevice(src, dst)
 	}
 
-	return os.Rename(src, dst)
+	err = os.Rename(src, dst)
+	if err != nil && strings.Contains(err.Error(), "cross-device link") {
+		return moveCrossDevice(src, dst)
+	}
+
+	return err
+}
+
+func moveCrossDevice(src string, dst string) error {
+	err := copy.Copy(src, dst)
+	if err != nil {
+		return errors.WithMessage(err, "failed to copy files")
+	}
+
+	err = os.RemoveAll(src)
+	if err != nil {
+		return errors.WithMessage(err, "failed to remove files from source directory")
+	}
+
+	return nil
 }
 
 func Copy(src string, dst string) error {
