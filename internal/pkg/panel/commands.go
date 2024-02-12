@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -131,6 +132,22 @@ func ChangePassword(_ context.Context, path, username, password string) error {
 	cmd.Stderr = log.Writer()
 
 	err = cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute artisan command")
+	}
+
+	return nil
+}
+
+func UpgradeGames(_ context.Context, path string) error {
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(path, "artisan"), "games:upgrade",
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	err = utils.ExecCommand(cmdName, args...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute artisan command")
 	}

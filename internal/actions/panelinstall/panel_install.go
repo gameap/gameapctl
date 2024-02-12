@@ -361,6 +361,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to chown gameap directory")
 	}
 
+	err = panel.UpgradeGames(cliCtx.Context, state.Path)
+	if err != nil {
+		// Don't return error here
+		log.Println("Failed to upgrade games: ", err)
+	}
+
 	if state.WebServer != noneWebServer {
 		fmt.Println("Checking panel installation ...")
 		if state, err = checkInstallation(cliCtx.Context, state); err != nil {
