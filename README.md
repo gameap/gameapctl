@@ -36,3 +36,9 @@ Other operating systems may work as well, if they can run the required dependenc
 | Stream 9 | ✔        | Lates manual test (v0.6.1): 17.11.2023 |
 | Stream 8 | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
 | 7        | ✔        | Lates manual test (v0.6.2): 17.11.2023 |
+
+### AlmaLinux
+
+| Version | Supported | Notes                                     |
+|---------|----------|-------------------------------------------|
+| 9       | ✔        | Lates manual test (v0.6.10): 12.02.2024   |
