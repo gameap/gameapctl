@@ -31,6 +31,9 @@ jobs:
         with:
           version: v1.55.1
 
+      - name: Unit Tests
+        run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=coverage.out
+
       - name: Build
         run: |
           cd cmd/gameapctl/
