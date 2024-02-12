@@ -1062,7 +1062,7 @@ func installNginx(
 	switch {
 	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
 
-		err = os.Rename(nginxMainConf, nginxMainConf+".old")
+		err = utils.Move(nginxMainConf, nginxMainConf+".old")
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to rename config")
 		}

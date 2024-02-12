@@ -443,7 +443,7 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 			return err
 		}
 		for _, entry := range entries {
-			err = os.Rename(filepath.Join(d, entry.Name()), filepath.Join(p.DefaultInstallPath, entry.Name()))
+			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(p.DefaultInstallPath, entry.Name()))
 			if err != nil {
 				return errors.WithMessage(err, "failed to move file")
 			}

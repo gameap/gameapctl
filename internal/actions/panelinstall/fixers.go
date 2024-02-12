@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/gameap/gameapctl/pkg/fixer"
 	"github.com/gameap/gameapctl/pkg/service"
@@ -39,7 +38,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			FixFunc: func(ctx context.Context) error {
 				log.Println("Disabling nginx default.conf config")
 
-				err = os.Rename("/etc/nginx/conf.d/default.conf", "/etc/nginx/conf.d/default.conf.disabled")
+				err = utils.Move("/etc/nginx/conf.d/default.conf", "/etc/nginx/conf.d/default.conf.disabled")
 				if err != nil {
 					return errors.WithMessage(err, "failed to rename default nginx config")
 				}

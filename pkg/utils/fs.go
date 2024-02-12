@@ -162,7 +162,7 @@ func findInFileAndReplaceOrAdd(ctx context.Context, path string, replaceMap map[
 	if err != nil {
 		return err
 	}
-	err = os.Rename(tmpFile.Name(), path)
+	err = Move(tmpFile.Name(), path)
 	if err != nil {
 		return err
 	}
