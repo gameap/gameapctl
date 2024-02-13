@@ -60,8 +60,10 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to create temp file")
 	}
 
+	backupPanelDir := filepath.Join(backupDir, "gameap")
+
 	fmt.Println("Backup GameAP ...")
-	err = utils.Move(state.Path, backupDir)
+	err = utils.Move(state.Path, backupPanelDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to backup")
 	}
@@ -72,7 +74,7 @@ func Handle(cliCtx *cli.Context) error {
 		fmt.Println("Failed to upgrade GameAP: ", err)
 		fmt.Println("Restoring backup ...")
 
-		backupErr := restoreBackup(ctx, backupDir, state.Path)
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
 			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
@@ -81,9 +83,9 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to upgrade")
 	}
 
-	err = utils.Copy(filepath.Join(backupDir, ".env"), filepath.Join(state.Path, ".env"))
+	err = utils.Copy(filepath.Join(backupPanelDir, ".env"), filepath.Join(state.Path, ".env"))
 	if err != nil {
-		backupErr := restoreBackup(ctx, backupDir, state.Path)
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
 			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
@@ -92,9 +94,9 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to upgrade")
 	}
 
-	err = utils.Copy(filepath.Join(backupDir, ".env"), filepath.Join(state.Path, ".env"))
+	err = utils.Copy(filepath.Join(backupPanelDir, ".env"), filepath.Join(state.Path, ".env"))
 	if err != nil {
-		backupErr := restoreBackup(ctx, backupDir, state.Path)
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
 			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
@@ -103,9 +105,9 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to upgrade")
 	}
 
-	err = utils.Copy(filepath.Join(backupDir, "storage", "app"), filepath.Join(state.Path, "storage", "app"))
+	err = utils.Copy(filepath.Join(backupPanelDir, "storage", "app"), filepath.Join(state.Path, "storage", "app"))
 	if err != nil {
-		backupErr := restoreBackup(ctx, backupDir, state.Path)
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
 			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
