@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:funlen,gocyclo
+//nolint:funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
@@ -114,6 +114,18 @@ func Handle(cliCtx *cli.Context) error {
 		}
 
 		return errors.WithMessage(err, "failed to upgrade")
+	}
+
+	fmt.Println("Updating privileges ...")
+	err = panel.SetPrivileges(ctx, state.Path)
+	if err != nil {
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
+		if backupErr != nil {
+			fmt.Println("Failed to restore backup: ", backupErr)
+			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+		}
+
+		return errors.WithMessage(err, "failed to set privileges")
 	}
 
 	defer func() {

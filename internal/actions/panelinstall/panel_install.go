@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -1190,25 +1189,11 @@ func clearGameAPCache(ctx context.Context, state panelInstallState) (panelInstal
 	return state, nil
 }
 
-func chownRGameapDirectory(_ context.Context, state panelInstallState) (panelInstallState, error) {
+func chownRGameapDirectory(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Updating files permissions ...")
 
-		users := []string{"www-data", "apache", "nginx"}
-
-		for _, u := range users {
-			if uinfo, err := user.Lookup(u); err == nil {
-				err = utils.ExecCommand(
-					"chown", "-R",
-					fmt.Sprintf("%s:%s", uinfo.Uid, uinfo.Gid), state.Path,
-				)
-				if err != nil {
-					return state, errors.WithMessage(err, "failed to change owner")
-				}
-
-				break
-			}
-		}
+		return state, panel.SetPrivileges(ctx, state.Path)
 	}
 
 	return state, nil
