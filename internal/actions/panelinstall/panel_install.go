@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -19,7 +18,6 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/internal/pkg/panel"
-	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/service"
@@ -361,6 +359,7 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to chown gameap directory")
 	}
 
+	fmt.Println("Upgrading games ...")
 	err = panel.UpgradeGames(cliCtx.Context, state.Path)
 	if err != nil {
 		// Don't return error here
@@ -846,42 +845,7 @@ func checkPHPExtensions(_ context.Context, state panelInstallState) (panelInstal
 }
 
 func installGameAP(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	path := state.Path
-
-	tempDir, err := os.MkdirTemp("", "gameap")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to create temp dir")
-	}
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			log.Println(err)
-		}
-	}(tempDir)
-
-	fmt.Println("Downloading GameAP ...")
-	downloadPath, err := url.JoinPath(gameap.Repository(), "gameap/latest.tar.gz")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to join url")
-	}
-
-	err = utils.Download(ctx, downloadPath, tempDir)
-	if err != nil {
-		return state, errors.WithMessagef(err, "failed to download gameap from '%s'", downloadPath)
-	}
-
-	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to move gameap")
-	}
-
-	fmt.Println("Installing GameAP ...")
-	err = utils.Copy(path+string(os.PathSeparator)+".env.example", path+string(os.PathSeparator)+".env")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to copy .env.example")
-	}
-
-	return state, nil
+	return state, panel.SetupGameAPFromRepo(ctx, state.Path)
 }
 
 func installGameAPFromGithub(
@@ -889,52 +853,7 @@ func installGameAPFromGithub(
 	pm packagemanager.PackageManager,
 	state panelInstallState,
 ) (panelInstallState, error) {
-	var err error
-
-	fmt.Println("Installing git ...")
-	if err = pm.Install(ctx, packagemanager.GitPackage); err != nil {
-		return state, errors.WithMessage(err, "failed to install git")
-	}
-
-	fmt.Println("Installing composer ...")
-	if err = pm.Install(ctx, packagemanager.ComposerPackage); err != nil {
-		return state, errors.WithMessage(err, "failed to install composer")
-	}
-
-	fmt.Println("Installing nodejs ...")
-	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
-		return state, errors.WithMessage(err, "failed to install nodejs")
-	}
-
-	fmt.Println("Cloning gameap ...")
-	err = utils.ExecCommand(
-		"git", "clone", "-b", state.Branch, "https://github.com/et-nik/gameap.git", state.Path,
-	)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to clone gameap from github")
-	}
-
-	fmt.Println("Installing composer dependencies ...")
-
-	cmdName, args, err := packagemanager.DefinePHPComposerCommandAndArgs(
-		"update", "--no-dev", "--optimize-autoloader", "--no-interaction", "--working-dir", state.Path,
-	)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to define php composer command and args")
-	}
-
-	err = utils.ExecCommand(cmdName, args...)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to run composer update")
-	}
-
-	fmt.Println("Building styles ...")
-	err = panel.BuildStyles(ctx, state.Path)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to build styles")
-	}
-
-	return state, nil
+	return state, panel.SetupGameAPFromGithub(ctx, pm, state.Path, state.Branch)
 }
 
 func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallState, error) {

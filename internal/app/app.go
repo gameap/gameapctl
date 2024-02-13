@@ -18,6 +18,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/daemonstop"
 	"github.com/gameap/gameapctl/internal/actions/daemonupdate"
 	"github.com/gameap/gameapctl/internal/actions/panelinstall"
+	"github.com/gameap/gameapctl/internal/actions/panelupdate"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -207,6 +208,12 @@ func Run(args []string) {
 								Name: "database-password",
 							},
 						},
+					},
+					{
+						Name:    "upgrade",
+						Aliases: []string{"update", "u"},
+						Usage:   "Update panel to a new version",
+						Action:  panelupdate.Handle,
 					},
 				},
 			},
