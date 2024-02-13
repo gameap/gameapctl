@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1206,51 +1203,7 @@ func checkInstallation(ctx context.Context, state panelInstallState) (panelInsta
 		return state, errors.WithMessage(err, "failed to clear panel cache")
 	}
 
-	hostPort := state.Host
-	if state.Port != "80" && state.Port != "433" {
-		hostPort = state.Host + ":" + state.Port
-	}
-
-	u := "http://" + hostPort + "/api/healthz"
-	if state.HTTPS {
-		u = "https://" + hostPort + "/api/healthz"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return state, err
-	}
-	//nolint:bodyclose
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return state, err
-	}
-	defer func(body io.ReadCloser) {
-		err := body.Close()
-		if err != nil {
-			log.Println(errors.WithMessage(err, "failed to close response body"))
-		}
-	}(response.Body)
-
-	if response.StatusCode != http.StatusOK {
-		return state, errors.New("unsuccessful response from panel")
-	}
-
-	r := struct {
-		Status  string `json:"status"`
-		Message string `json:"message"`
-	}{}
-
-	err = json.NewDecoder(response.Body).Decode(&r)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to decode response")
-	}
-
-	if r.Status != "ok" {
-		return state, errors.New("unsuccessful response from panel")
-	}
-
-	return state, nil
+	return state, panel.CheckInstallation(ctx, state.Host, state.Port, state.HTTPS)
 }
 
 func savePanelInstallationDetails(ctx context.Context, state panelInstallState) error {

@@ -197,7 +197,7 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		},
 		Timeout: 2 * time.Second,
 	}
-	url := "http://" + state.Host + ":" + state.Port //nolint:goconst
+	url := "http://" + state.Host + ":" + state.Port
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return state, err

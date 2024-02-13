@@ -2,8 +2,11 @@ package panel
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 
@@ -93,6 +96,54 @@ func SetupGameAPFromRepo(ctx context.Context, path string) error {
 	err = utils.Move(tempDir+string(os.PathSeparator)+"gameap", path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to move gameap")
+	}
+
+	return nil
+}
+
+func CheckInstallation(ctx context.Context, host, port string, https bool) error {
+	hostPort := host
+	if port != "80" && port != "433" {
+		hostPort = host + ":" + port
+	}
+
+	u := "http://" + hostPort + "/api/healthz"
+	if https {
+		u = "https://" + hostPort + "/api/healthz"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	//nolint:bodyclose
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to close response body"))
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		return errors.New("unsuccessful response from panel")
+	}
+
+	r := struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}{}
+
+	err = json.NewDecoder(response.Body).Decode(&r)
+	if err != nil {
+		return errors.WithMessage(err, "failed to decode response")
+	}
+
+	if r.Status != "ok" {
+		return errors.New("unsuccessful response from panel")
 	}
 
 	return nil

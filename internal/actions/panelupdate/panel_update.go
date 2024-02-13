@@ -15,13 +15,13 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
 	fmt.Println("GameAP update")
 
-	pm, err := packagemanager.Load(cliCtx.Context)
+	pm, err := packagemanager.Load(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
@@ -49,7 +49,7 @@ func Handle(cliCtx *cli.Context) error {
 		err = panel.SetupGameAPFromGithub(ctx, pm, tmpPanelDir, state.Branch)
 	} else {
 		fmt.Println("Setup GameAP ...")
-		err = panel.SetupGameAPFromRepo(cliCtx.Context, tmpPanelDir)
+		err = panel.SetupGameAPFromRepo(ctx, tmpPanelDir)
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
@@ -128,6 +128,38 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to set privileges")
 	}
 
+	fmt.Println("Upgrading games ...")
+	err = panel.UpgradeGames(ctx, state.Path)
+	if err != nil {
+		// Don't return error here
+		log.Println("Failed to upgrade games: ", err)
+	}
+
+	err = panel.ClearCache(ctx, state.Path)
+	if err != nil {
+		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
+		if backupErr != nil {
+			fmt.Println("Failed to restore backup: ", backupErr)
+			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+		}
+
+		return errors.WithMessage(err, "failed to set privileges")
+	}
+
+	err = panel.CheckInstallation(ctx, state.Host, state.Port, false)
+	if err != nil {
+		err = panel.CheckInstallation(ctx, state.Host, state.Port, true)
+		if err != nil {
+			backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
+			if backupErr != nil {
+				fmt.Println("Failed to restore backup: ", backupErr)
+				log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			}
+
+			return errors.WithMessage(err, "failed to check installation")
+		}
+	}
+
 	defer func() {
 		err := os.RemoveAll(backupDir)
 		if err != nil {
@@ -135,12 +167,7 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}()
 
-	fmt.Println("Upgrading games ...")
-	err = panel.UpgradeGames(cliCtx.Context, state.Path)
-	if err != nil {
-		// Don't return error here
-		log.Println("Failed to upgrade games: ", err)
-	}
+	fmt.Println("GameAP updated")
 
 	return nil
 }
@@ -150,6 +177,10 @@ func restoreBackup(_ context.Context, backupDir, path string) error {
 		fmt.Println("Removing GameAP ...")
 		err := os.RemoveAll(path)
 		if err != nil {
+			fmt.Println()
+			fmt.Println("Backup directory: ", backupDir)
+			fmt.Println()
+
 			return errors.WithMessage(err, "failed to remove current gameap dir before backup restore")
 		}
 	}
