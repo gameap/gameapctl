@@ -128,13 +128,7 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to set privileges")
 	}
 
-	fmt.Println("Upgrading games ...")
-	err = panel.UpgradeGames(ctx, state.Path)
-	if err != nil {
-		// Don't return error here
-		log.Println("Failed to upgrade games: ", err)
-	}
-
+	fmt.Println("Clearing cache ...")
 	err = panel.ClearCache(ctx, state.Path)
 	if err != nil {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
@@ -144,6 +138,13 @@ func Handle(cliCtx *cli.Context) error {
 		}
 
 		return errors.WithMessage(err, "failed to set privileges")
+	}
+
+	fmt.Println("Upgrading games ...")
+	err = panel.UpgradeGames(ctx, state.Path)
+	if err != nil {
+		// Don't return error here
+		log.Println("Failed to upgrade games: ", err)
 	}
 
 	err = panel.CheckInstallation(ctx, state.Host, state.Port, false)
