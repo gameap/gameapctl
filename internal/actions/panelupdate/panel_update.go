@@ -42,12 +42,14 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}()
 
+	tmpPanelDir := filepath.Join(tmpDir, "gameap")
+
 	if state.FromGithub {
 		fmt.Println("Setup GameAP from github ...")
-		err = panel.SetupGameAPFromGithub(ctx, pm, tmpDir, state.Branch)
+		err = panel.SetupGameAPFromGithub(ctx, pm, tmpPanelDir, state.Branch)
 	} else {
 		fmt.Println("Setup GameAP ...")
-		err = panel.SetupGameAPFromRepo(cliCtx.Context, tmpDir)
+		err = panel.SetupGameAPFromRepo(cliCtx.Context, tmpPanelDir)
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to download gameap")
@@ -65,7 +67,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Upgrading GameAP ...")
-	err = utils.Move(tmpDir, state.Path)
+	err = utils.Move(tmpPanelDir, state.Path)
 	if err != nil {
 		fmt.Println("Failed to upgrade GameAP: ", err)
 		fmt.Println("Restoring backup ...")
