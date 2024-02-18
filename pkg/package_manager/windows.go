@@ -418,6 +418,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 				";?\\s*extension=intl\\s*":       "extension=intl",
 				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
 				";?\\s*extension=openssl\\s*":    "extension=openssl",
+				";?\\s*extension=sockets\\s*":    "extension=sockets",
 				";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
 				";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
 				";?\\s*extension=zip\\s*":        "extension=zip",
