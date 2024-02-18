@@ -108,12 +108,7 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 	NginxPackage: {
 		DistributionWindows: {
 			"nginx_conf": func(ctx context.Context) (string, error) {
-				var errNotFound NotFoundError
 				path, err := defineNginxPath(ctx)
-				if err != nil && errors.As(err, &errNotFound) {
-					// Default path
-					path = "C:\\gameap\\tools\\nginx"
-				}
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")
 				}
@@ -121,12 +116,7 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 				return filepath.Join(path, "conf", "nginx.conf"), nil
 			},
 			"gameap_host_conf": func(ctx context.Context) (string, error) {
-				var errNotFound NotFoundError
 				path, err := defineNginxPath(ctx)
-				if err != nil && errors.As(err, &errNotFound) {
-					// Default path
-					path = "C:\\gameap\\tools\\nginx"
-				}
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")
 				}

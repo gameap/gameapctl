@@ -104,7 +104,11 @@ func checkNginxWebServer(ctx context.Context, state panelInstallState) (panelIns
 			return state, err
 		}
 	} else {
+		var errNotFound packagemanager.NotFoundError
 		nginxConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "nginx_conf")
+		if err != nil && errors.As(err, errNotFound) {
+			return state, nil
+		}
 		if err != nil {
 			return state, err
 		}
@@ -120,7 +124,11 @@ func checkNginxWebServer(ctx context.Context, state panelInstallState) (panelIns
 		}
 	}
 
+	var errNotFound packagemanager.NotFoundError
 	gameapConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "gameap_host_conf")
+	if err != nil && errors.As(err, errNotFound) {
+		return state, nil
+	}
 	if err != nil {
 		return state, err
 	}
