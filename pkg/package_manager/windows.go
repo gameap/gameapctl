@@ -68,8 +68,8 @@ var repository = map[string]pack{
 	PHPPackage: {
 		LookupPath: []string{"php"},
 		DownloadURLs: []string{
+			"https://windows.php.net/downloads/releases/php-8.3.3-Win32-vs16-x64.zip",
 			"https://windows.php.net/downloads/releases/php-8.2.2-Win32-vs16-x64.zip",
-			"https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip",
 		},
 		DefaultInstallPath: "C:\\php",
 		ServiceConfig: &WinSWServiceConfig{
@@ -362,7 +362,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			scannedFileDir := filepath.Dir(firstScannedFile)
 
 			exts := []string{
-				"bz2", "curl", "fileinfo", "gd2", "gmp", "intl",
+				"bz2", "curl", "fileinfo", "gd", "gmp", "intl",
 				"mbstring", "openssl", "pdo_mysql", "pdo_sqlite", "zip",
 			}
 
