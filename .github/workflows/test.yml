@@ -142,7 +142,7 @@ jobs:
       - name: Tests
         run: |
           sc delete nginx
-          del C:\tools\nginx-1.25.3
+          del /F /Q C:\tools\nginx-1.25.3
           cd .\cmd\gameapctl\
           go build .
           .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
