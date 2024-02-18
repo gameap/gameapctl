@@ -413,7 +413,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 				";?\\s*extension=bz2\\s*":        "extension=bz2",
 				";?\\s*extension=curl\\s*":       "extension=curl",
 				";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
-				";?\\s*extension=gd\\s*":         "extension=gd2",
+				";?\\s*extension=gd\\s*":         "extension=gd",
 				";?\\s*extension=gmp\\s*":        "extension=gmp",
 				";?\\s*extension=intl\\s*":       "extension=intl",
 				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
