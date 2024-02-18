@@ -196,6 +196,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	}
 
 	log.Println("\n", cmd.String())
+	log.Println(buf.String())
 
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
