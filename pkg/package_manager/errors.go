@@ -22,7 +22,17 @@ func (e InvalidDirContentsError) Error() string {
 	return fmt.Sprintf("invalid contents in '%s' directory", string(e))
 }
 
-type PackageNotFoundError string
+type NotFoundError string
+
+func NewErrNotFound(e string) NotFoundError {
+	return NotFoundError(e)
+}
+
+func (e NotFoundError) Error() string {
+	return string(e)
+}
+
+type PackageNotFoundError NotFoundError
 
 func NewErrPackageNotFound(name string) PackageNotFoundError {
 	return PackageNotFoundError(name)

@@ -108,7 +108,12 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 	NginxPackage: {
 		DistributionWindows: {
 			"nginx_conf": func(ctx context.Context) (string, error) {
+				var errNotFound NotFoundError
 				path, err := defineNginxPath(ctx)
+				if err != nil && errors.As(err, &errNotFound) {
+					// Default path
+					path = "C:\\gameap\\tools\\nginx"
+				}
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")
 				}
@@ -116,7 +121,12 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 				return filepath.Join(path, "conf", "nginx.conf"), nil
 			},
 			"gameap_host_conf": func(ctx context.Context) (string, error) {
+				var errNotFound NotFoundError
 				path, err := defineNginxPath(ctx)
+				if err != nil && errors.As(err, &errNotFound) {
+					// Default path
+					path = "C:\\gameap\\tools\\nginx"
+				}
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")
 				}
@@ -165,7 +175,7 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 func defineNginxPath(ctx context.Context) (string, error) {
 	path, err := findNginxDirWindows(ctx)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to find nginx directory")
+		return "", NewErrNotFound("failed to find nginx directory")
 	}
 
 	if path == "" {
@@ -185,7 +195,7 @@ func defineNginxPath(ctx context.Context) (string, error) {
 	}
 
 	if path == "" {
-		return "", errors.New("nginx binary not found")
+		return "", NewErrNotFound("nginx binary not found")
 	}
 
 	if _, err := os.Stat(filepath.Join(path, "nginx.exe")); err == nil {
