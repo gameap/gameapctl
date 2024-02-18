@@ -14,15 +14,17 @@ import (
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 )
 
 type pack struct {
-	DownloadURLs       []string
-	LookupPath         []string
-	InstallCommand     string
-	DefaultInstallPath string
-	ServiceConfig      *WinSWServiceConfig
-	Dependencies       []string
+	DownloadURLs            []string
+	LookupPath              []string
+	InstallCommand          string
+	AllowedInstallExitCodes []int
+	DefaultInstallPath      string
+	ServiceConfig           *WinSWServiceConfig
+	Dependencies            []string
 }
 
 const (
@@ -93,6 +95,9 @@ var repository = map[string]pack{
 			"https://aka.ms/vs/16/release/VC_redist.x64.exe",
 		},
 		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
+		AllowedInstallExitCodes: []int{
+			1638, // A newer version is already installed or already installed
+		},
 	},
 	WinSWPackage: {
 		LookupPath: []string{"winsw"},
@@ -228,6 +233,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		log.Println('\n', cmd.String())
 		err = cmd.Run()
 		if err != nil {
+			if len(p.AllowedInstallExitCodes) > 0 && lo.Contains(p.AllowedInstallExitCodes, cmd.ProcessState.ExitCode()) {
+				log.Println(errors.WithMessage(err, "failed to execute install command"))
+				log.Println("Exit code is allowed")
+
+				return nil
+			}
+
 			return errors.WithMessage(err, "failed to execute install command")
 		}
 	}
