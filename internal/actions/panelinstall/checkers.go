@@ -219,7 +219,8 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		(errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(err, context.Canceled) ||
 			(errors.As(err, &netErr) && netErr.Timeout()) ||
-			(errors.As(err, &sysErr) && errors.Is(sysErr.Err, syscall.ECONNREFUSED))) {
+			(errors.As(err, &sysErr) && errors.Is(sysErr.Err, syscall.ECONNREFUSED)) ||
+			strings.Contains(err.Error(), "No connection could be made because the target machine actively refused it")) {
 		// OK
 		return state, nil
 	}
