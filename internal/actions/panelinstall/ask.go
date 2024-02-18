@@ -200,6 +200,7 @@ func warning(ctx context.Context, state panelInstallState, text string) error {
 
 	if state.NonInteractive {
 		log.Println(text)
+
 		return errors.New("The installation cannot be continued. Please fix it or set the --skip-warnings flag")
 	}
 
