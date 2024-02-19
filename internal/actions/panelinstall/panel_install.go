@@ -396,7 +396,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	if state.Database == sqliteDatabase {
-		fmt.Println("Database file path:", state.Path+"/database.sqlite")
+		fmt.Println("Database file path:", filepath.Join(state.Path, "database.sqlite"))
 	}
 
 	fmt.Println()
@@ -646,6 +646,14 @@ func installMySQL(
 			state.DBCreds.Host = "localhost"
 		}
 		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Port != "3306" {
+			state.DBCreds.Port = "3306"
+			state, err = checkMySQLConnection(ctx, state)
+		}
 	}
 
 	return state, err

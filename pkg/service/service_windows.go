@@ -171,6 +171,7 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil || svc == nil {
+		log.Println(err)
 		return NewNotFoundError(serviceName)
 	}
 
@@ -181,7 +182,52 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is starting\n", serviceName)
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	default:
-		return utils.ExecCommand("sc", "start", serviceName)
+		err = utils.ExecCommand("sc", "start", serviceName)
+	}
+	if err != nil {
+		return err
+	}
+
+	svc, err = findService(ctx, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if svc.State != windowsServiceStateStartPending {
+		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
+	}
+
+	return nil
+}
+
+func (s *Windows) stop(ctx context.Context, serviceName string) error {
+	svc, err := findService(ctx, serviceName)
+	if err != nil || svc == nil {
+		return NewNotFoundError(serviceName)
+	}
+
+	switch svc.State {
+	case windowsServiceStateRunning, windowsServiceStateStartPending:
+		err = utils.ExecCommand("sc", "stop", serviceName)
+	case windowsServiceStateStopped:
+		log.Printf("Service '%s' is already stopped\n", serviceName)
+	case windowsServiceStateStopPending:
+		log.Printf("Service '%s' is stopping\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
+	}
+	if err != nil {
+		return err
+	}
+
+	svc, err = findService(ctx, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if svc.State != windowsServiceStateStartPending {
+		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
 	return nil
@@ -213,29 +259,18 @@ func (s *Windows) waitStatus(ctx context.Context, serviceName string, status win
 			return nil
 		}
 
+		if svc.State != windowsServiceStateStartPending &&
+			svc.State != windowsServiceStateStopPending &&
+			svc.State != windowsServiceStateContinuePending &&
+			svc.State != windowsServiceStatePausePending {
+
+			return errors.New("failed to wait service status, service state is not pending")
+		}
+
 		checksAvailable--
 	}
 
 	return errors.New("failed to wait service status")
-}
-
-func (s *Windows) stop(ctx context.Context, serviceName string) error {
-	svc, err := findService(ctx, serviceName)
-	if err != nil || svc == nil {
-		return NewNotFoundError(serviceName)
-	}
-
-	switch svc.State {
-	case windowsServiceStateRunning, windowsServiceStateStartPending:
-		return utils.ExecCommand("sc", "stop", serviceName)
-	case windowsServiceStateStopped:
-		log.Printf("Service '%s' is already stopped\n", serviceName)
-	case windowsServiceStateStopPending:
-		log.Printf("Service '%s' is stopping\n", serviceName)
-		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
-	}
-
-	return nil
 }
 
 func IsExists(ctx context.Context, serviceName string) bool {
@@ -260,10 +295,10 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	}
 
 	log.Println("\n", cmd.String())
-	log.Println(buf.String())
 
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
+		log.Println(buf.String())
 		return nil, err
 	}
 
