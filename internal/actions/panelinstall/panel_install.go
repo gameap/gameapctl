@@ -585,10 +585,31 @@ func installMySQL(
 	}
 
 	fmt.Println("Starting MySQL server ...")
-	if err = service.Start(ctx, "mysql"); err != nil {
-		if err = service.Start(ctx, "mysqld"); err != nil {
-			if err = service.Start(ctx, "mariadb"); err != nil {
-				return state, errors.WithMessage(err, "failed to start MySQL server")
+	switch {
+	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+		var errNotFound *service.NotFoundError
+		err = service.Start(ctx, "mysql")
+		if err != nil && errors.As(err, &errNotFound) {
+			log.Println(err)
+			err = utils.ExecCommand("mysqld", "--install")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to exec 'mysqld --install' command")
+			}
+
+			err = service.Start(ctx, "mysql")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to start MySQL server after 'mysqld --install'")
+			}
+		}
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start MySQL server")
+		}
+	default:
+		if err = service.Start(ctx, "mysql"); err != nil {
+			if err = service.Start(ctx, "mysqld"); err != nil {
+				if err = service.Start(ctx, "mariadb"); err != nil {
+					return state, errors.WithMessage(err, "failed to start MySQL server")
+				}
 			}
 		}
 	}

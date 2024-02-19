@@ -60,10 +60,9 @@ var repository = map[string]pack{
 	MySQLServerPackage: {
 		LookupPath: []string{"mariadb"},
 		DownloadURLs: []string{
-			"https://mirror.23m.com/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
-			"https://ftp.bme.hu/pub/mirrors/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
+			"https://archive.mariadb.org//mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
-		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.12-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
