@@ -240,9 +240,19 @@ func mysqlChangeUserPassword(ctx context.Context, db *sql.DB, username, password
 		return errors.WithMessage(err, "failed to get mysql version")
 	}
 
-	majorVersion := strings.Split(version, ".")[0]
+	split := strings.Split(version, ".")
 
-	if majorVersion == "8" {
+	majorVersion := ""
+	minorVersion := ""
+	if len(split) > 0 {
+		majorVersion = split[0]
+	}
+	if len(split) > 1 {
+		minorVersion = split[1]
+	}
+
+	if majorVersion == "8" ||
+		(majorVersion == "10" && minorVersion == "6") { // MariaDB 10.6
 		_, err = db.ExecContext(
 			ctx,
 			"ALTER USER '"+username+"'@'%' IDENTIFIED BY '"+password+"'",
