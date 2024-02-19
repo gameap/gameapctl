@@ -536,7 +536,16 @@ func installMariaDB(
 		} else if state.DBCreds.Host == "127.0.0.1" {
 			state.DBCreds.Host = "localhost"
 		}
+
 		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Port != "3306" {
+			state.DBCreds.Port = "3306"
+			state, err = checkMySQLConnection(ctx, state)
+		}
 	}
 
 	return state, err
