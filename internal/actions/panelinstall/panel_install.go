@@ -507,10 +507,18 @@ func installMariaDB(
 	}
 
 	fmt.Println("Starting MariaDB server ...")
-	if err = service.Start(ctx, "mariadb"); err != nil {
-		if err = service.Start(ctx, "mysqld"); err != nil {
-			if err = service.Start(ctx, "mysql"); err != nil {
-				return state, errors.WithMessage(err, "failed to start MariaDB server")
+	switch {
+	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+		err = service.Start(ctx, "mariadb")
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start MariaDB server")
+		}
+	default:
+		if err = service.Start(ctx, "mysql"); err != nil {
+			if err = service.Start(ctx, "mysqld"); err != nil {
+				if err = service.Start(ctx, "mariadb"); err != nil {
+					return state, errors.WithMessage(err, "failed to start MySQL server")
+				}
 			}
 		}
 	}
