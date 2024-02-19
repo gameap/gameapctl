@@ -92,7 +92,7 @@ var repository = map[string]pack{
 			if path != "" {
 				p.ServiceConfig.Arguments = fmt.Sprintf(
 					"-b 127.0.0.1:9934 -c %s",
-					filepath.Join(filepath.Base(path), "php.ini"),
+					filepath.Join(filepath.Dir(path), "php.ini"),
 				)
 			}
 

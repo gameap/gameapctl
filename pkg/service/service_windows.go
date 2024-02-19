@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -178,11 +179,44 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is already running\n", serviceName)
 	case windowsServiceStateStartPending:
 		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	default:
 		return utils.ExecCommand("sc", "start", serviceName)
 	}
 
 	return nil
+}
+
+func (s *Windows) waitStatus(ctx context.Context, serviceName string, status windowsServiceState) error {
+	log.Println("Waiting for service status")
+
+	t := time.NewTicker(5 * time.Second)
+	defer func() {
+		t.Stop()
+	}()
+
+	checksAvailable := 15
+
+	for checksAvailable > 0 {
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		svc, err := findService(ctx, serviceName)
+		if err != nil || svc == nil {
+			return NewNotFoundError(serviceName)
+		}
+
+		if svc.State == status {
+			return nil
+		}
+
+		checksAvailable--
+	}
+
+	return errors.New("failed to wait service status")
 }
 
 func (s *Windows) stop(ctx context.Context, serviceName string) error {
@@ -198,6 +232,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is already stopped\n", serviceName)
 	case windowsServiceStateStopPending:
 		log.Printf("Service '%s' is stopping\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
 	}
 
 	return nil
