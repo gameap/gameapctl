@@ -6,8 +6,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
+	pathPkg "path"
 	"path/filepath"
 	"strings"
 
@@ -225,15 +227,26 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	for _, path := range p.DownloadURLs {
 		log.Println("Downloading file from", path, "to", dir)
 
-		if filepath.Ext(path) == ".msi" {
-			err = utils.DownloadFileOrArchive(ctx, path, dir)
+		var parsedURL *url.URL
+		parsedURL, err = url.Parse(path)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to parse url"))
+
+			continue
+		}
+
+		if filepath.Ext(parsedURL.Path) == ".msi" {
+			err = utils.DownloadFileOrArchive(
+				ctx,
+				path,
+				filepath.Join(dir, pathPkg.Base(parsedURL.Path)),
+			)
 		} else {
 			err = utils.Download(ctx, path, dir)
 		}
 
 		if err != nil {
-			log.Println("failed to download file")
-			log.Println(err)
+			log.Println(errors.WithMessage(err, "failed to download file"))
 
 			continue
 		}
