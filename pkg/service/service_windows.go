@@ -35,8 +35,15 @@ var commands = map[string]struct {
 func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	err := s.start(ctx, serviceName)
 	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			return nil
+		}
 		log.Println(err)
 	}
+	if err == nil {
+		return nil
+	}
+
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
@@ -94,6 +101,16 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 
 func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 	err := s.stop(ctx, serviceName)
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			return nil
+		}
+		log.Println(err)
+	}
+	if err == nil {
+		return nil
+	}
+
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
@@ -156,10 +173,13 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		return NewNotFoundError(serviceName)
 	}
 
-	if svc.State == windowsServiceStateStopped {
-		return utils.ExecCommand("sc", "start", serviceName)
-	} else {
+	switch svc.State {
+	case windowsServiceStateRunning:
 		log.Printf("Service '%s' is already running\n", serviceName)
+	case windowsServiceStateStartPending:
+		log.Printf("Service '%s' is starting\n", serviceName)
+	default:
+		return utils.ExecCommand("sc", "start", serviceName)
 	}
 
 	return nil
@@ -171,10 +191,13 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 		return NewNotFoundError(serviceName)
 	}
 
-	if svc.State == windowsServiceStateRunning {
+	switch svc.State {
+	case windowsServiceStateRunning, windowsServiceStateStartPending:
 		return utils.ExecCommand("sc", "stop", serviceName)
-	} else {
+	case windowsServiceStateStopped:
 		log.Printf("Service '%s' is already stopped\n", serviceName)
+	case windowsServiceStateStopPending:
+		log.Printf("Service '%s' is stopping\n", serviceName)
 	}
 
 	return nil

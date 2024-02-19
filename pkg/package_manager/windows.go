@@ -329,6 +329,9 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		return errors.WithMessage(err, "failed to marshal service config")
 	}
 
+	log.Println("Marshalled service config")
+	log.Println(string(out))
+
 	if _, err = os.Stat(servicesConfigPath); errors.Is(err, os.ErrNotExist) {
 		err = os.MkdirAll(servicesConfigPath, 0755)
 		if err != nil {
