@@ -37,6 +37,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
+		log.Println(err)
 		return err
 	}
 
@@ -45,11 +46,13 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if err == nil {
 			return nil
 		}
+		log.Println(err)
 	}
 
 	if err == nil {
 		return nil
 	}
+	log.Println(err)
 
 	if commandExists {
 		var cmd []string

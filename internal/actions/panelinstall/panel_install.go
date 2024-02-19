@@ -590,6 +590,7 @@ func installMySQL(
 		var errNotFound *service.NotFoundError
 		err = service.Start(ctx, "mysql")
 		if err != nil && errors.As(err, &errNotFound) {
+			fmt.Println("MySQL service not found, trying to install ...")
 			log.Println(err)
 			err = utils.ExecCommand("mysqld", "--install")
 			if err != nil {
