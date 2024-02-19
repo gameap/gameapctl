@@ -63,14 +63,14 @@ var repository = map[string]pack{
 	MySQLServerPackage: {
 		LookupPath: []string{"mysql", "mysqld"},
 		DownloadURLs: []string{
-			"https://archive.mariadb.org//mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
+			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
 		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	MariaDBServerPackage: {
 		LookupPath: []string{"mariadb", "mariadbd"},
 		DownloadURLs: []string{
-			"https://archive.mariadb.org//mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
+			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
 		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
@@ -225,7 +225,12 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	for _, path := range p.DownloadURLs {
 		log.Println("Downloading file from", path, "to", dir)
 
-		err = utils.Download(ctx, path, dir)
+		if filepath.Ext(path) == ".msi" {
+			err = utils.DownloadFileOrArchive(ctx, path, dir)
+		} else {
+			err = utils.Download(ctx, path, dir)
+		}
+
 		if err != nil {
 			log.Println("failed to download file")
 			log.Println(err)
@@ -330,6 +335,21 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		serviceConfig.WorkingDirectory = filepath.Dir(path)
 	}
 
+	if !utils.IsFileExists(servicesConfigPath) {
+		err = os.MkdirAll(servicesConfigPath, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create services config directory")
+		}
+	}
+
+	configPath := filepath.Join(servicesConfigPath, packName+".xml")
+
+	if utils.IsFileExists(configPath) {
+		log.Printf("Service config for '%s' is already exists", packName)
+
+		return nil
+	}
+
 	out, err := xml.Marshal(struct {
 		WinSWServiceConfig
 		XMLName struct{} `xml:"service"`
@@ -341,15 +361,6 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	log.Println("Marshalled service config")
 	log.Println(string(out))
-
-	if _, err = os.Stat(servicesConfigPath); errors.Is(err, os.ErrNotExist) {
-		err = os.MkdirAll(servicesConfigPath, 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create services config directory")
-		}
-	}
-
-	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
 	log.Println("create service config")
 

@@ -40,7 +40,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if strings.Contains(err.Error(), "already running") {
 			return nil
 		}
-		log.Println(err)
+		log.Println(errors.WithMessage(err, "failed to start service"))
 	}
 	if err == nil {
 		return nil
@@ -61,10 +61,12 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		log.Println(errors.WithMessagef(err, "failed to start alias %s for service %s", alias, serviceName))
 	}
 
+	if err != nil {
+		log.Println(err)
+	}
 	if err == nil {
 		return nil
 	}
-	log.Println(err)
 
 	if commandExists {
 		var cmd []string
