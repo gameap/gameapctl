@@ -76,6 +76,19 @@ func chooseIPFromHost(host string) (string, error) {
 	return result, nil
 }
 
+func checkPath(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	if utils.IsFileExists(state.Path) {
+		err := warning(ctx, state,
+			fmt.Sprintf("Directory '%s' already exists. Please provide another path", state.Path),
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	return state, nil
+}
+
 func checkWebServers(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	if state.WebServer == noneWebServer {
 		return state, nil

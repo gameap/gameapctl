@@ -187,6 +187,11 @@ func Handle(cliCtx *cli.Context) error {
 		state.Port = "80"
 	}
 
+	state, err = checkPath(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check path")
+	}
+
 	state, err = filterAndCheckHost(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check host")

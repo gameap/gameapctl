@@ -38,37 +38,38 @@ func UpdateEnvPath() {
 		appendPath = append(appendPath, p.DefaultInstallPath)
 	}
 
-	entries, err := os.ReadDir(gameap.DefaultToolsPath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	if utils.IsFileExists(gameap.DefaultToolsPath) {
+		entries, err := os.ReadDir(gameap.DefaultToolsPath)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to read dir"))
+		} else {
+			if !utils.Contains(currentPath, gameap.DefaultToolsPath) &&
+				!utils.Contains(appendPath, gameap.DefaultToolsPath) {
+				appendPath = append(appendPath, gameap.DefaultToolsPath)
+			}
 
-	if utils.IsFileExists(gameap.DefaultToolsPath) &&
-		!utils.Contains(currentPath, gameap.DefaultToolsPath) &&
-		!utils.Contains(appendPath, gameap.DefaultToolsPath) {
-		appendPath = append(appendPath, gameap.DefaultToolsPath)
-	}
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
 
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+				path := filepath.Join(gameap.DefaultToolsPath, e.Name())
+
+				if !utils.IsFileExists(path) {
+					continue
+				}
+
+				if utils.Contains(appendPath, path) {
+					continue
+				}
+
+				if utils.Contains(currentPath, path) {
+					continue
+				}
+
+				appendPath = append(appendPath, path)
+			}
 		}
-
-		path := filepath.Join(gameap.DefaultToolsPath, e.Name())
-
-		if !utils.IsFileExists(path) {
-			continue
-		}
-
-		if utils.Contains(appendPath, path) {
-			continue
-		}
-
-		if utils.Contains(currentPath, path) {
-			continue
-		}
-
-		appendPath = append(appendPath, path)
 	}
 
 	newPath := os.Getenv("PATH") +
@@ -76,7 +77,7 @@ func UpdateEnvPath() {
 		strings.Join(appendPath, string(filepath.ListSeparator))
 
 	log.Println("New PATH:", newPath)
-	err = os.Setenv(
+	err := os.Setenv(
 		"PATH",
 		newPath,
 	)
