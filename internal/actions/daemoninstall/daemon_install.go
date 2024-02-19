@@ -236,7 +236,7 @@ func installSteamCMD(
 	return state, nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func generateCertificates(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -250,13 +250,13 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 		}
 	}
 
-	var privKey *rsa.PrivateKey
+	var privKey any
 	privKeyFilePath := filepath.Join(state.CertsPath, "server.key")
 
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		privKey, err = rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
+		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -271,9 +271,12 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 				log.Println(errors.WithMessage(err, "failed to close private key file"))
 			}
 		}(f)
+
+		privKey = privKeyRsa
+
 		err = pem.Encode(f, &pem.Block{
 			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(privKey),
+			Bytes: x509.MarshalPKCS1PrivateKey(privKeyRsa),
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to encode private key")
@@ -294,7 +297,11 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 
 		privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
-			return state, errors.WithMessage(err, "failed to parse private key")
+			log.Println(errors.WithMessage(err, "failed to parse private key"))
+			privKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to parse private key")
+			}
 		}
 	}
 
