@@ -69,9 +69,10 @@ type daemonsInstallState struct {
 	APIKey   string
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Install daemon")
+
 	state := daemonsInstallState{
 		Host:         cliCtx.String("host"),
 		Token:        cliCtx.String("token"),
@@ -106,19 +107,22 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
-	fmt.Println("Checking for curl ...")
-	if !utils.IsCommandAvailable("curl") {
-		fmt.Println("Installing curl ...")
-		if err = pm.Install(cliCtx.Context, packagemanager.CurlPackage); err != nil {
-			return errors.WithMessage(err, "failed to install curl")
+	//nolint:nestif
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Checking for curl ...")
+		if !utils.IsCommandAvailable("curl") {
+			fmt.Println("Installing curl ...")
+			if err = pm.Install(cliCtx.Context, packagemanager.CurlPackage); err != nil {
+				return errors.WithMessage(err, "failed to install curl")
+			}
 		}
-	}
 
-	fmt.Println("Checking for gpg ...")
-	if !utils.IsCommandAvailable("gpg") {
-		fmt.Println("Installing gpg ...")
-		if err = pm.Install(cliCtx.Context, packagemanager.GnuPGPackage); err != nil {
-			return errors.WithMessage(err, "failed to install gpg")
+		fmt.Println("Checking for gpg ...")
+		if !utils.IsCommandAvailable("gpg") {
+			fmt.Println("Installing gpg ...")
+			if err = pm.Install(cliCtx.Context, packagemanager.GnuPGPackage); err != nil {
+				return errors.WithMessage(err, "failed to install gpg")
+			}
 		}
 	}
 
@@ -133,12 +137,14 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed install SteamCMD")
 	}
 
-	if err = pm.Install(
-		cliCtx.Context,
-		packagemanager.UnzipPackage,
-		packagemanager.XZUtilsPackage,
-	); err != nil {
-		return errors.WithMessage(err, "failed to install archive managers")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		if err = pm.Install(
+			cliCtx.Context,
+			packagemanager.UnzipPackage,
+			packagemanager.XZUtilsPackage,
+		); err != nil {
+			return errors.WithMessage(err, "failed to install archive managers")
+		}
 	}
 
 	fmt.Println("Set user privileges ...")
@@ -159,10 +165,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
 
-	fmt.Println("Downloading runner ...")
-	state, err = downloadRunner(cliCtx.Context, state, pm)
-	if err != nil {
-		return errors.WithMessage(err, "failed to download runner")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Downloading runner ...")
+		state, err = downloadRunner(cliCtx.Context, state, pm)
+		if err != nil {
+			return errors.WithMessage(err, "failed to download runner")
+		}
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")
@@ -190,18 +198,31 @@ func installSteamCMD(
 	pm packagemanager.PackageManager,
 	state daemonsInstallState,
 ) (daemonsInstallState, error) {
-	err := utils.Download(
-		ctx,
-		"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
-		state.SteamCMDPath,
-	)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to download steamcmd")
+	if runtime.GOOS == "linux" {
+		err := utils.Download(
+			ctx,
+			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
+			state.SteamCMDPath,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to download steamcmd")
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		err := utils.Download(
+			ctx,
+			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
+			state.SteamCMDPath,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to download steamcmd")
+		}
 	}
 
 	if runtime.GOOS == "linux" && strconv.IntSize == 64 {
 		fmt.Println("Installing 32-bit libraries ...")
-		err = pm.Install(
+		err := pm.Install(
 			ctx,
 			packagemanager.Lib32GCCPackage,
 			packagemanager.Lib32Stdc6Package,

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -92,6 +94,8 @@ func Run(args []string) {
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
 
+							packagemanager.UpdateEnvPath()
+
 							return nil
 						},
 						Action: daemoninstall.Handle,
@@ -114,7 +118,12 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Update daemon to a new version",
 						Usage:       "Update daemon to a new version",
-						Action:      daemonupdate.Handle,
+						Before: func(context *cli.Context) error {
+							packagemanager.UpdateEnvPath()
+
+							return nil
+						},
+						Action: daemonupdate.Handle,
 					},
 					{
 						Name:        "start",
@@ -157,6 +166,8 @@ func Run(args []string) {
 						Usage:       "Install panel",
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
+
+							packagemanager.UpdateEnvPath()
 
 							return nil
 						},
@@ -213,7 +224,12 @@ func Run(args []string) {
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
-						Action:  panelupdate.Handle,
+						Before: func(context *cli.Context) error {
+							packagemanager.UpdateEnvPath()
+
+							return nil
+						},
+						Action: panelupdate.Handle,
 					},
 				},
 			},
@@ -275,7 +291,13 @@ func Run(args []string) {
 func initLogFile(command string) string {
 	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05.000"))
 
-	logpath := "/var/log/gameapctl/"
+	logpath := ""
+
+	if runtime.GOOS == "windows" {
+		logpath = "C:\\gameap\\logs\\"
+	} else {
+		logpath = "/var/log/gameapctl/"
+	}
 
 	if _, err := os.Stat(logpath); errors.Is(err, fs.ErrNotExist) {
 		err = os.Mkdir(logpath, 0755)
