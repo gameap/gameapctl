@@ -306,12 +306,18 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	}
 
 	log.Println("\n", cmd.String())
-	log.Println(buf.String())
 
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
+		log.Println(buf.String())
 		return nil, err
 	}
+
+	serviceNames := make([]string, 0, len(services))
+	for _, winservice := range services {
+		serviceNames = append(serviceNames, winservice.ServiceName)
+	}
+	log.Println("Services: ", strings.Join(serviceNames, ", "))
 
 	for _, winservice := range services {
 		if strings.ToLower(winservice.ServiceName) == strings.ToLower(serviceName) {
