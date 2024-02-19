@@ -79,7 +79,8 @@ func chooseIPFromHost(host string) (string, error) {
 func checkPath(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	if utils.IsFileExists(state.Path) {
 		err := warning(ctx, state,
-			fmt.Sprintf("Directory '%s' already exists. Please provide another path", state.Path),
+			fmt.Sprintf("Directory '%s' already exists. Files will be overwritten. "+
+				"The panel installation may also fail.", state.Path),
 		)
 		if err != nil {
 			return state, err
