@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -25,6 +26,8 @@ type pack struct {
 	DefaultInstallPath      string
 	ServiceConfig           *WinSWServiceConfig
 	Dependencies            []string
+
+	PreInstallFunc func(ctx context.Context, p pack, resolvedPackagePath string) (pack, error)
 }
 
 const (
@@ -85,6 +88,13 @@ var repository = map[string]pack{
 			ResetFailure: "1 hour",
 		},
 		Dependencies: []string{VCRedist16Package},
+		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
+			if path != "" {
+				p.ServiceConfig.Arguments = fmt.Sprintf("-b 127.0.0.1:9934 -c %s", filepath.Join(path, "php.ini"))
+			}
+
+			return p, nil
+		},
 	},
 	PHPExtensionsPackage: {
 		LookupPath: []string{"php"},
@@ -150,6 +160,10 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(packagePath))
 
 		break
+	}
+
+	if p.PreInstallFunc != nil {
+		p, err = p.PreInstallFunc(ctx, p, packagePath)
 	}
 
 	if len(p.Dependencies) > 0 {

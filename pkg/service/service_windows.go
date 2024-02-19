@@ -34,6 +34,9 @@ var commands = map[string]struct {
 
 func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	err := s.start(ctx, serviceName)
+	if err != nil {
+		log.Println(err)
+	}
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
