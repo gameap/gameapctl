@@ -23,6 +23,10 @@ func UpdateEnvPath() {
 			continue
 		}
 
+		if !utils.IsFileExists(p.DefaultInstallPath) {
+			continue
+		}
+
 		if utils.Contains(currentPath, p.DefaultInstallPath) {
 			continue
 		}
@@ -39,7 +43,9 @@ func UpdateEnvPath() {
 		log.Fatal(err)
 	}
 
-	if !utils.Contains(currentPath, gameap.DefaultToolsPath) && !utils.Contains(appendPath, gameap.DefaultToolsPath) {
+	if utils.IsFileExists(gameap.DefaultToolsPath) &&
+		!utils.Contains(currentPath, gameap.DefaultToolsPath) &&
+		!utils.Contains(appendPath, gameap.DefaultToolsPath) {
 		appendPath = append(appendPath, gameap.DefaultToolsPath)
 	}
 
@@ -49,6 +55,10 @@ func UpdateEnvPath() {
 		}
 
 		path := filepath.Join(gameap.DefaultToolsPath, e.Name())
+
+		if !utils.IsFileExists(path) {
+			continue
+		}
 
 		if utils.Contains(appendPath, path) {
 			continue
