@@ -61,7 +61,14 @@ var repository = map[string]pack{
 		},
 	},
 	MySQLServerPackage: {
-		LookupPath: []string{"mariadb"},
+		LookupPath: []string{"mysql", "mysqld"},
+		DownloadURLs: []string{
+			"https://archive.mariadb.org//mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
+		},
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+	},
+	MariaDBServerPackage: {
+		LookupPath: []string{"mariadb", "mariadbd"},
 		DownloadURLs: []string{
 			"https://archive.mariadb.org//mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
