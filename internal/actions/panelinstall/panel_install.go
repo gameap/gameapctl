@@ -92,6 +92,7 @@ func Handle(cliCtx *cli.Context) error {
 	state := panelInstallState{}
 
 	state.NonInteractive = cliCtx.Bool("non-interactive")
+	state.SkipWarnings = cliCtx.Bool("skip-warnings")
 	state.Host = cliCtx.String("host")
 	state.Port = cliCtx.String("port")
 	state.Path = cliCtx.String("path")
