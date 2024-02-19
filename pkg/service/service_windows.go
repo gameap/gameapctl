@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os/exec"
 	"strconv"
@@ -175,8 +176,11 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 
 func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
-	if err != nil || svc == nil {
-		log.Println(err)
+	if err != nil {
+		fmt.Println(errors.WithMessage(err, "failed to find service"))
+		return NewNotFoundError(serviceName)
+	}
+	if svc == nil {
 		return NewNotFoundError(serviceName)
 	}
 
@@ -300,10 +304,10 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	}
 
 	log.Println("\n", cmd.String())
+	log.Println(buf.String())
 
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
-		log.Println(buf.String())
 		return nil, err
 	}
 
