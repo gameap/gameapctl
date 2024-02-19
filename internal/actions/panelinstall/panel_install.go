@@ -441,10 +441,12 @@ func installMySQLOrMariaDB(
 		fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
 		log.Println(err)
 
-		fmt.Println("Removing MySQL server ...")
-		err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to remove MySQL server")
+		if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+			fmt.Println("Removing MySQL server ...")
+			err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to remove MySQL server")
+			}
 		}
 
 		//nolint:goconst
