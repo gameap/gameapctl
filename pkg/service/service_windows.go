@@ -57,7 +57,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if err == nil {
 			return nil
 		}
-		log.Println(err)
+		log.Println(errors.WithMessagef(err, "failed to start alias %s for service %s", alias, serviceName))
 	}
 
 	if err == nil {
@@ -68,17 +68,16 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	if commandExists {
 		var cmd []string
 		cmd, err = shellquote.Split(c.Start)
-
-		if err == nil {
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to split command"))
+		} else {
 			err = utils.ExecCommand(cmd[0], cmd[1:]...)
-			if err == nil {
+			if err != nil {
+				log.Println(errors.WithMessage(err, "failed to exec command"))
+			} else {
 				return nil
 			}
 		}
-	}
-
-	if err != nil {
-		log.Println(err)
 	}
 
 	for _, alias := range a {
@@ -90,8 +89,12 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		var aliasCmd []string
 		aliasCmd, err = shellquote.Split(ac.Start)
 		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to split alias command"))
+		} else {
 			err = utils.ExecCommand(aliasCmd[0], aliasCmd[1:]...)
-			if err == nil {
+			if err != nil {
+				log.Println(errors.WithMessage(err, "failed to exec command"))
+			} else {
 				return nil
 			}
 		}
@@ -106,7 +109,7 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 		if strings.Contains(err.Error(), "already running") {
 			return nil
 		}
-		log.Println(err)
+		log.Println(errors.WithMessage(err, "failed to stop service"))
 	}
 	if err == nil {
 		return nil
@@ -120,7 +123,9 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 
 	for _, alias := range a {
 		err = s.stop(ctx, alias)
-		if err == nil {
+		if err != nil {
+			log.Println(errors.WithMessagef(err, "failed to stop alias %s for service %s", alias, serviceName))
+		} else {
 			return nil
 		}
 	}

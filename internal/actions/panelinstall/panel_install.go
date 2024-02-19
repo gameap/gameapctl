@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -415,8 +416,26 @@ func Handle(cliCtx *cli.Context) error {
 	return nil
 }
 
-func isMySQLInstalled(_ context.Context) bool {
+func isMySQLInstalled(ctx context.Context) bool {
+	if runtime.GOOS == "windows" {
+		return utils.IsCommandAvailable("mysqld") ||
+			service.IsExists(ctx, "mysql") ||
+			service.IsExists(ctx, "mysql57") ||
+			service.IsExists(ctx, "mysql80")
+	}
+
 	return utils.IsCommandAvailable("mysqld") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mysql.service") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
+}
+
+func isMariaDBInstalled(ctx context.Context) bool {
+	if runtime.GOOS == "windows" {
+		return utils.IsCommandAvailable("mariadbd") || service.IsExists(ctx, "mariadb")
+	}
+
+	return utils.IsCommandAvailable("mysqld") ||
+		utils.IsCommandAvailable("mariadbd") ||
 		utils.IsFileExists("/usr/lib/systemd/system/mysql.service") ||
 		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
 }
@@ -480,7 +499,7 @@ func installMariaDB(
 	if state.DBCreds.Host == "" ||
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
-		if !isMySQLInstalled(ctx) {
+		if !isMariaDBInstalled(ctx) {
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
