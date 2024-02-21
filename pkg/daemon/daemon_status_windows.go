@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultDaemonConfigPath = "C:\\gameap\\daemon\\gameap-daemon.xml"
+	defaultDaemonConfigPath = "C:\\gameap\\services\\gameap-daemon.xml"
 )
 
 func Status(_ context.Context) error {
