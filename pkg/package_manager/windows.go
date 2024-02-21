@@ -178,20 +178,20 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	log.Println("Installing", packName, "package")
 	var err error
 
-	packagePath := ""
+	resolvedPackagePath := ""
 	for _, c := range p.LookupPath {
-		packagePath, err = exec.LookPath(c)
+		resolvedPackagePath, err = exec.LookPath(c)
 		if err != nil {
 			continue
 		}
 
-		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(packagePath))
+		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(resolvedPackagePath))
 
 		break
 	}
 
 	if p.PreInstallFunc != nil {
-		p, err = p.PreInstallFunc(ctx, p, packagePath)
+		p, err = p.PreInstallFunc(ctx, p, resolvedPackagePath)
 	}
 
 	if len(p.Dependencies) > 0 {
@@ -206,13 +206,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	preProcessor, ok := packagePreProcessors[packName]
 	if ok {
 		log.Println("Execute pre processor for ", packName)
-		err = preProcessor(ctx, packagePath)
+		err = preProcessor(ctx, resolvedPackagePath)
 		if err != nil {
 			return err
 		}
 	}
 
-	if packagePath != "" {
+	if resolvedPackagePath != "" {
 		if p.ServiceConfig != nil {
 			err = pm.installService(ctx, packName, p)
 			if err != nil {
@@ -220,7 +220,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 			}
 		}
 
-		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", packagePath, packName)
+		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", resolvedPackagePath, packName)
 
 		return nil
 	}
@@ -301,9 +301,11 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		}
 	}
 
+	resolvedPackagePath = p.DefaultInstallPath
+
 	postProcessor, ok := packagePostProcessors[packName]
 	if ok {
-		err = postProcessor(ctx, packagePath)
+		err = postProcessor(ctx, resolvedPackagePath)
 		if err != nil {
 			return err
 		}
@@ -526,6 +528,7 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		if utils.Contains(currentPath, packagePath) {
 			log.Println("Path already contains ", packagePath)
 			log.Println("PATH: ", strings.Join(currentPath, string(filepath.ListSeparator)))
+
 			return nil
 		}
 
