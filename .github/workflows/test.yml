@@ -104,7 +104,6 @@ jobs:
         shell: bash
         run: |
           cd cmd/gameapctl/
-          go build .
           echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | /var/www/gameap/artisan tinker || true          
           ./gameapctl --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
@@ -146,6 +145,12 @@ jobs:
           cd .\cmd\gameapctl\
           go build .
           .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+
+      - name: Daemon Installation Test
+        run: |
+          cd .\cmd\gameapctl\
+          echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | C:\tools\php\php.exe C:\gameap\web\artisan tinker
+          .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
