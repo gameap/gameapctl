@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -67,6 +68,9 @@ type daemonsInstallState struct {
 	ListenIP string
 	NodeID   uint
 	APIKey   string
+
+	User     string
+	Password string // Password for user (Windows only)
 }
 
 //nolint:funlen,gocognit
@@ -157,6 +161,12 @@ func Handle(cliCtx *cli.Context) error {
 	state, err = generateCertificates(cliCtx.Context, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to generate certificates")
+	}
+
+	fmt.Println("Setting firewall rules ...")
+	state, err = setFirewallRules(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set firewall rules")
 	}
 
 	fmt.Println("Downloading gameap-daemon binaries ...")
@@ -642,6 +652,13 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		SteamCMDPath: state.SteamCMDPath,
 	}
 
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
+		cfg.Users = map[string]string{
+			state.User: fmt.Sprintf("base64:%s", pw),
+		}
+	}
+
 	cfgBytes, err := yaml.Marshal(cfg)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to marshal daemon config")
@@ -878,6 +895,8 @@ type DaemonConfig struct {
 	SteamConfig DaemonSteamConfig `yaml:"steam_config"`
 
 	Scripts DaemonConfigScripts `yaml:"-"`
+
+	Users map[string]string `yaml:"users"`
 }
 
 func findDaemonReleaseURL(ctx context.Context) (string, error) {

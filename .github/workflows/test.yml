@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.21.x]
+        go-version: [1.22.x]
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
@@ -57,12 +57,6 @@ jobs:
             database: 'sqlite'
         include:
           - distro: 'ubuntu:18.04'
-            database: 'mysql'
-            experimental: true
-          - distro: 'ubuntu:23.04'
-            database: 'mysql'
-            experimental: true
-          - distro: 'ubuntu:23.10'
             database: 'mysql'
             experimental: true
           - distro: 'debian:sid'
@@ -120,8 +114,8 @@ jobs:
       matrix:
         database: [ mysql, sqlite ]
         web-server: [ nginx ]
-        go-version: [ 1.21.x ]
-        experimental: [ true ]
+        go-version: [ 1.22.x ]
+        experimental: [ false ]
 
     runs-on: windows-latest
     continue-on-error: ${{ matrix.experimental }}

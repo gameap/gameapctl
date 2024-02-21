@@ -68,3 +68,7 @@ func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsIns
 
 	return state, nil
 }
+
+func setFirewallRules(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	return state, nil
+}
