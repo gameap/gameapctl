@@ -72,6 +72,14 @@ func UpdateEnvPath() {
 		}
 	}
 
+	daemonDir := filepath.Dir(gameap.DefaultDaemonFilePath)
+	if utils.IsFileExists(daemonDir) {
+		if !utils.Contains(currentPath, daemonDir) &&
+			!utils.Contains(appendPath, daemonDir) {
+			appendPath = append(appendPath, daemonDir)
+		}
+	}
+
 	newPath := os.Getenv("PATH") +
 		string(filepath.ListSeparator) +
 		strings.Join(appendPath, string(filepath.ListSeparator))
