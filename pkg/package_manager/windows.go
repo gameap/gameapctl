@@ -40,6 +40,9 @@ const (
 
 const servicesConfigPath = "C:\\gameap\\services"
 
+// https://curl.se/docs/caextract.html
+const caCertURL = "https://curl.se/ca/cacert.pem"
+
 var repository = map[string]pack{
 	NginxPackage: {
 		LookupPath: []string{"nginx"},
@@ -471,25 +474,45 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			}
 		}
 
-		if iniFilePath != "" {
-			return utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
-				";?\\s*extension=bz2\\s*":        "extension=bz2",
-				";?\\s*extension=curl\\s*":       "extension=curl",
-				";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
-				";?\\s*extension=gd\\s*":         "extension=gd",
-				";?\\s*extension=gmp\\s*":        "extension=gmp",
-				";?\\s*extension=intl\\s*":       "extension=intl",
-				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
-				";?\\s*extension=openssl\\s*":    "extension=openssl",
-				";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
-				";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
-				";?\\s*extension=sqlite\\s*":     "extension=sqlite3",
-				";?\\s*extension=sockets\\s*":    "extension=sockets",
-				";?\\s*extension=zip\\s*":        "extension=zip",
-			})
+		if iniFilePath == "" {
+			return errors.New("failed to find config edition way to enable php extensions")
 		}
 
-		return errors.New("failed to find config edition way to enable php extensions")
+		err = utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
+			";?\\s*extension=bz2\\s*":        "extension=bz2",
+			";?\\s*extension=curl\\s*":       "extension=curl",
+			";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
+			";?\\s*extension=gd\\s*":         "extension=gd",
+			";?\\s*extension=gmp\\s*":        "extension=gmp",
+			";?\\s*extension=intl\\s*":       "extension=intl",
+			";?\\s*extension=mbstring\\s*":   "extension=mbstring",
+			";?\\s*extension=openssl\\s*":    "extension=openssl",
+			";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
+			";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
+			";?\\s*extension=sqlite\\s*":     "extension=sqlite3",
+			";?\\s*extension=sockets\\s*":    "extension=sockets",
+			";?\\s*extension=zip\\s*":        "extension=zip",
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update extensions to php.ini")
+		}
+
+		cacertPath := filepath.Join(filepath.Dir(iniFilePath), "cacert.pem")
+
+		err = utils.DownloadFile(ctx, caCertURL, cacertPath)
+		if err != nil {
+			return errors.WithMessage(err, "failed to download cacert.pem")
+		}
+
+		err = utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
+			";?\\s*curl\\.cainfo\\s*":    fmt.Sprintf(`curl.cainfo="%s"`, cacertPath),
+			";?\\s*openssl\\.cafile\\s*": fmt.Sprintf(`openssl.cafile="%s"`, cacertPath),
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update cacert.pem path in php.ini")
+		}
+
+		return nil
 	},
 }
 
