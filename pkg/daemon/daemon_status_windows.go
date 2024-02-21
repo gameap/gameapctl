@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"log"
 	"os/exec"
 	"strings"
 
@@ -25,6 +26,8 @@ func Status(_ context.Context) error {
 	if err != nil && !errors.As(err, &exitErr) {
 		return errors.Wrap(err, "failed to get daemon status")
 	}
+
+	log.Println("Result:", result)
 
 	if exitErr.ExitCode() == exitCodeStatusNotActive {
 		return errors.New("daemon process is not active")
