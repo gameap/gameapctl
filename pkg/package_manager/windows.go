@@ -518,12 +518,20 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
 	PHPPackage: func(_ context.Context, packagePath string) error {
+		log.Printf("Adding %s to PATH", packagePath)
+
 		path, _ := os.LookupEnv("PATH")
 
 		currentPath := strings.Split(path, string(filepath.ListSeparator))
 		if utils.Contains(currentPath, packagePath) {
+			log.Println("Path already contains ", packagePath)
+			log.Println("PATH: ", strings.Join(currentPath, string(filepath.ListSeparator)))
 			return nil
 		}
+
+		newPath := append(currentPath, packagePath)
+
+		log.Println("New PATH: ", strings.Join(newPath, string(filepath.ListSeparator)))
 
 		err := os.Setenv("PATH", path+string(os.PathListSeparator)+packagePath)
 		if err != nil {
