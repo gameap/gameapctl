@@ -5,10 +5,24 @@ package daemon
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
-func Restart(ctx context.Context) error {
-	return errors.New("not implemented")
+func Restart(_ context.Context) error {
+	result, err := utils.ExecCommandWithOutput("winsw", "restart", defaultDaemonConfigPath)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get daemon status")
+	}
+
+	if !strings.Contains(result, "restarted successfully") {
+		return errors.New("failed to restart daemon")
+	}
+
+	fmt.Println("Daemon process restarted")
+
+	return nil
 }
