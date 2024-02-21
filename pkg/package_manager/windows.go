@@ -517,26 +517,39 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 }
 
 var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	NginxPackage: func(_ context.Context, _ string) error {
-		p := repository[NginxPackage]
+	PHPPackage: func(_ context.Context, packagePath string) error {
+		path, _ := os.LookupEnv("PATH")
 
-		entries, err := os.ReadDir(p.DefaultInstallPath)
+		currentPath := strings.Split(path, string(filepath.ListSeparator))
+		if utils.Contains(currentPath, packagePath) {
+			return nil
+		}
+
+		err := os.Setenv("PATH", path+string(os.PathListSeparator)+packagePath)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set PATH")
+		}
+
+		return nil
+	},
+	NginxPackage: func(_ context.Context, packagePath string) error {
+		entries, err := os.ReadDir(packagePath)
 		if err != nil {
 			return err
 		}
 
 		if len(entries) != 1 {
-			return NewErrInvalidDirContents(p.DefaultInstallPath)
+			return NewErrInvalidDirContents(packagePath)
 		}
 
-		d := filepath.Join(p.DefaultInstallPath, entries[0].Name())
+		d := filepath.Join(packagePath, entries[0].Name())
 
 		entries, err = os.ReadDir(d)
 		if err != nil {
 			return err
 		}
 		for _, entry := range entries {
-			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(p.DefaultInstallPath, entry.Name()))
+			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(packagePath, entry.Name()))
 			if err != nil {
 				return errors.WithMessage(err, "failed to move file")
 			}
