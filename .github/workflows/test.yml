@@ -149,7 +149,7 @@ jobs:
         run: |
           cd .\cmd\gameapctl\
           echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | C:\tools\php\php.exe C:\gameap\web\artisan tinker
-          .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
+          .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1:3080 --token=test_auto_setup_token
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
