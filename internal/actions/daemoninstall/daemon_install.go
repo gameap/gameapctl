@@ -160,7 +160,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Downloading gameap-daemon binaries ...")
-	state, err = installDaemonBinaries(cliCtx.Context, state)
+	state, err = installDaemonBinaries(cliCtx.Context, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
@@ -350,7 +350,9 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	return state, nil
 }
 
-func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func installDaemonBinaries(
+	ctx context.Context, pm packagemanager.PackageManager, state daemonsInstallState,
+) (daemonsInstallState, error) {
 	tmpDir, err := os.MkdirTemp("", "gameap")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to make temp dir")
@@ -395,6 +397,13 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	if !binariesInstalled {
 		return state, errors.New("gameap binaries wasn't installed, invalid archive contents")
+	}
+
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		err = pm.Install(ctx, packagemanager.GameAPDaemon)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to install gameap-daemon")
+		}
 	}
 
 	return state, nil

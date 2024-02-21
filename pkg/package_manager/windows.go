@@ -35,6 +35,7 @@ type pack struct {
 const (
 	WinSWPackage      = "winsw"
 	VCRedist16Package = "vc_redist_16" //nolint:gosec
+	GameAPDaemon      = "gameap-daemon"
 )
 
 const servicesConfigPath = "C:\\gameap\\services"
@@ -118,6 +119,21 @@ var repository = map[string]pack{
 		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
 		AllowedInstallExitCodes: []int{
 			1638, // A newer version is already installed or already installed
+		},
+	},
+	GameAPDaemon: {
+		ServiceConfig: &WinSWServiceConfig{
+			ID:               "GameAP Daemon",
+			Name:             "GameAP Daemon",
+			Executable:       "gameap-daemon",
+			WorkingDirectory: "C:\\gameap\\daemon",
+			OnFailure: []onFailure{
+				{Action: "restart", Delay: "1 sec"},
+				{Action: "restart", Delay: "2 sec"},
+				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart", Delay: "5 sec"},
+			},
+			ResetFailure: "1 hour",
 		},
 	},
 	WinSWPackage: {
@@ -481,13 +497,6 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 }
 
 var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	PHPPackage: func(_ context.Context, _ string) error {
-		p := repository[PHPPackage]
-
-		path, _ := os.LookupEnv("PATH")
-
-		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
-	},
 	NginxPackage: func(_ context.Context, _ string) error {
 		p := repository[NginxPackage]
 
