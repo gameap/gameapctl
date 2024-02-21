@@ -26,15 +26,17 @@ func Status(ctx context.Context) error {
 		return errors.Wrap(err, "failed to get daemon status")
 	}
 
-	if exitErr.ExitCode() == exitCodeStatusNotActive {
-		return errors.New("daemon process is not active")
-	}
+	if exitErr != nil {
+		if exitErr.ExitCode() == exitCodeStatusNotActive {
+			return errors.New("daemon process is not active")
+		}
 
-	if exitErr.ExitCode() != exitCodeStatusActive {
-		return errors.WithMessagef(
-			errors.New("unknown response"),
-			"invalid exit code %d", exitErr.ExitCode(),
-		)
+		if exitErr.ExitCode() != exitCodeStatusActive {
+			return errors.WithMessagef(
+				errors.New("unknown response"),
+				"invalid exit code %d", exitErr.ExitCode(),
+			)
+		}
 	}
 
 	p, err := FindProcess(ctx)
