@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"context"
+	"log"
 	"os/exec"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -18,9 +19,9 @@ const (
 	exitCodeStatusActive    = 1
 )
 
-func Status(_ context.Context) error {
+func Status(ctx context.Context) error {
 	var exitErr *exec.ExitError
-	err := utils.ExecCommand("winsw", "status", defaultDaemonConfigPath)
+	_, err := utils.ExecCommandWithOutput("winsw", "status", defaultDaemonConfigPath)
 	if err != nil && !errors.As(err, &exitErr) {
 		return errors.Wrap(err, "failed to get daemon status")
 	}
@@ -28,6 +29,22 @@ func Status(_ context.Context) error {
 	if exitErr.ExitCode() == exitCodeStatusNotActive {
 		return errors.New("daemon process is not active")
 	}
+
+	if exitErr.ExitCode() != exitCodeStatusActive {
+		return errors.WithMessagef(
+			errors.New("unknown response"),
+			"invalid exit code %d", exitErr.ExitCode(),
+		)
+	}
+
+	p, err := FindProcess(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to find daemon process")
+	}
+	if p == nil {
+		return errors.New("daemon process not found")
+	}
+	log.Println("Daemon process found with pid", p.Pid)
 
 	return nil
 }
