@@ -95,7 +95,6 @@ var repository = map[string]pack{
 			OnFailure: []onFailure{
 				{Action: "restart"},
 			},
-			ResetFailure: "1 hour",
 		},
 		Dependencies: []string{VCRedist16Package},
 		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
