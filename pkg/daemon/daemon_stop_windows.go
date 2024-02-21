@@ -16,5 +16,5 @@ func Stop(_ context.Context) error {
 		return errors.WithMessage(err, "failed to execute stop gameap-daemon command")
 	}
 
-	return errors.New("failed to stop daemon")
+	return nil
 }
