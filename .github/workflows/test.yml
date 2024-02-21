@@ -101,7 +101,6 @@ jobs:
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Daemon Installation Test
-        shell: bash
         run: |
           cd cmd/gameapctl/
           echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | /var/www/gameap/artisan tinker || true          
