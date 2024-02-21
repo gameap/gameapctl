@@ -90,10 +90,7 @@ var repository = map[string]pack{
 			Executable: "php-cgi",
 			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
 			OnFailure: []onFailure{
-				{Action: "restart", Delay: "1 sec"},
-				{Action: "restart", Delay: "2 sec"},
-				{Action: "restart", Delay: "5 sec"},
-				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart"},
 			},
 			ResetFailure: "1 hour",
 		},
