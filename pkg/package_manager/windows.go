@@ -95,6 +95,9 @@ var repository = map[string]pack{
 			OnFailure: []onFailure{
 				{Action: "restart"},
 			},
+			Env: []env{
+				{Name: "PHP_FCGI_MAX_REQUESTS", Value: "0"},
+			},
 		},
 		Dependencies: []string{VCRedist16Package},
 		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
@@ -380,10 +383,10 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		return nil
 	}
 
-	out, err := xml.Marshal(struct {
+	out, err := xml.MarshalIndent(struct {
 		WinSWServiceConfig
 		XMLName struct{} `xml:"service"`
-	}{WinSWServiceConfig: serviceConfig})
+	}{WinSWServiceConfig: serviceConfig}, "", "  ")
 
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal service config")
@@ -588,9 +591,16 @@ type WinSWServiceConfig struct {
 		Username string `xml:"username,omitempty"`
 		Password string `xml:"password,omitempty"`
 	} `xml:"serviceaccount,omitempty"`
+
+	Env []env `xml:"env,omitempty"`
 }
 
 type onFailure struct {
 	Action string `xml:"action,attr"`
 	Delay  string `xml:"delay,attr,omitempty"`
+}
+
+type env struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
