@@ -621,6 +621,8 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 				if err != nil {
 					return errors.WithMessage(err, "failed to set PATH")
 				}
+
+				return nil
 			}
 
 			time.Sleep(sleepTime)
