@@ -615,9 +615,10 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 			}
 
 			if utils.IsFileExists(defaultPath) {
-				log.Printf("Adding %s to PATH", defaultPath)
+				p := filepath.Dir(defaultPath)
+				log.Printf("Adding %s to PATH", p)
 
-				err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+defaultPath)
+				err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
 				if err != nil {
 					return errors.WithMessage(err, "failed to set PATH")
 				}
@@ -631,6 +632,17 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		}
 
 		return errors.New("failed to install composer, failed to lookup composer executable")
+	},
+	NodeJSPackage: func(_ context.Context, _ string) error {
+		defaultPath := "C:\\Program Files\\nodejs\\node"
+		p := filepath.Dir(defaultPath)
+		log.Printf("Adding %s to PATH", p)
+		err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set PATH")
+		}
+
+		return nil
 	},
 }
 
