@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"math/big"
+	"os/user"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -17,12 +18,26 @@ const (
 )
 
 func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	userName := defaultUserName
+	var errUnknownUser user.UnknownUserError
+	systemUser, err := user.Lookup(userName)
+	if err != nil && !errors.As(err, &errUnknownUser) {
+		return state, errors.WithMessage(err, "failed to lookup user")
+	}
+
 	password, err := generatePassword(24)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to generate password")
 	}
 
-	userName := defaultUserName
+	if systemUser != nil {
+		// Change password
+		err = utils.ExecCommand("net", "user", userName, password)
+		if err != nil {
+			return state, errors.WithMessagef(err, "failed to change password for user %s", userName)
+		}
+		return state, nil
+	}
 
 	err = utils.ExecCommand("net", "user", userName, password, "/HOMEDIR:C:\\gameap", "/ADD", "/Y")
 	if err != nil {
