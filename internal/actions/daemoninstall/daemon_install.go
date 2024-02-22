@@ -512,10 +512,10 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	}
 
 	fw, _ = w.CreateFormField("script_get_console")
-	_, _ = fw.Write([]byte("{node_work_path}/runner.sh get_console -d {dir} -n {uuid} -u {user}"))
+	_, _ = fw.Write([]byte("server-output {id}"))
 
 	fw, _ = w.CreateFormField("script_send_command")
-	_, _ = fw.Write([]byte("{node_work_path}/runner.sh send_command -d {dir} -n {uuid} -u {user} -c \"{command}\""))
+	_, _ = fw.Write([]byte("server-command {id} {command}"))
 
 	client := http.Client{
 		Timeout: 30 * time.Second, //nolint:gomnd

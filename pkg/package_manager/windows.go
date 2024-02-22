@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	pathPkg "path"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/gameap/gameapctl/pkg/service"
@@ -97,6 +99,7 @@ var repository = map[string]pack{
 			},
 			Env: []env{
 				{Name: "PHP_FCGI_MAX_REQUESTS", Value: "0"},
+				{Name: "PHP_FCGI_CHILDREN", Value: strconv.Itoa(runtime.NumCPU() * 2)},
 			},
 		},
 		Dependencies: []string{VCRedist16Package},
