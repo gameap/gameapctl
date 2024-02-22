@@ -20,6 +20,10 @@ const (
 )
 
 func Status(ctx context.Context) error {
+	if !utils.IsFileExists(defaultDaemonConfigPath) {
+		return errors.New("daemon config file not found")
+	}
+
 	var exitErr *exec.ExitError
 	_, err := utils.ExecCommandWithOutput("winsw", "status", defaultDaemonConfigPath)
 	if err != nil && !errors.As(err, &exitErr) {
