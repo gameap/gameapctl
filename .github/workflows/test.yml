@@ -153,6 +153,7 @@ jobs:
           path: |
             ~/AppData/Local/Temp/gameapctl*
             C:/gameap/services/*
+            C:/gameap/logs/*
           retention-days: 5
 
   test-cache:
