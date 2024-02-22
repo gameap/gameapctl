@@ -603,7 +603,9 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 	ComposerPackage: func(_ context.Context, _ string) error {
 		// Wait composer installation
 
-		tries := 10
+		defaultPath := "C:\\ProgramData\\ComposerSetup\\bin\\composer"
+
+		tries := 8
 		sleepTime := 1 * time.Second
 		for tries > 0 {
 			for _, p := range repository[ComposerPackage].LookupPath {
@@ -611,8 +613,18 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 					return nil
 				}
 			}
+
+			if utils.IsFileExists(defaultPath) {
+				log.Printf("Adding %s to PATH", defaultPath)
+
+				err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+defaultPath)
+				if err != nil {
+					return errors.WithMessage(err, "failed to set PATH")
+				}
+			}
+
 			time.Sleep(sleepTime)
-			sleepTime = sleepTime * 2
+			sleepTime *= 2
 			tries--
 		}
 
