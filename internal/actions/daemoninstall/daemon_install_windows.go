@@ -24,7 +24,7 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 
 	userName := defaultUserName
 
-	err = utils.ExecCommand("net", "user", userName, password, "/HOMEDIR:C:\\gameap", "/ADD")
+	err = utils.ExecCommand("net", "user", userName, password, "/HOMEDIR:C:\\gameap", "/ADD", "/Y")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to add user")
 	}
