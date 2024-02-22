@@ -405,10 +405,12 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
+	configOverride := false
+
 	if utils.IsFileExists(configPath) {
 		log.Printf("Service config for '%s' is already exists", packName)
-
-		return nil
+		// Config already exists, we will override it and try to refresh before installation
+		configOverride = true
 	}
 
 	out, err := xml.MarshalIndent(struct {
@@ -428,6 +430,19 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
 		return errors.WithMessagef(err, "failed to save config for service '%s' ", packName)
+	}
+
+	if configOverride {
+		err = utils.ExecCommand("winsw", "refresh", configPath)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to refresh service"))
+			// There is no need to return error here, because it seems that service
+			// config is already exists, but is not installed. We will try to install it next
+		}
+		if err == nil {
+			// Refreshed successfully, no need to run install service command
+			return nil
+		}
 	}
 
 	err = utils.ExecCommand("winsw", "install", configPath)
