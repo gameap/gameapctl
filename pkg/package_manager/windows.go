@@ -126,6 +126,30 @@ var repository = map[string]pack{
 			1638, // A newer version is already installed or already installed
 		},
 	},
+	GitPackage: {
+		LookupPath: []string{"git"},
+		DownloadURLs: []string{
+			"https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe",
+		},
+		InstallCommand: "cmd /c Git-2.43.0-64-bit.exe " +
+			"/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS " +
+			"/RESTARTAPPLICATIONS /COMPONENTS=icons,ext\\reg\\shellhere,assoc,assoc_sh",
+	},
+	NodeJSPackage: {
+		LookupPath: []string{"node"},
+		DownloadURLs: []string{
+			"https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi",
+		},
+		InstallCommand: "cmd /c start /wait msiexec /i node-v20.11.1-x64.msi /qb",
+	},
+	ComposerPackage: {
+		LookupPath:   []string{"composer"},
+		Dependencies: []string{PHPPackage},
+		DownloadURLs: []string{
+			"https://getcomposer.org/Composer-Setup.exe",
+		},
+		InstallCommand: "cmd /c Composer-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS",
+	},
 	GameAPDaemon: {
 		ServiceConfig: &WinSWServiceConfig{
 			ID:               "GameAP Daemon",
@@ -574,6 +598,21 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		log.Println("Removing", d)
 
 		return os.RemoveAll(d)
+	},
+	ComposerPackage: func(_ context.Context, _ string) error {
+		// Wait composer installation
+
+		tries := 10
+		for tries > 0 {
+			for _, p := range repository[ComposerPackage].LookupPath {
+				if _, err := exec.LookPath(p); err == nil {
+					return nil
+				}
+			}
+			tries--
+		}
+
+		return errors.New("failed to install composer, failed to lookup composer executable")
 	},
 }
 
