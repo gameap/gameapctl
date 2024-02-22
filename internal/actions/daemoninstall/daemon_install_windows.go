@@ -36,6 +36,10 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 		if err != nil {
 			return state, errors.WithMessagef(err, "failed to change password for user %s", userName)
 		}
+
+		state.User = userName
+		state.Password = password
+
 		return state, nil
 	}
 
