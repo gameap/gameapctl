@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -603,12 +604,15 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		// Wait composer installation
 
 		tries := 10
+		sleepTime := 1 * time.Second
 		for tries > 0 {
 			for _, p := range repository[ComposerPackage].LookupPath {
 				if _, err := exec.LookPath(p); err == nil {
 					return nil
 				}
 			}
+			time.Sleep(sleepTime)
+			sleepTime = sleepTime * 2
 			tries--
 		}
 
