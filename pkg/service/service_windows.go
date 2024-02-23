@@ -176,6 +176,23 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 	return errors.New("use stop and start instead of restart")
 }
 
+func (s *Windows) Status(ctx context.Context, serviceName string) error {
+	svc, err := findService(ctx, serviceName)
+	if err != nil {
+		fmt.Println(errors.WithMessage(err, "failed to find service"))
+		return NewNotFoundError(serviceName)
+	}
+	if svc == nil {
+		return NewNotFoundError(serviceName)
+	}
+
+	if svc.State != windowsServiceStateRunning && svc.State != windowsServiceStateStartPending {
+		return ErrInactiveService
+	}
+
+	return nil
+}
+
 func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil {

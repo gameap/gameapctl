@@ -22,6 +22,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/panelupdate"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
+	"github.com/gameap/gameapctl/internal/actions/ui"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
@@ -234,13 +235,31 @@ func Run(args []string) {
 				},
 			},
 			{
+				Name:        "ui",
+				Description: "Web interface in default browser. ",
+				Usage:       "Web interface in default browser. ",
+				Before: func(context *cli.Context) error {
+					packagemanager.UpdateEnvPath()
+
+					return nil
+				},
+				Action: ui.Handle,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "no-browser",
+						Usage: "Do not open browser",
+					},
+				},
+			},
+			{
 				Name:        "self-update",
 				Description: "Update the gameapctl binary to the latest version",
 				Usage:       "Update the gameapctl binary to the latest version",
 				Action:      selfupdate.Handle,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name: "force",
+						Name:  "force",
+						Usage: "Update even if dev version is used. ",
 					},
 				},
 			},

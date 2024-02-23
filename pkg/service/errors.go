@@ -1,6 +1,12 @@
 package service
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
+
+var ErrInactiveService = errors.New("inactive service")
 
 type NotFoundError struct {
 	ServiceName string
