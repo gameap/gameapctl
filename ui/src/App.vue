@@ -43,7 +43,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeMount } from 'vue'
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 
@@ -55,29 +55,27 @@ import {unarySend} from "./websocket.js"
 
 const servicesStore = useServicesStore()
 
-onMounted(() => {
-  setTimeout(() => {
-    unarySend("service-daemon-status", "service-status gameap-daemon", (code, message) => {
-      if (code === "payload") {
-        servicesStore.updateService("gameap-daemon", {status: message})
-      }
-    })
-    unarySend("service-nginx-status", "service-status nginx", (code, message) => {
-      if (code === "payload") {
-        servicesStore.updateService("nginx", {status: message})
-      }
-    })
-    unarySend("service-mysql-status", "service-status mysql", (code, message) => {
-      if (code === "payload") {
-        servicesStore.updateService("mysql", {status: message})
-      }
-    })
-    unarySend("service-php-status", "service-status php-fpm", (code, message) => {
-      if (code === "payload") {
-        servicesStore.updateService("php-fpm", {status: message})
-      }
-    })
-  }, 200)
+onBeforeMount(() => {
+  unarySend("service-daemon-status", "service-status gameap-daemon", (code, message) => {
+    if (code === "payload") {
+      servicesStore.updateService("gameap-daemon", {status: message})
+    }
+  })
+  unarySend("service-nginx-status", "service-status nginx", (code, message) => {
+    if (code === "payload") {
+      servicesStore.updateService("nginx", {status: message})
+    }
+  })
+  unarySend("service-mysql-status", "service-status mysql", (code, message) => {
+    if (code === "payload") {
+      servicesStore.updateService("mysql", {status: message})
+    }
+  })
+  unarySend("service-php-status", "service-status php-fpm", (code, message) => {
+    if (code === "payload") {
+      servicesStore.updateService("php-fpm", {status: message})
+    }
+  })
 })
 
 const navigation = ref([

@@ -13,15 +13,31 @@ function unsubscribe(id) {
 }
 
 function send(topic, message) {
-    conn.send(JSON.stringify({
-        "topic": topic,
-        "code": "payload",
-        "value": message
-    }))
+    waitForSocketConnection(conn, function(){
+        conn.send(JSON.stringify({
+            "topic": topic,
+            "code": "payload",
+            "value": message
+        }))
+    });
+}
+
+function waitForSocketConnection(socket, callback){
+    setTimeout(
+        function () {
+            if (socket.readyState === WebSocket.OPEN) {
+                if (callback != null){
+                    callback();
+                }
+            } else {
+                waitForSocketConnection(socket, callback);
+            }
+
+        }, 5);
 }
 
 conn.onclose = function (event) {
-    log.value += "\nConnection closed.\n"
+    console.log("Connection closed.")
 };
 conn.onmessage = function (event) {
     const msg = JSON.parse(event.data)

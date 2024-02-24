@@ -3,6 +3,7 @@ import {computed, defineProps} from 'vue'
 import {ArrowPathIcon, PlayIcon, StopIcon} from "@heroicons/vue/24/outline/index.js"
 import { storeToRefs } from "pinia"
 import {useServicesStore} from "../store/services.js"
+import {runAction} from "../action.js";
 
 const props = defineProps({
   serviceId: String
@@ -28,6 +29,33 @@ function serviceUnavailable() {
   return service.value.status === undefined || service.value.status === '' || service.value.status === false
 }
 
+function onClickStart() {
+  runAction(
+      "Service start",
+      "Are you sure?",
+      "service-command",
+      "service-command start " + props.serviceId,
+  )
+}
+
+function onClickStop() {
+  runAction(
+      "Service stop",
+      "Are you sure?",
+      "service-command",
+      "service-command start " + props.serviceId,
+  )
+}
+
+function onClickRestart() {
+  runAction(
+      "Service restart",
+      "Are you sure?",
+      "service-command",
+      "service-command start " + props.serviceId,
+  )
+}
+
 </script>
 
 <template>
@@ -35,6 +63,7 @@ function serviceUnavailable() {
     <n-button-group>
       <n-button
           :disabled="serviceUnavailable() || serviceInactive()"
+          @click="onClickStart"
       >
         <template #icon>
           <PlayIcon />
@@ -44,6 +73,7 @@ function serviceUnavailable() {
 
       <n-button
           :disabled="serviceUnavailable() || serviceActive()"
+          @click="onClickStop"
       >
         <template #icon>
           <StopIcon />
@@ -53,6 +83,7 @@ function serviceUnavailable() {
 
       <n-button
           :disabled="serviceUnavailable() || serviceActive()"
+          @click="onClickRestart"
       >
         <template #icon>
           <ArrowPathIcon />
