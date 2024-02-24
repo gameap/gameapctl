@@ -33,8 +33,12 @@ function serviceStatus() {
       Stopped
     </n-tag>
 
-    <n-tag v-if="serviceStatus() === 'active'" :bordered="false" type="success">
+    <n-tag v-else-if="serviceStatus() === 'active'" :bordered="false" type="success">
       Running
+    </n-tag>
+
+    <n-tag v-else-if="serviceStatus() === 'not found'" :bordered="false">
+      Not Found
     </n-tag>
 
     <n-tag v-else :bordered="false">

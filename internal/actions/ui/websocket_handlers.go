@@ -41,13 +41,15 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 		return errors.New("no service name provided")
 	}
 
-	_, _ = w.Write([]byte("active"))
-	return nil
-
 	serviceName := args[0]
 
 	var errNotFound *service.NotFoundError
 	err := service.Status(ctx, serviceName)
+	if err != nil && errors.Is(err, service.ErrInactiveService) {
+		_, _ = w.Write([]byte("inactive"))
+
+		return nil
+	}
 	if err != nil && !errors.As(err, &errNotFound) {
 		return errors.WithMessage(err, "failed to get service status")
 	}
@@ -55,11 +57,6 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 		_, _ = w.Write([]byte("not found"))
 
 		//nolint:nilerr
-		return nil
-	}
-	if err != nil && errors.Is(err, service.ErrInactiveService) {
-		_, _ = w.Write([]byte("inactive"))
-
 		return nil
 	}
 

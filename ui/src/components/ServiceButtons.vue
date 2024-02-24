@@ -26,7 +26,11 @@ function serviceInactive() {
 }
 
 function serviceUnavailable() {
-  return service.value.status === undefined || service.value.status === '' || service.value.status === false
+  return service.value.status === undefined ||
+      service.value.status === '' ||
+      service.value.status === false ||
+      (service.value.status !== 'active' &&
+      service.value.status !== 'inactive')
 }
 
 function onClickStart() {
@@ -62,8 +66,8 @@ function onClickRestart() {
   <div class="mt-3">
     <n-button-group>
       <n-button
-          :disabled="serviceUnavailable() || serviceInactive()"
-          @click="onClickStart"
+          :disabled="serviceUnavailable() || serviceActive()"
+          @click="onClickStart()"
       >
         <template #icon>
           <PlayIcon />
@@ -72,8 +76,8 @@ function onClickRestart() {
       </n-button>
 
       <n-button
-          :disabled="serviceUnavailable() || serviceActive()"
-          @click="onClickStop"
+          :disabled="serviceUnavailable() || serviceInactive()"
+          @click="onClickStop()"
       >
         <template #icon>
           <StopIcon />
@@ -82,8 +86,8 @@ function onClickRestart() {
       </n-button>
 
       <n-button
-          :disabled="serviceUnavailable() || serviceActive()"
-          @click="onClickRestart"
+          :disabled="serviceUnavailable() || serviceInactive()"
+          @click="onClickRestart()"
       >
         <template #icon>
           <ArrowPathIcon />
