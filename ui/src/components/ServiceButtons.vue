@@ -47,7 +47,7 @@ function onClickStop() {
       "Service stop",
       "Are you sure?",
       "service-command",
-      "service-command start " + props.serviceId,
+      "service-command stop " + props.serviceId,
   )
 }
 
@@ -56,7 +56,7 @@ function onClickRestart() {
       "Service restart",
       "Are you sure?",
       "service-command",
-      "service-command start " + props.serviceId,
+      "service-command restart " + props.serviceId,
   )
 }
 

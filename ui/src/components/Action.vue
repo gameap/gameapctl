@@ -4,6 +4,7 @@ import { useMessage, useDialog } from "naive-ui";
 import {XMarkIcon} from "@heroicons/vue/24/outline/index.js";
 import {send, subscribe, unsubscribe} from "../websocket.js";
 import {subscribeAction} from "../action.js";
+import {reloadServices} from "../global.js";
 
 const dialog = useDialog();
 
@@ -61,12 +62,14 @@ function run() {
       unsubscribe(id)
       complete.value = true
       log.value += "\nError:\n" + message + "\n"
+      reloadServices()
     }
 
     if (code === "end" && complete.value === false) {
       unsubscribe(id)
       log.value += "\n" + "Completed" + "\n"
       complete.value = true
+      reloadServices()
     }
   })
 }

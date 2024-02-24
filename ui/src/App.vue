@@ -50,32 +50,27 @@ import { Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 import ApiTab from "./tabs/ApiTab.vue"
 import DaemonTab from "./tabs/DaemonTab.vue"
 import Action from "./components/Action.vue"
-import { useServicesStore } from "./store/services.js";
+import {reloadServices} from "./global.js"
 import {unarySend} from "./websocket.js"
+import {useNodeStore} from "./store/node.js"
 
-const servicesStore = useServicesStore()
+const nodeStore = useNodeStore()
 
 onBeforeMount(() => {
-  unarySend("service-daemon-status", "service-status gameap-daemon", (code, message) => {
+  unarySend("node-info", "node-info", (code, message) => {
     if (code === "payload") {
-      servicesStore.updateService("gameap-daemon", {status: message})
+      const lines = message.split('\n');
+      const nodeInfo = {};
+
+      lines.forEach(line => {
+        const [key, value] = line.split(':');
+        nodeInfo[key.trim().toLowerCase()] = value.trim();
+      });
+
+      nodeStore.updateNode(nodeInfo)
     }
   })
-  unarySend("service-nginx-status", "service-status nginx", (code, message) => {
-    if (code === "payload") {
-      servicesStore.updateService("nginx", {status: message})
-    }
-  })
-  unarySend("service-mysql-status", "service-status mysql", (code, message) => {
-    if (code === "payload") {
-      servicesStore.updateService("mysql", {status: message})
-    }
-  })
-  unarySend("service-php-status", "service-status php-fpm", (code, message) => {
-    if (code === "payload") {
-      servicesStore.updateService("php-fpm", {status: message})
-    }
-  })
+  reloadServices()
 })
 
 const navigation = ref([

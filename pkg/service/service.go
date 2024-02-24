@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os/exec"
 	"sync"
 
@@ -47,10 +48,10 @@ func Restart(ctx context.Context, serviceName string) error {
 	}
 	err = s.Restart(ctx, serviceName)
 	if err != nil {
-		log.Println(err)
+		slog.WarnContext(ctx, "failed to restart", err)
 		err = s.Stop(ctx, serviceName)
 		if err != nil {
-			log.Println(err)
+			slog.WarnContext(ctx, "failed to stop", err)
 		}
 
 		return s.Start(ctx, serviceName)
@@ -119,7 +120,7 @@ func (s *Systemd) Start(_ context.Context, serviceName string) error {
 	cmd := exec.Command("systemctl", "start", serviceName)
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
-	log.Println('\n', cmd.String())
+	slog.Debug(cmd.String())
 
 	return cmd.Run()
 }
@@ -128,7 +129,7 @@ func (s *Systemd) Stop(_ context.Context, serviceName string) error {
 	cmd := exec.Command("systemctl", "stop", serviceName)
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
-	log.Println('\n', cmd.String())
+	slog.Debug(cmd.String())
 
 	return cmd.Run()
 }

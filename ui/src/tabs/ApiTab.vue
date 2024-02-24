@@ -1,24 +1,49 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 import ServicePanel from "../components/ServicePanel.vue";
 import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon} from "@heroicons/vue/24/outline/index.js";
 
 import { runAction, runActionWithoutDialog } from "../action.js";
 
+import {useNodeStore} from "../store/node.js";
+
+const { getNodeInfo } = useNodeStore()
+
+const nodeOS = computed(() => {
+  return getNodeInfo("os")
+})
+
+const defaultPath = computed(() => {
+  return nodeOS.value === "windows"
+      ? "C:\\gameap"
+      : "/var/www/gameap"
+})
+
 const showInstallationAskModal = ref(false)
 
 const installationFormRef = ref(null);
 const installationForm = ref({
-  path: "/var/www/gameap",
+  path: defaultPath,
   host: "127.0.0.1",
   port: "80",
   source: "repo",
   branch: "master",
+  webServer: "nginx",
+  database: "mysql",
 })
 const githubBranchOptions = [
   {label: "develop", value: "develop"},
   {label: "master", value: "master"},
+]
+const webServerOptions = [
+  {label: "Nginx", value: "nginx"},
+  {label: "None", value: "none"},
+]
+const databaseOptions = [
+  {label: "MySQL", value: "mysql"},
+  {label: "SQLite", value: "sqlite"},
+  {label: "None", value: "none"},
 ]
 
 const installationFormRules = {
@@ -40,9 +65,21 @@ function onClickGameAPUpgradingButton() {
 
 function handleInstallButtonClick(e) {
   showInstallationAskModal.value = false
+
+  let params = "--path=" + installationForm.value.path +
+      " --host=" + installationForm.value.host +
+      " --port=" + installationForm.value.port +
+      " --web-server=" + installationForm.value.webServer +
+      " --database=" + installationForm.value.database
+
+  if (installationForm.value.source === "github") {
+    params += " --source=github"
+    params += " --branch=" + installationForm.value.branch
+  }
+
   runActionWithoutDialog(
       "gameap-install",
-      "gameap-install some-values=123,somevalue=3",
+      "gameap-install " + params,
   )
 }
 
@@ -105,7 +142,11 @@ function handleInstallButtonClick(e) {
           :rules="installationFormRules"
       >
         <n-form-item label="Path" path="path">
-          <n-input v-model:value="installationForm.path" placeholder="Path" />
+          <n-input
+              v-model:value="installationForm.path"
+              :disabled="nodeOS === 'windows'"
+              placeholder="Path"
+          />
         </n-form-item>
         <n-form-item label="Source" path="source">
           <n-radio-group v-model:value="installationForm.source">
@@ -125,6 +166,12 @@ function handleInstallButtonClick(e) {
         </n-form-item>
         <n-form-item label="Port" path="port">
           <n-input v-model:value="installationForm.port" placeholder="Port" />
+        </n-form-item>
+        <n-form-item label="Web Server" path="webServer">
+          <n-select v-model:value="installationForm.webServer" :options="webServerOptions" />
+        </n-form-item>
+        <n-form-item label="Database" path="database">
+          <n-select v-model:value="installationForm.database" :options="databaseOptions" />
         </n-form-item>
       </n-form>
       <n-button type="primary" @click="handleInstallButtonClick">

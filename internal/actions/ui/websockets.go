@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gorilla/websocket"
@@ -80,7 +81,9 @@ func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) erro
 
 	log.Printf("recv: %s", msg)
 
-	err = cmdHandle(ctx, newResponseWriter(ws, m.Topic), m)
+	rw := newResponseWriter(ws, m.Topic)
+
+	err = cmdHandle(ctx, rw, m)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to handle command"))
 
@@ -93,7 +96,7 @@ func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) erro
 			return errors.WithMessage(err, "failed to handle command and marshal message")
 		}
 
-		err = ws.WriteMessage(mt, b)
+		err = rw.WriteMessage(mt, b)
 		if err != nil {
 			return errors.WithMessage(err, "failed to handle command and write error message")
 		}
@@ -107,7 +110,7 @@ func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) erro
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal message")
 	}
-	err = ws.WriteMessage(mt, b)
+	err = rw.WriteMessage(mt, b)
 	if err != nil {
 		return errors.WithMessage(err, "failed to write message")
 	}
@@ -116,6 +119,7 @@ func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) erro
 }
 
 type responseWriter struct {
+	mu    sync.Mutex
 	conn  *websocket.Conn
 	topic string
 }
@@ -125,6 +129,9 @@ func newResponseWriter(conn *websocket.Conn, topic string) *responseWriter {
 }
 
 func (rw *responseWriter) Write(p []byte) (n int, err error) {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+
 	b, err := json.Marshal(message{
 		Topic: rw.topic,
 		Code:  messageCodePayload,
@@ -139,4 +146,11 @@ func (rw *responseWriter) Write(p []byte) (n int, err error) {
 	}
 
 	return len(p), nil
+}
+
+func (rw *responseWriter) WriteMessage(messageType int, data []byte) error {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+
+	return rw.conn.WriteMessage(messageType, data)
 }
