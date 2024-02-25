@@ -1,13 +1,11 @@
 package panel
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -143,45 +141,21 @@ func ChangePassword(_ context.Context, path, username, password string) error {
 
 func SetDaemonCreateToken(_ context.Context, path, token string) error {
 	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
-		filepath.Join(path, "artisan"), "tinker",
+		filepath.Join(path, "artisan"),
+		"tinker",
+		"--execute",
+		fmt.Sprintf(
+			"Illuminate\\Support\\Facades\\Cache::put('gdaemonAutoCreateToken', '%s', 9999);",
+			token,
+		),
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to define php command and args")
 	}
 
-	buf := bytes.NewBuffer(nil)
-
-	cmd := exec.Command(cmdName, args...)
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-	cmd.Stdin = buf
-	log.Println('\n', cmd.String())
-
-	go func() {
-		err := cmd.Run()
-		if err != nil {
-			log.Println(errors.WithMessage(err, "failed to execute tinker command"))
-		}
-	}()
-
-	// Wait for tinker to start
-	log.Println("Waiting for tinker to start ...")
-	time.Sleep(5 * time.Second) //nolint:gomnd
-	buf.WriteString(
-		fmt.Sprintf(
-			"Illuminate\\Support\\Facades\\Cache::put('gdaemonAutoCreateToken', '%s', 9999);\n",
-			token,
-		),
-	)
-
-	// Wait for tinker to finish
-	log.Println("Waiting for tinker to finish ...")
-	time.Sleep(2 * time.Second)
-
-	log.Println("Interrupting tinker ...")
-	err = cmd.Process.Kill()
+	err = utils.ExecCommand(cmdName, args...)
 	if err != nil {
-		log.Println(errors.WithMessage(err, "failed to interrupt tinker"))
+		return errors.WithMessage(err, "failed to execute tinker command")
 	}
 
 	return nil
