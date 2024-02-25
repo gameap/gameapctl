@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js
         uses: actions/setup-node@v3
@@ -91,6 +91,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
       - name: Install Go
         uses: actions/setup-go@v4
         with:
@@ -132,7 +143,18 @@ jobs:
     continue-on-error: ${{ matrix.experimental }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
 
       - name: Install Go
         uses: actions/setup-go@v3
@@ -171,6 +193,17 @@ jobs:
     needs: [test, integration-test, integration-test-windows]
     runs-on: ubuntu-latest
     steps:
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
       - name: Install Go
         uses: actions/setup-go@v3
         with:

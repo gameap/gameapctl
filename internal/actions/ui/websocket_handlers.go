@@ -2,13 +2,16 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
@@ -293,15 +296,102 @@ func gameapUpgrade(_ context.Context, w io.Writer, _ []string) error {
 	return nil
 }
 
-func daemonInstall(_ context.Context, w io.Writer, _ []string) error {
+//nolint:funlen
+func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 	ex, err := os.Executable()
 	if err != nil {
 		return errors.Wrap(err, "failed to get executable path")
 	}
 
+	host := ""
+	installationToken := ""
+
+	if len(args) < 2 {
+		return errors.New("not enough arguments, should be at least 2: host and installation token")
+	}
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--host=") {
+			host = strings.TrimPrefix(arg, "--host=")
+		}
+
+		if strings.HasPrefix(arg, "--installation-token=") {
+			installationToken = strings.TrimPrefix(arg, "--installation-token=")
+		}
+	}
+
+	if host == "" || installationToken == "" {
+		return errors.New("host and installation token should be provided")
+	}
+
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "http://" + host
+	}
+
+	client := http.DefaultClient
+	client.Timeout = 5 * time.Second //nolint:gomnd
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("%s/gdaemon/setup/%s", host, installationToken),
+		nil,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create request")
+	}
+
+	//nolint:bodyclose
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to get daemon setup")
+	}
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("failed to get daemon setup")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read response body")
+	}
+
+	createToken := ""
+
+	split := strings.Split(string(body), ";")
+	if len(split) < 2 {
+		return errors.New("invalid response body")
+	}
+
+	for _, s := range split {
+		switch {
+		case strings.HasPrefix(s, "export createToken="):
+			createToken = strings.TrimPrefix(s, "export createToken=")
+		case strings.HasPrefix(s, "export CREATE_TOKEN="):
+			createToken = strings.TrimPrefix(s, "export CREATE_TOKEN=")
+		}
+	}
+
+	if createToken == "" {
+		return errors.New("failed to get create token")
+	}
+
 	exPath := filepath.Dir(ex)
 
-	cmd := exec.Command(ex, "--non-interactive", "daemon", "install")
+	cmd := exec.Command(
+		ex,
+		"--non-interactive",
+		"daemon",
+		"install",
+		"--host="+host,
+		"--create-token="+createToken,
+	)
 	cmd.Stdout = w
 	cmd.Stderr = w
 	cmd.Dir = exPath
