@@ -1249,16 +1249,18 @@ func daemonInstall(ctx context.Context, state panelInstallState) (panelInstallSt
 
 	err := panel.SetDaemonCreateToken(
 		ctx,
-		state.Host,
+		state.Path,
 		token,
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to set daemon create token")
 	}
 
+	host := "http://" + state.Host + ":" + state.Port
+
 	err = daemoninstall.Install(
 		ctx,
-		state.Host,
+		host,
 		token,
 	)
 	if err != nil {

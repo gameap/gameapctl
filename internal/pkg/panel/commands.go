@@ -141,7 +141,7 @@ func ChangePassword(_ context.Context, path, username, password string) error {
 	return nil
 }
 
-func SetDaemonCreateToken(_ context.Context, path string, token string) error {
+func SetDaemonCreateToken(_ context.Context, path, token string) error {
 	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
 		filepath.Join(path, "artisan"), "tinker",
 	)
