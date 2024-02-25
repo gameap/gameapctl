@@ -114,7 +114,7 @@ function onClickDaemonUpgradingButton() {
           label-width="auto"
           >
         <n-form-item label="Host" prop="host">
-          <n-input v-model:value="installationForm.host" placeholder="http://<your Host/IP>" />
+          <n-input v-model:value="installationForm.host" placeholder="http://<your host / IP>" />
 
           <n-tooltip placement="top-start" trigger="hover">
             <template #trigger>

@@ -29,9 +29,9 @@ func Handle(cliCtx *cli.Context) error {
 	http.Handle("/", http.StripPrefix("/", fs))
 	http.HandleFunc("/ws", serveWs)
 
-	addr := fmt.Sprintf("%s:%d", cliCtx.String("host"), cliCtx.Int("port"))
+	addr := fmt.Sprintf("%s:%s", cliCtx.String("host"), cliCtx.String("port"))
 
-	if addr == "" {
+	if addr == "" || addr == ":" || addr == ":0" {
 		addr = "localhost:17080"
 	}
 	url := "http://" + addr
