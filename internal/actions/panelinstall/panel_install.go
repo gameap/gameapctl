@@ -1245,10 +1245,12 @@ func configureCron(_ context.Context, state panelInstallState) error {
 func daemonInstall(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	fmt.Println("Installing daemon ...")
 
+	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
+
 	err := panel.SetDaemonCreateToken(
 		ctx,
 		state.Host,
-		fmt.Sprintf("gameapctl%d", time.Now().UnixMilli()),
+		token,
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to set daemon create token")
@@ -1257,7 +1259,7 @@ func daemonInstall(ctx context.Context, state panelInstallState) (panelInstallSt
 	err = daemoninstall.Install(
 		ctx,
 		state.Host,
-		"",
+		token,
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")

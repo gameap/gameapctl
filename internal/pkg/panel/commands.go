@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -177,10 +176,10 @@ func SetDaemonCreateToken(_ context.Context, path string, token string) error {
 
 	// Wait for tinker to finish
 	log.Println("Waiting for tinker to finish ...")
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	log.Println("Interrupting tinker ...")
-	err = cmd.Process.Signal(os.Interrupt)
+	err = cmd.Process.Kill()
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to interrupt tinker"))
 	}
