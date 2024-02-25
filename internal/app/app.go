@@ -34,6 +34,10 @@ import (
 func Run(args []string) {
 	logfilepath := ""
 
+	if len(args) == 0 && runtime.GOOS == "windows" {
+		args = []string{"ui"}
+	}
+
 	app := &cli.App{
 		Name:      "gameapctl",
 		Usage:     "GameAP Control",
@@ -218,6 +222,10 @@ func Run(args []string) {
 							},
 							&cli.StringFlag{
 								Name: "database-password",
+							},
+							&cli.BoolFlag{
+								Name:  "with-daemon",
+								Usage: "Daemon will be also installed with panel. ",
 							},
 						},
 					},

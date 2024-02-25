@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/internal/pkg/panel"
@@ -69,6 +71,7 @@ type panelInstallState struct {
 	Branch        string
 	Database      string
 	DBCreds       databaseCredentials
+	WithDaemon    bool
 	OSInfo        osinfo.Info
 
 	// Installation variables
@@ -105,6 +108,7 @@ func Handle(cliCtx *cli.Context) error {
 		Username:     cliCtx.String("database-username"),
 		Password:     cliCtx.String("database-password"),
 	}
+	state.WithDaemon = cliCtx.Bool("with-daemon")
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
 
 	state.FromGithub = cliCtx.Bool("github")
@@ -386,6 +390,14 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	log.Println("GameAP successfully installed")
+
+	if state.WithDaemon {
+		state, err = daemonInstall(cliCtx.Context, state)
+		if err != nil {
+			fmt.Println("Failed to install daemon: ", err.Error())
+			log.Println(errors.WithMessage(err, "failed to install daemon, try to install it manually"))
+		}
+	}
 
 	fmt.Println("---------------------------------")
 	fmt.Println("DONE!")
@@ -1228,6 +1240,30 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	}
 
 	return nil
+}
+
+func daemonInstall(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	fmt.Println("Installing daemon ...")
+
+	err := panel.SetDaemonCreateToken(
+		ctx,
+		state.Host,
+		fmt.Sprintf("gameapctl%d", time.Now().UnixMilli()),
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to set daemon create token")
+	}
+
+	err = daemoninstall.Install(
+		ctx,
+		state.Host,
+		"",
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install daemon")
+	}
+
+	return state, nil
 }
 
 func updateAdminPassword(ctx context.Context, state panelInstallState) (panelInstallState, error) {
