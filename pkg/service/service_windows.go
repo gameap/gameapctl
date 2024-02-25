@@ -7,10 +7,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -34,9 +36,20 @@ var commands = map[string]struct {
 
 func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	err := s.start(ctx, serviceName)
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			return nil
+		}
+		log.Println(errors.WithMessage(err, "failed to start service"))
+	}
+	if err == nil {
+		return nil
+	}
+
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
+		log.Println(err)
 		return err
 	}
 
@@ -45,8 +58,12 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if err == nil {
 			return nil
 		}
+		log.Println(errors.WithMessagef(err, "failed to start alias %s for service %s", alias, serviceName))
 	}
 
+	if err != nil {
+		log.Println(err)
+	}
 	if err == nil {
 		return nil
 	}
@@ -54,17 +71,16 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	if commandExists {
 		var cmd []string
 		cmd, err = shellquote.Split(c.Start)
-
-		if err == nil {
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to split command"))
+		} else {
 			err = utils.ExecCommand(cmd[0], cmd[1:]...)
-			if err == nil {
+			if err != nil {
+				log.Println(errors.WithMessage(err, "failed to exec command"))
+			} else {
 				return nil
 			}
 		}
-	}
-
-	if err != nil {
-		log.Println(err)
 	}
 
 	for _, alias := range a {
@@ -76,8 +92,12 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		var aliasCmd []string
 		aliasCmd, err = shellquote.Split(ac.Start)
 		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to split alias command"))
+		} else {
 			err = utils.ExecCommand(aliasCmd[0], aliasCmd[1:]...)
-			if err == nil {
+			if err != nil {
+				log.Println(errors.WithMessage(err, "failed to exec command"))
+			} else {
 				return nil
 			}
 		}
@@ -88,6 +108,16 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 
 func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 	err := s.stop(ctx, serviceName)
+	if err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			return nil
+		}
+		log.Println(errors.WithMessage(err, "failed to stop service"))
+	}
+	if err == nil {
+		return nil
+	}
+
 	c, commandExists := commands[serviceName]
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
@@ -96,7 +126,9 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 
 	for _, alias := range a {
 		err = s.stop(ctx, alias)
-		if err == nil {
+		if err != nil {
+			log.Println(errors.WithMessagef(err, "failed to stop alias %s for service %s", alias, serviceName))
+		} else {
 			return nil
 		}
 	}
@@ -144,16 +176,54 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 	return errors.New("use stop and start instead of restart")
 }
 
-func (s *Windows) start(ctx context.Context, serviceName string) error {
+func (s *Windows) Status(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
-	if err != nil || svc == nil {
+	if err != nil {
+		fmt.Println(errors.WithMessage(err, "failed to find service"))
+		return NewNotFoundError(serviceName)
+	}
+	if svc == nil {
 		return NewNotFoundError(serviceName)
 	}
 
-	if svc.State == windowsServiceStateStopped {
-		return utils.ExecCommand("sc", "start", serviceName)
-	} else {
+	if svc.State != windowsServiceStateRunning && svc.State != windowsServiceStateStartPending {
+		return ErrInactiveService
+	}
+
+	return nil
+}
+
+func (s *Windows) start(ctx context.Context, serviceName string) error {
+	svc, err := findService(ctx, serviceName)
+	if err != nil {
+		fmt.Println(errors.WithMessage(err, "failed to find service"))
+		return NewNotFoundError(serviceName)
+	}
+	if svc == nil {
+		return NewNotFoundError(serviceName)
+	}
+
+	switch svc.State {
+	case windowsServiceStateRunning:
 		log.Printf("Service '%s' is already running\n", serviceName)
+	case windowsServiceStateStartPending:
+		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
+	default:
+		err = utils.ExecCommand("sc", "start", serviceName)
+	}
+	if err != nil {
+		return err
+	}
+
+	svc, err = findService(ctx, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if svc.State != windowsServiceStateStartPending {
+		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
 	return nil
@@ -165,13 +235,70 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 		return NewNotFoundError(serviceName)
 	}
 
-	if svc.State == windowsServiceStateRunning {
-		return utils.ExecCommand("sc", "stop", serviceName)
-	} else {
+	switch svc.State {
+	case windowsServiceStateRunning, windowsServiceStateStartPending:
+		err = utils.ExecCommand("sc", "stop", serviceName)
+	case windowsServiceStateStopped:
 		log.Printf("Service '%s' is already stopped\n", serviceName)
+	case windowsServiceStateStopPending:
+		log.Printf("Service '%s' is stopping\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
+	}
+	if err != nil {
+		return err
+	}
+
+	svc, err = findService(ctx, serviceName)
+	if err != nil {
+		return err
+	}
+
+	if svc.State != windowsServiceStateStartPending {
+		log.Printf("Service '%s' is starting\n", serviceName)
+		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
 	return nil
+}
+
+func (s *Windows) waitStatus(ctx context.Context, serviceName string, status windowsServiceState) error {
+	log.Println("Waiting for service status")
+
+	t := time.NewTicker(5 * time.Second)
+	defer func() {
+		t.Stop()
+	}()
+
+	checksAvailable := 15
+
+	for checksAvailable > 0 {
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		svc, err := findService(ctx, serviceName)
+		if err != nil || svc == nil {
+			return NewNotFoundError(serviceName)
+		}
+
+		if svc.State == status {
+			return nil
+		}
+
+		if svc.State != windowsServiceStateStartPending &&
+			svc.State != windowsServiceStateStopPending &&
+			svc.State != windowsServiceStateContinuePending &&
+			svc.State != windowsServiceStatePausePending {
+
+			return errors.New("failed to wait service status, service state is not pending")
+		}
+
+		checksAvailable--
+	}
+
+	return errors.New("failed to wait service status")
 }
 
 func IsExists(ctx context.Context, serviceName string) bool {
@@ -199,8 +326,15 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
+		log.Println(buf.String())
 		return nil, err
 	}
+
+	serviceNames := make([]string, 0, len(services))
+	for _, winservice := range services {
+		serviceNames = append(serviceNames, winservice.ServiceName)
+	}
+	log.Println("Services: ", strings.Join(serviceNames, ", "))
 
 	for _, winservice := range services {
 		if strings.ToLower(winservice.ServiceName) == strings.ToLower(serviceName) {

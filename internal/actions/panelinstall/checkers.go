@@ -76,6 +76,20 @@ func chooseIPFromHost(host string) (string, error) {
 	return result, nil
 }
 
+func checkPath(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	if utils.IsFileExists(state.Path) {
+		err := warning(ctx, state,
+			fmt.Sprintf("Directory '%s' already exists. Files will be overwritten. "+
+				"The panel installation may also fail.", state.Path),
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+
+	return state, nil
+}
+
 func checkWebServers(ctx context.Context, state panelInstallState) (panelInstallState, error) {
 	if state.WebServer == noneWebServer {
 		return state, nil
@@ -104,7 +118,11 @@ func checkNginxWebServer(ctx context.Context, state panelInstallState) (panelIns
 			return state, err
 		}
 	} else {
+		var errNotFound packagemanager.NotFoundError
 		nginxConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "nginx_conf")
+		if err != nil && errors.As(err, &errNotFound) {
+			return state, nil
+		}
 		if err != nil {
 			return state, err
 		}
@@ -120,7 +138,11 @@ func checkNginxWebServer(ctx context.Context, state panelInstallState) (panelIns
 		}
 	}
 
+	var errNotFound packagemanager.NotFoundError
 	gameapConfPath, err := packagemanager.ConfigForDistro(ctx, packagemanager.NginxPackage, "gameap_host_conf")
+	if err != nil && errors.As(err, &errNotFound) {
+		return state, nil
+	}
 	if err != nil {
 		return state, err
 	}
@@ -197,7 +219,7 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		},
 		Timeout: 2 * time.Second,
 	}
-	url := "http://" + state.Host + ":" + state.Port
+	url := "http://" + state.Host + ":" + state.Port //nolint:goconst
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return state, err
@@ -211,7 +233,8 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		(errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(err, context.Canceled) ||
 			(errors.As(err, &netErr) && netErr.Timeout()) ||
-			(errors.As(err, &sysErr) && errors.Is(sysErr.Err, syscall.ECONNREFUSED))) {
+			(errors.As(err, &sysErr) && errors.Is(sysErr.Err, syscall.ECONNREFUSED)) ||
+			strings.Contains(err.Error(), "No connection could be made because the target machine actively refused it")) {
 		// OK
 		return state, nil
 	}

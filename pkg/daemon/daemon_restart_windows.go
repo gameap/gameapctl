@@ -6,9 +6,15 @@ package daemon
 import (
 	"context"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
-func Restart(ctx context.Context) error {
-	return errors.New("not implemented")
+func Restart(_ context.Context) error {
+	err := utils.ExecCommand("winsw", "restart", defaultDaemonConfigPath)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get daemon status")
+	}
+
+	return nil
 }

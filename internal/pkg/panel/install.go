@@ -129,6 +129,10 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 	}(response.Body)
 
 	if response.StatusCode != http.StatusOK {
+		log.Println("unsuccessful response from panel")
+		body, _ := io.ReadAll(response.Body)
+		log.Println(string(body))
+
 		return errors.New("unsuccessful response from panel")
 	}
 

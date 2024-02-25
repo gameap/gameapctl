@@ -27,6 +27,10 @@ func (s *WindowsNil) Restart(_ context.Context, _ string) error {
 	return errors.New("unsupported")
 }
 
+func (s *WindowsNil) Status(_ context.Context, _ string) error {
+	return errors.New("unsupported")
+}
+
 func IsExists(_ context.Context, _ string) bool {
 	panic("function is not implemented")
 }

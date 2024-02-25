@@ -165,18 +165,22 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 func defineNginxPath(ctx context.Context) (string, error) {
 	path, err := findNginxDirWindows(ctx)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to find nginx directory")
+		return "", NewErrNotFound("failed to find nginx directory")
 	}
 
 	if path == "" {
 		path, err = defineWindowsServiceBinaryPath(ctx, NginxPackage)
 		if err != nil {
-			return "", errors.WithMessage(err, "failed to define service binary path")
+			log.Println(errors.WithMessage(err, "failed to define service binary path"))
+
+			return "", NewErrNotFound(errors.WithMessage(err, "failed to define service binary path").Error())
 		}
 
 		stat, err := os.Stat(path)
 		if err != nil {
-			return "", err
+			log.Println(errors.WithMessage(err, "failed to stat nginx binary"))
+
+			return "", NewErrNotFound(errors.WithMessage(err, "failed to stat nginx binary").Error())
 		}
 
 		if !stat.IsDir() {
@@ -185,14 +189,14 @@ func defineNginxPath(ctx context.Context) (string, error) {
 	}
 
 	if path == "" {
-		return "", errors.New("nginx binary not found")
+		return "", NewErrNotFound("nginx binary not found")
 	}
 
 	if _, err := os.Stat(filepath.Join(path, "nginx.exe")); err == nil {
 		return path, nil
 	}
 
-	return "", errors.New("nginx path not found")
+	return "", NewErrNotFound("nginx path not found")
 }
 
 func findNginxDirWindows(_ context.Context) (string, error) {

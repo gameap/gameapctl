@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -48,12 +49,30 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			DBName:               "mysql",
 			AllowNativePasswords: true,
 		},
+		{
+			User:                 "root",
+			Net:                  "tcp",
+			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, "3309"),
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
+		{
+			User:                 "root",
+			Passwd:               dbCreds.RootPassword,
+			Net:                  "tcp",
+			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, "3309"),
+			DBName:               "mysql",
+			AllowNativePasswords: true,
+		},
 	}
 
 	var err error
 	var db *sql.DB
 	for _, cfg := range mysqlCfgs {
-		if cfg.Net == "unix" && !utils.IsFileExists(cfg.Addr) {
+		if runtime.GOOS == "windows" && cfg.Net == "unix" {
+			continue
+		}
+		if cfg.Net == "unix" && (!utils.IsFileExists(cfg.Addr)) {
 			continue
 		}
 		db, err = sql.Open("mysql", cfg.FormatDSN())
@@ -221,9 +240,19 @@ func mysqlChangeUserPassword(ctx context.Context, db *sql.DB, username, password
 		return errors.WithMessage(err, "failed to get mysql version")
 	}
 
-	majorVersion := strings.Split(version, ".")[0]
+	split := strings.Split(version, ".")
 
-	if majorVersion == "8" {
+	majorVersion := ""
+	minorVersion := ""
+	if len(split) > 0 {
+		majorVersion = split[0]
+	}
+	if len(split) > 1 {
+		minorVersion = split[1]
+	}
+
+	if majorVersion == "8" ||
+		(majorVersion == "10" && minorVersion == "6") { // MariaDB 10.6
 		_, err = db.ExecContext(
 			ctx,
 			"ALTER USER '"+username+"'@'%' IDENTIFIED BY '"+password+"'",

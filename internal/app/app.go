@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -21,8 +22,10 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/panelupdate"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
+	"github.com/gameap/gameapctl/internal/actions/ui"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -30,6 +33,10 @@ import (
 //nolint:funlen
 func Run(args []string) {
 	logfilepath := ""
+
+	if len(args) == 1 && runtime.GOOS == "windows" {
+		args = []string{args[0], "ui"}
+	}
 
 	app := &cli.App{
 		Name:      "gameapctl",
@@ -92,6 +99,8 @@ func Run(args []string) {
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
 
+							packagemanager.UpdateEnvPath()
+
 							return nil
 						},
 						Action: daemoninstall.Handle,
@@ -114,7 +123,12 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Update daemon to a new version",
 						Usage:       "Update daemon to a new version",
-						Action:      daemonupdate.Handle,
+						Before: func(context *cli.Context) error {
+							packagemanager.UpdateEnvPath()
+
+							return nil
+						},
+						Action: daemonupdate.Handle,
 					},
 					{
 						Name:        "start",
@@ -157,6 +171,8 @@ func Run(args []string) {
 						Usage:       "Install panel",
 						Before: func(context *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
+
+							packagemanager.UpdateEnvPath()
 
 							return nil
 						},
@@ -207,13 +223,47 @@ func Run(args []string) {
 							&cli.StringFlag{
 								Name: "database-password",
 							},
+							&cli.BoolFlag{
+								Name:  "with-daemon",
+								Usage: "Daemon will be also installed with panel. ",
+							},
 						},
 					},
 					{
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
-						Action:  panelupdate.Handle,
+						Before: func(context *cli.Context) error {
+							packagemanager.UpdateEnvPath()
+
+							return nil
+						},
+						Action: panelupdate.Handle,
+					},
+				},
+			},
+			{
+				Name:        "ui",
+				Description: "Web interface in default browser. ",
+				Usage:       "Web interface in default browser. ",
+				Before: func(context *cli.Context) error {
+					packagemanager.UpdateEnvPath()
+
+					return nil
+				},
+				Action: ui.Handle,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "host",
+						DefaultText: "localhost",
+					},
+					&cli.StringFlag{
+						Name:        "port",
+						DefaultText: "17080",
+					},
+					&cli.BoolFlag{
+						Name:  "no-browser",
+						Usage: "Do not open browser",
 					},
 				},
 			},
@@ -224,7 +274,8 @@ func Run(args []string) {
 				Action:      selfupdate.Handle,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name: "force",
+						Name:  "force",
+						Usage: "Update even if dev version is used. ",
 					},
 				},
 			},
@@ -275,7 +326,13 @@ func Run(args []string) {
 func initLogFile(command string) string {
 	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05.000"))
 
-	logpath := "/var/log/gameapctl/"
+	logpath := ""
+
+	if runtime.GOOS == "windows" {
+		logpath = "C:\\gameap\\logs\\"
+	} else {
+		logpath = "/var/log/gameapctl/"
+	}
 
 	if _, err := os.Stat(logpath); errors.Is(err, fs.ErrNotExist) {
 		err = os.Mkdir(logpath, 0755)

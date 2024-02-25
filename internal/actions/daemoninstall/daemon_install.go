@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -67,14 +68,26 @@ type daemonsInstallState struct {
 	ListenIP string
 	NodeID   uint
 	APIKey   string
+
+	User     string
+	Password string // Password for user (Windows only)
 }
 
-//nolint:funlen
 func Handle(cliCtx *cli.Context) error {
+	return Install(
+		cliCtx.Context,
+		cliCtx.String("host"),
+		cliCtx.String("token"),
+	)
+}
+
+//nolint:funlen,gocognit
+func Install(ctx context.Context, host, token string) error {
 	fmt.Println("Install daemon")
+
 	state := daemonsInstallState{
-		Host:         cliCtx.String("host"),
-		Token:        cliCtx.String("token"),
+		Host:         host,
+		Token:        token,
 		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
@@ -94,90 +107,103 @@ func Handle(cliCtx *cli.Context) error {
 		state.CertsPath = gameap.DefaultDaemonCertPath
 	}
 
-	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
+	state.OSInfo = contextInternal.OSInfoFromContext(ctx)
 
-	pm, err := packagemanager.Load(cliCtx.Context)
+	pm, err := packagemanager.Load(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
 	fmt.Println("Checking for updates ...")
-	if err = pm.CheckForUpdates(cliCtx.Context); err != nil {
+	if err = pm.CheckForUpdates(ctx); err != nil {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
-	fmt.Println("Checking for curl ...")
-	if !utils.IsCommandAvailable("curl") {
-		fmt.Println("Installing curl ...")
-		if err = pm.Install(cliCtx.Context, packagemanager.CurlPackage); err != nil {
-			return errors.WithMessage(err, "failed to install curl")
+	//nolint:nestif
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Checking for curl ...")
+		if !utils.IsCommandAvailable("curl") {
+			fmt.Println("Installing curl ...")
+			if err = pm.Install(ctx, packagemanager.CurlPackage); err != nil {
+				return errors.WithMessage(err, "failed to install curl")
+			}
+		}
+
+		fmt.Println("Checking for gpg ...")
+		if !utils.IsCommandAvailable("gpg") {
+			fmt.Println("Installing gpg ...")
+			if err = pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
+				return errors.WithMessage(err, "failed to install gpg")
+			}
 		}
 	}
 
-	fmt.Println("Checking for gpg ...")
-	if !utils.IsCommandAvailable("gpg") {
-		fmt.Println("Installing gpg ...")
-		if err = pm.Install(cliCtx.Context, packagemanager.GnuPGPackage); err != nil {
-			return errors.WithMessage(err, "failed to install gpg")
-		}
-	}
-
-	state, err = createUser(cliCtx.Context, state)
+	state, err = createUser(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
 
 	fmt.Println("Installing steamcmd ...")
-	state, err = installSteamCMD(cliCtx.Context, pm, state)
+	state, err = installSteamCMD(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed install SteamCMD")
 	}
 
-	if err = pm.Install(
-		cliCtx.Context,
-		packagemanager.UnzipPackage,
-		packagemanager.XZUtilsPackage,
-	); err != nil {
-		return errors.WithMessage(err, "failed to install archive managers")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		if err = pm.Install(
+			ctx,
+			packagemanager.UnzipPackage,
+			packagemanager.XZUtilsPackage,
+		); err != nil {
+			return errors.WithMessage(err, "failed to install archive managers")
+		}
 	}
 
 	fmt.Println("Set user privileges ...")
-	state, err = setUserPrivileges(cliCtx.Context, state)
+	state, err = setUserPrivileges(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to set user privileges")
 	}
 
 	fmt.Println("Generating GameAP Daemon certificates ...")
-	state, err = generateCertificates(cliCtx.Context, state)
+	state, err = generateCertificates(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to generate certificates")
 	}
 
+	fmt.Println("Setting firewall rules ...")
+	state, err = setFirewallRules(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set firewall rules")
+	}
+
 	fmt.Println("Downloading gameap-daemon binaries ...")
-	state, err = installDaemonBinaries(cliCtx.Context, state)
+	state, err = installDaemonBinaries(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
 
-	fmt.Println("Downloading runner ...")
-	state, err = downloadRunner(cliCtx.Context, state, pm)
-	if err != nil {
-		return errors.WithMessage(err, "failed to download runner")
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		fmt.Println("Downloading runner ...")
+		state, err = downloadRunner(ctx, state, pm)
+		if err != nil {
+			return errors.WithMessage(err, "failed to download runner")
+		}
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")
-	state, err = configureDaemon(cliCtx.Context, state)
+	state, err = configureDaemon(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to configure daemon")
 	}
 
-	state, err = saveDaemonConfig(cliCtx.Context, state)
+	state, err = saveDaemonConfig(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to save daemon config")
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
-	err = daemon.Start(cliCtx.Context)
+	err = daemon.Start(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
@@ -190,18 +216,31 @@ func installSteamCMD(
 	pm packagemanager.PackageManager,
 	state daemonsInstallState,
 ) (daemonsInstallState, error) {
-	err := utils.Download(
-		ctx,
-		"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
-		state.SteamCMDPath,
-	)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to download steamcmd")
+	if runtime.GOOS == "linux" {
+		err := utils.Download(
+			ctx,
+			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
+			state.SteamCMDPath,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to download steamcmd")
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		err := utils.Download(
+			ctx,
+			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
+			state.SteamCMDPath,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to download steamcmd")
+		}
 	}
 
 	if runtime.GOOS == "linux" && strconv.IntSize == 64 {
 		fmt.Println("Installing 32-bit libraries ...")
-		err = pm.Install(
+		err := pm.Install(
 			ctx,
 			packagemanager.Lib32GCCPackage,
 			packagemanager.Lib32Stdc6Package,
@@ -215,7 +254,7 @@ func installSteamCMD(
 	return state, nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func generateCertificates(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -229,13 +268,13 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 		}
 	}
 
-	var privKey *rsa.PrivateKey
+	var privKey any
 	privKeyFilePath := filepath.Join(state.CertsPath, "server.key")
 
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		privKey, err = rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
+		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -250,9 +289,12 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 				log.Println(errors.WithMessage(err, "failed to close private key file"))
 			}
 		}(f)
+
+		privKey = privKeyRsa
+
 		err = pem.Encode(f, &pem.Block{
 			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(privKey),
+			Bytes: x509.MarshalPKCS1PrivateKey(privKeyRsa),
 		})
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to encode private key")
@@ -273,7 +315,11 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 
 		privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
-			return state, errors.WithMessage(err, "failed to parse private key")
+			log.Println(errors.WithMessage(err, "failed to parse private key"))
+			privKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to parse private key")
+			}
 		}
 	}
 
@@ -322,7 +368,9 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	return state, nil
 }
 
-func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func installDaemonBinaries(
+	ctx context.Context, pm packagemanager.PackageManager, state daemonsInstallState,
+) (daemonsInstallState, error) {
 	tmpDir, err := os.MkdirTemp("", "gameap")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to make temp dir")
@@ -367,6 +415,13 @@ func installDaemonBinaries(ctx context.Context, state daemonsInstallState) (daem
 
 	if !binariesInstalled {
 		return state, errors.New("gameap binaries wasn't installed, invalid archive contents")
+	}
+
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		err = pm.Install(ctx, packagemanager.GameAPDaemon)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to install gameap-daemon")
+		}
 	}
 
 	return state, nil
@@ -465,10 +520,10 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	}
 
 	fw, _ = w.CreateFormField("script_get_console")
-	_, _ = fw.Write([]byte("{node_work_path}/runner.sh get_console -d {dir} -n {uuid} -u {user}"))
+	_, _ = fw.Write([]byte("server-output {id}"))
 
 	fw, _ = w.CreateFormField("script_send_command")
-	_, _ = fw.Write([]byte("{node_work_path}/runner.sh send_command -d {dir} -n {uuid} -u {user} -c \"{command}\""))
+	_, _ = fw.Write([]byte("server-command {id} {command}"))
 
 	client := http.Client{
 		Timeout: 30 * time.Second, //nolint:gomnd
@@ -603,6 +658,13 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		WorkPath:     state.WorkPath,
 		ToolsPath:    gameap.DefaultToolsPath,
 		SteamCMDPath: state.SteamCMDPath,
+	}
+
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
+		cfg.Users = map[string]string{
+			state.User: fmt.Sprintf("base64:%s", pw),
+		}
 	}
 
 	cfgBytes, err := yaml.Marshal(cfg)
@@ -841,6 +903,8 @@ type DaemonConfig struct {
 	SteamConfig DaemonSteamConfig `yaml:"steam_config"`
 
 	Scripts DaemonConfigScripts `yaml:"-"`
+
+	Users map[string]string `yaml:"users"`
 }
 
 func findDaemonReleaseURL(ctx context.Context) (string, error) {

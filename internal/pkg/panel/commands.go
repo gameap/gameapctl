@@ -139,6 +139,28 @@ func ChangePassword(_ context.Context, path, username, password string) error {
 	return nil
 }
 
+func SetDaemonCreateToken(_ context.Context, path, token string) error {
+	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
+		filepath.Join(path, "artisan"),
+		"tinker",
+		"--execute",
+		fmt.Sprintf(
+			"Illuminate\\Support\\Facades\\Cache::put('gdaemonAutoCreateToken', '%s', 9999);",
+			token,
+		),
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php command and args")
+	}
+
+	err = utils.ExecCommand(cmdName, args...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute tinker command")
+	}
+
+	return nil
+}
+
 func UpgradeGames(_ context.Context, path string) error {
 	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
 		filepath.Join(path, "artisan"), "games:upgrade",

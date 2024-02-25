@@ -9,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
+	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/internal/pkg/panel"
@@ -68,6 +71,7 @@ type panelInstallState struct {
 	Branch        string
 	Database      string
 	DBCreds       databaseCredentials
+	WithDaemon    bool
 	OSInfo        osinfo.Info
 
 	// Installation variables
@@ -91,6 +95,7 @@ func Handle(cliCtx *cli.Context) error {
 	state := panelInstallState{}
 
 	state.NonInteractive = cliCtx.Bool("non-interactive")
+	state.SkipWarnings = cliCtx.Bool("skip-warnings")
 	state.Host = cliCtx.String("host")
 	state.Port = cliCtx.String("port")
 	state.Path = cliCtx.String("path")
@@ -103,6 +108,7 @@ func Handle(cliCtx *cli.Context) error {
 		Username:     cliCtx.String("database-username"),
 		Password:     cliCtx.String("database-password"),
 	}
+	state.WithDaemon = cliCtx.Bool("with-daemon")
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
 
 	state.FromGithub = cliCtx.Bool("github")
@@ -183,6 +189,11 @@ func Handle(cliCtx *cli.Context) error {
 
 	if state.Port == "" {
 		state.Port = "80"
+	}
+
+	state, err = checkPath(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check path")
 	}
 
 	state, err = filterAndCheckHost(state)
@@ -380,6 +391,14 @@ func Handle(cliCtx *cli.Context) error {
 
 	log.Println("GameAP successfully installed")
 
+	if state.WithDaemon {
+		state, err = daemonInstall(cliCtx.Context, state)
+		if err != nil {
+			fmt.Println("Failed to install daemon: ", err.Error())
+			log.Println(errors.WithMessage(err, "failed to install daemon, try to install it manually"))
+		}
+	}
+
 	fmt.Println("---------------------------------")
 	fmt.Println("DONE!")
 	fmt.Println()
@@ -396,7 +415,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	if state.Database == sqliteDatabase {
-		fmt.Println("Database file path:", state.Path+"/database.sqlite")
+		fmt.Println("Database file path:", filepath.Join(state.Path, "database.sqlite"))
 	}
 
 	fmt.Println()
@@ -415,8 +434,26 @@ func Handle(cliCtx *cli.Context) error {
 	return nil
 }
 
-func isMySQLInstalled(_ context.Context) bool {
+func isMySQLInstalled(ctx context.Context) bool {
+	if runtime.GOOS == "windows" {
+		return utils.IsCommandAvailable("mysqld") ||
+			service.IsExists(ctx, "mysql") ||
+			service.IsExists(ctx, "mysql57") ||
+			service.IsExists(ctx, "mysql80")
+	}
+
 	return utils.IsCommandAvailable("mysqld") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mysql.service") ||
+		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
+}
+
+func isMariaDBInstalled(ctx context.Context) bool {
+	if runtime.GOOS == "windows" {
+		return utils.IsCommandAvailable("mariadbd") || service.IsExists(ctx, "mariadb")
+	}
+
+	return utils.IsCommandAvailable("mysqld") ||
+		utils.IsCommandAvailable("mariadbd") ||
 		utils.IsFileExists("/usr/lib/systemd/system/mysql.service") ||
 		utils.IsFileExists("/usr/lib/systemd/system/mariadb.service")
 }
@@ -441,10 +478,12 @@ func installMySQLOrMariaDB(
 		fmt.Println("Failed to install MySQL server. Trying to replace by MariaDB ...")
 		log.Println(err)
 
-		fmt.Println("Removing MySQL server ...")
-		err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to remove MySQL server")
+		if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+			fmt.Println("Removing MySQL server ...")
+			err = pm.Purge(ctx, packagemanager.MySQLServerPackage)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to remove MySQL server")
+			}
 		}
 
 		//nolint:goconst
@@ -478,7 +517,7 @@ func installMariaDB(
 	if state.DBCreds.Host == "" ||
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
-		if !isMySQLInstalled(ctx) {
+		if !isMariaDBInstalled(ctx) {
 			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
@@ -505,10 +544,18 @@ func installMariaDB(
 	}
 
 	fmt.Println("Starting MariaDB server ...")
-	if err = service.Start(ctx, "mariadb"); err != nil {
-		if err = service.Start(ctx, "mysqld"); err != nil {
-			if err = service.Start(ctx, "mysql"); err != nil {
-				return state, errors.WithMessage(err, "failed to start MariaDB server")
+	switch {
+	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+		err = service.Start(ctx, "mariadb")
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start MariaDB server")
+		}
+	default:
+		if err = service.Start(ctx, "mysql"); err != nil {
+			if err = service.Start(ctx, "mysqld"); err != nil {
+				if err = service.Start(ctx, "mariadb"); err != nil {
+					return state, errors.WithMessage(err, "failed to start MySQL server")
+				}
 			}
 		}
 	}
@@ -534,7 +581,16 @@ func installMariaDB(
 		} else if state.DBCreds.Host == "127.0.0.1" {
 			state.DBCreds.Host = "localhost"
 		}
+
 		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Port != "3306" {
+			state.DBCreds.Port = "3306"
+			state, err = checkMySQLConnection(ctx, state)
+		}
 	}
 
 	return state, err
@@ -583,10 +639,32 @@ func installMySQL(
 	}
 
 	fmt.Println("Starting MySQL server ...")
-	if err = service.Start(ctx, "mysql"); err != nil {
-		if err = service.Start(ctx, "mysqld"); err != nil {
-			if err = service.Start(ctx, "mariadb"); err != nil {
-				return state, errors.WithMessage(err, "failed to start MySQL server")
+	switch {
+	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+		var errNotFound *service.NotFoundError
+		err = service.Start(ctx, "mysql")
+		if err != nil && errors.As(err, &errNotFound) {
+			fmt.Println("MySQL service not found, trying to install ...")
+			log.Println(err)
+			err = utils.ExecCommand("mysqld", "--install")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to exec 'mysqld --install' command")
+			}
+
+			err = service.Start(ctx, "mysql")
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to start MySQL server after 'mysqld --install'")
+			}
+		}
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start MySQL server")
+		}
+	default:
+		if err = service.Start(ctx, "mysql"); err != nil {
+			if err = service.Start(ctx, "mysqld"); err != nil {
+				if err = service.Start(ctx, "mariadb"); err != nil {
+					return state, errors.WithMessage(err, "failed to start MySQL server")
+				}
 			}
 		}
 	}
@@ -613,6 +691,14 @@ func installMySQL(
 			state.DBCreds.Host = "localhost"
 		}
 		state, err = checkMySQLConnection(ctx, state)
+	}
+
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Port != "3306" {
+			state.DBCreds.Port = "3306"
+			state, err = checkMySQLConnection(ctx, state)
+		}
 	}
 
 	return state, err
@@ -1154,6 +1240,34 @@ func configureCron(_ context.Context, state panelInstallState) error {
 	}
 
 	return nil
+}
+
+func daemonInstall(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	fmt.Println("Installing daemon ...")
+
+	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
+
+	err := panel.SetDaemonCreateToken(
+		ctx,
+		state.Path,
+		token,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to set daemon create token")
+	}
+
+	host := "http://" + state.Host + ":" + state.Port
+
+	err = daemoninstall.Install(
+		ctx,
+		host,
+		token,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install daemon")
+	}
+
+	return state, nil
 }
 
 func updateAdminPassword(ctx context.Context, state panelInstallState) (panelInstallState, error) {

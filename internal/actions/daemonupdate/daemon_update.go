@@ -51,9 +51,15 @@ func Handle(cliCtx *cli.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to download")
 	}
-	f, err := os.Open(filepath.Join(tmpDir, "gameap-daemon"))
+
+	filename := filepath.Join(tmpDir, "gameap-daemon")
+	if runtime.GOOS == "windows" {
+		filename += ".exe"
+	}
+
+	f, err := os.Open(filename)
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to open downloaded file")
 	}
 	defer func() {
 		err := f.Close()
@@ -165,7 +171,7 @@ func revert(_ context.Context, path, backupPath string) error {
 		TargetPath: path,
 	})
 
-	return err
+	return errors.WithMessage(err, "failed to revert")
 }
 
 func findRelease(ctx context.Context) (*releasefinder.Release, error) {

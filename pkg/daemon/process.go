@@ -7,10 +7,6 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 )
 
-const (
-	daemonProcessName = "gameap-daemon"
-)
-
 func FindProcess(ctx context.Context) (*process.Process, error) {
 	processes, err := process.ProcessesWithContext(ctx)
 	if err != nil {

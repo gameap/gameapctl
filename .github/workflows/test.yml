@@ -10,12 +10,23 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.21.x]
+        go-version: [1.22.x]
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
 
       - name: Install Go
         uses: actions/setup-go@v3
@@ -59,12 +70,6 @@ jobs:
           - distro: 'ubuntu:18.04'
             database: 'mysql'
             experimental: true
-          - distro: 'ubuntu:23.04'
-            database: 'mysql'
-            experimental: true
-          - distro: 'ubuntu:23.10'
-            database: 'mysql'
-            experimental: true
           - distro: 'debian:sid'
             database: 'mysql'
             experimental: true
@@ -86,6 +91,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
       - name: Install Go
         uses: actions/setup-go@v4
         with:
@@ -101,10 +117,8 @@ jobs:
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Daemon Installation Test
-        shell: bash
         run: |
           cd cmd/gameapctl/
-          go build .
           echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | /var/www/gameap/artisan tinker || true          
           ./gameapctl --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
@@ -122,14 +136,25 @@ jobs:
       matrix:
         database: [ mysql, sqlite ]
         web-server: [ nginx ]
-        go-version: [ 1.21.x ]
-        experimental: [ true ]
+        go-version: [ 1.22.x ]
+        experimental: [ false ]
 
     runs-on: windows-latest
     continue-on-error: ${{ matrix.experimental }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
 
       - name: Install Go
         uses: actions/setup-go@v3
@@ -142,9 +167,16 @@ jobs:
       - name: Tests
         run: |
           sc delete nginx
+          del C:\tools\nginx* -Recurse -Force
           cd .\cmd\gameapctl\
           go build .
           .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+
+      - name: Daemon Installation Test
+        run: |
+          cd .\cmd\gameapctl\
+          echo "Illuminate\Support\Facades\Cache::put('gdaemonAutoCreateToken', 'test_auto_setup_token', 99999);" | C:\tools\php\php.exe C:\gameap\web\artisan tinker
+          .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1:3080 --token=test_auto_setup_token
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
@@ -154,6 +186,7 @@ jobs:
           path: |
             ~/AppData/Local/Temp/gameapctl*
             C:/gameap/services/*
+            C:/gameap/logs/*
           retention-days: 5
 
   test-cache:
@@ -182,8 +215,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Unit Tests
-        run: go test -race -v $(go list ./... | grep -v /test/)
+
   finish:
     needs: [test, integration-test, integration-test-windows]
     runs-on: ubuntu-latest

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/matishsiao/goInfo"
@@ -22,6 +23,32 @@ type Info struct {
 	OS                   string
 	Hostname             string
 	CPUs                 int
+}
+
+func (i Info) String() string {
+	b := strings.Builder{}
+	b.Grow(256) //nolint:gomnd
+
+	b.WriteString("Kernel: ")
+	b.WriteString(i.Kernel)
+	b.WriteString("\nCore: ")
+	b.WriteString(i.Core)
+	b.WriteString("\nDistribution: ")
+	b.WriteString(i.Distribution)
+	b.WriteString("\nDistributionVersion: ")
+	b.WriteString(i.DistributionVersion)
+	b.WriteString("\nDistributionCodename: ")
+	b.WriteString(i.DistributionCodename)
+	b.WriteString("\nPlatform: ")
+	b.WriteString(i.Platform)
+	b.WriteString("\nOS: ")
+	b.WriteString(i.OS)
+	b.WriteString("\nHostname: ")
+	b.WriteString(i.Hostname)
+	b.WriteString("\nCPUs: ")
+	b.WriteString(strconv.Itoa(i.CPUs))
+
+	return b.String()
 }
 
 func GetOSInfo() (Info, error) {

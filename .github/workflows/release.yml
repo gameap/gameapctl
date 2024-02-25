@@ -16,20 +16,30 @@ jobs:
           - goarch: "mips64"
             goos: windows
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set APP_VERSION env
         run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
       - name: Set BUILD_TIME env
         run: echo BUILD_TIME=$(date --iso-8601=seconds) >> ${GITHUB_ENV}
 
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
 
       - uses: wangyoucao577/go-release-action@v1.46
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: 1.21.3
+          goversion: 1.22.0
           md5sum: false
           overwrite: true
           project_path: "./cmd/gameapctl"

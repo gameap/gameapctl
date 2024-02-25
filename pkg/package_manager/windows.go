@@ -4,33 +4,47 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
+	pathPkg "path"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 )
 
 type pack struct {
-	DownloadURLs       []string
-	LookupPath         []string
-	InstallCommand     string
-	DefaultInstallPath string
-	ServiceConfig      *WinSWServiceConfig
-	Dependencies       []string
+	DownloadURLs            []string
+	LookupPath              []string
+	InstallCommand          string
+	AllowedInstallExitCodes []int
+	DefaultInstallPath      string
+	ServiceConfig           *WinSWServiceConfig
+	Dependencies            []string
+
+	PreInstallFunc func(ctx context.Context, p pack, resolvedPackagePath string) (pack, error)
 }
 
 const (
 	WinSWPackage      = "winsw"
 	VCRedist16Package = "vc_redist_16" //nolint:gosec
+	GameAPDaemon      = "gameap-daemon"
 )
 
 const servicesConfigPath = "C:\\gameap\\services"
+
+// https://curl.se/docs/caextract.html
+const caCertURL = "https://curl.se/ca/cacert.pem"
 
 var repository = map[string]pack{
 	NginxPackage: {
@@ -56,18 +70,24 @@ var repository = map[string]pack{
 		},
 	},
 	MySQLServerPackage: {
-		LookupPath: []string{"mariadb"},
+		LookupPath: []string{"mysql", "mysqld"},
 		DownloadURLs: []string{
-			"https://mirror.23m.com/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
-			"https://ftp.bme.hu/pub/mirrors/mariadb/mariadb-10.6.12/winx64-packages/mariadb-10.6.12-winx64.msi",
+			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
-		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.12-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+	},
+	MariaDBServerPackage: {
+		LookupPath: []string{"mariadb", "mariadbd"},
+		DownloadURLs: []string{
+			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
+		},
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
 		DownloadURLs: []string{
+			"https://windows.php.net/downloads/releases/php-8.3.3-Win32-vs16-x64.zip",
 			"https://windows.php.net/downloads/releases/php-8.2.2-Win32-vs16-x64.zip",
-			"https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip",
 		},
 		DefaultInstallPath: "C:\\php",
 		ServiceConfig: &WinSWServiceConfig{
@@ -76,14 +96,24 @@ var repository = map[string]pack{
 			Executable: "php-cgi",
 			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
 			OnFailure: []onFailure{
-				{Action: "restart", Delay: "1 sec"},
-				{Action: "restart", Delay: "2 sec"},
-				{Action: "restart", Delay: "5 sec"},
-				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart"},
 			},
-			ResetFailure: "1 hour",
+			Env: []env{
+				{Name: "PHP_FCGI_MAX_REQUESTS", Value: "0"},
+				{Name: "PHP_FCGI_CHILDREN", Value: strconv.Itoa(runtime.NumCPU() * 2)},
+			},
 		},
 		Dependencies: []string{VCRedist16Package},
+		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
+			if path != "" {
+				p.ServiceConfig.Arguments = fmt.Sprintf(
+					"-b 127.0.0.1:9934 -c %s",
+					filepath.Join(filepath.Dir(path), "php.ini"),
+				)
+			}
+
+			return p, nil
+		},
 	},
 	PHPExtensionsPackage: {
 		LookupPath: []string{"php"},
@@ -93,6 +123,48 @@ var repository = map[string]pack{
 			"https://aka.ms/vs/16/release/VC_redist.x64.exe",
 		},
 		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
+		AllowedInstallExitCodes: []int{
+			1638, // A newer version is already installed or already installed
+		},
+	},
+	GitPackage: {
+		LookupPath: []string{"git"},
+		DownloadURLs: []string{
+			"https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe",
+		},
+		InstallCommand: "cmd /c Git-2.43.0-64-bit.exe " +
+			"/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS " +
+			"/RESTARTAPPLICATIONS /COMPONENTS=icons,ext\\reg\\shellhere,assoc,assoc_sh",
+	},
+	NodeJSPackage: {
+		LookupPath: []string{"node"},
+		DownloadURLs: []string{
+			"https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi",
+		},
+		InstallCommand: "cmd /c start /wait msiexec /i node-v20.11.1-x64.msi /qb",
+	},
+	ComposerPackage: {
+		LookupPath:   []string{"composer"},
+		Dependencies: []string{PHPPackage},
+		DownloadURLs: []string{
+			"https://getcomposer.org/Composer-Setup.exe",
+		},
+		InstallCommand: "cmd /c Composer-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS",
+	},
+	GameAPDaemon: {
+		ServiceConfig: &WinSWServiceConfig{
+			ID:               "GameAP Daemon",
+			Name:             "GameAP Daemon",
+			Executable:       "gameap-daemon",
+			WorkingDirectory: "C:\\gameap\\daemon",
+			OnFailure: []onFailure{
+				{Action: "restart", Delay: "1 sec"},
+				{Action: "restart", Delay: "2 sec"},
+				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart", Delay: "5 sec"},
+			},
+			ResetFailure: "1 hour",
+		},
 	},
 	WinSWPackage: {
 		LookupPath: []string{"winsw"},
@@ -136,16 +208,20 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	log.Println("Installing", packName, "package")
 	var err error
 
-	packagePath := ""
+	resolvedPackagePath := ""
 	for _, c := range p.LookupPath {
-		packagePath, err = exec.LookPath(c)
+		resolvedPackagePath, err = exec.LookPath(c)
 		if err != nil {
 			continue
 		}
 
-		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(packagePath))
+		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(resolvedPackagePath))
 
 		break
+	}
+
+	if p.PreInstallFunc != nil {
+		p, err = p.PreInstallFunc(ctx, p, resolvedPackagePath)
 	}
 
 	if len(p.Dependencies) > 0 {
@@ -160,13 +236,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	preProcessor, ok := packagePreProcessors[packName]
 	if ok {
 		log.Println("Execute pre processor for ", packName)
-		err = preProcessor(ctx, packagePath)
+		err = preProcessor(ctx, resolvedPackagePath)
 		if err != nil {
 			return err
 		}
 	}
 
-	if packagePath != "" {
+	if resolvedPackagePath != "" {
 		if p.ServiceConfig != nil {
 			err = pm.installService(ctx, packName, p)
 			if err != nil {
@@ -174,7 +250,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 			}
 		}
 
-		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", packagePath, packName)
+		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", resolvedPackagePath, packName)
 
 		return nil
 	}
@@ -197,10 +273,26 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	for _, path := range p.DownloadURLs {
 		log.Println("Downloading file from", path, "to", dir)
 
-		err = utils.Download(ctx, path, dir)
+		var parsedURL *url.URL
+		parsedURL, err = url.Parse(path)
 		if err != nil {
-			log.Println("failed to download file")
-			log.Println(err)
+			log.Println(errors.WithMessage(err, "failed to parse url"))
+
+			continue
+		}
+
+		if filepath.Ext(parsedURL.Path) == ".msi" {
+			err = utils.DownloadFileOrArchive(
+				ctx,
+				path,
+				filepath.Join(dir, pathPkg.Base(parsedURL.Path)),
+			)
+		} else {
+			err = utils.Download(ctx, path, dir)
+		}
+
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to download file"))
 
 			continue
 		}
@@ -228,13 +320,22 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		log.Println('\n', cmd.String())
 		err = cmd.Run()
 		if err != nil {
+			if len(p.AllowedInstallExitCodes) > 0 && lo.Contains(p.AllowedInstallExitCodes, cmd.ProcessState.ExitCode()) {
+				log.Println(errors.WithMessage(err, "failed to execute install command"))
+				log.Println("Exit code is allowed")
+
+				return nil
+			}
+
 			return errors.WithMessage(err, "failed to execute install command")
 		}
 	}
 
+	resolvedPackagePath = p.DefaultInstallPath
+
 	postProcessor, ok := packagePostProcessors[packName]
 	if ok {
-		err = postProcessor(ctx, packagePath)
+		err = postProcessor(ctx, resolvedPackagePath)
 		if err != nil {
 			return err
 		}
@@ -295,16 +396,7 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		serviceConfig.WorkingDirectory = filepath.Dir(path)
 	}
 
-	out, err := xml.Marshal(struct {
-		WinSWServiceConfig
-		XMLName struct{} `xml:"service"`
-	}{WinSWServiceConfig: serviceConfig})
-
-	if err != nil {
-		return errors.WithMessage(err, "failed to marshal service config")
-	}
-
-	if _, err = os.Stat(servicesConfigPath); errors.Is(err, os.ErrNotExist) {
+	if !utils.IsFileExists(servicesConfigPath) {
 		err = os.MkdirAll(servicesConfigPath, 0755)
 		if err != nil {
 			return errors.WithMessage(err, "failed to create services config directory")
@@ -313,11 +405,44 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	configPath := filepath.Join(servicesConfigPath, packName+".xml")
 
+	configOverride := false
+
+	if utils.IsFileExists(configPath) {
+		log.Printf("Service config for '%s' is already exists", packName)
+		// Config already exists, we will override it and try to refresh before installation
+		configOverride = true
+	}
+
+	out, err := xml.MarshalIndent(struct {
+		WinSWServiceConfig
+		XMLName struct{} `xml:"service"`
+	}{WinSWServiceConfig: serviceConfig}, "", "  ")
+
+	if err != nil {
+		return errors.WithMessage(err, "failed to marshal service config")
+	}
+
+	log.Println("Marshalled service config")
+	log.Println(string(out))
+
 	log.Println("create service config")
 
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
 		return errors.WithMessagef(err, "failed to save config for service '%s' ", packName)
+	}
+
+	if configOverride {
+		err = utils.ExecCommand("winsw", "refresh", configPath)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to refresh service"))
+			// There is no need to return error here, because it seems that service
+			// config is already exists, but is not installed. We will try to install it next
+		}
+		if err == nil {
+			// Refreshed successfully, no need to run install service command
+			return nil
+		}
 	}
 
 	err = utils.ExecCommand("winsw", "install", configPath)
@@ -350,7 +475,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			scannedFileDir := filepath.Dir(firstScannedFile)
 
 			exts := []string{
-				"bz2", "curl", "fileinfo", "gd2", "gmp", "intl",
+				"bz2", "curl", "fileinfo", "gd", "gmp", "intl",
 				"mbstring", "openssl", "pdo_mysql", "pdo_sqlite", "zip",
 			}
 
@@ -396,54 +521,91 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			}
 		}
 
-		if iniFilePath != "" {
-			return utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
-				";?\\s*extension=bz2\\s*":        "extension=bz2",
-				";?\\s*extension=curl\\s*":       "extension=curl",
-				";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
-				";?\\s*extension=gd\\s*":         "extension=gd2",
-				";?\\s*extension=gmp\\s*":        "extension=gmp",
-				";?\\s*extension=intl\\s*":       "extension=intl",
-				";?\\s*extension=mbstring\\s*":   "extension=mbstring",
-				";?\\s*extension=openssl\\s*":    "extension=openssl",
-				";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
-				";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
-				";?\\s*extension=zip\\s*":        "extension=zip",
-			})
+		if iniFilePath == "" {
+			return errors.New("failed to find config edition way to enable php extensions")
 		}
 
-		return errors.New("failed to find config edition way to enable php extensions")
+		err = utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
+			";?\\s*extension=bz2\\s*":        "extension=bz2",
+			";?\\s*extension=curl\\s*":       "extension=curl",
+			";?\\s*extension=fileinfo\\s*":   "extension=fileinfo",
+			";?\\s*extension=gd\\s*":         "extension=gd",
+			";?\\s*extension=gmp\\s*":        "extension=gmp",
+			";?\\s*extension=intl\\s*":       "extension=intl",
+			";?\\s*extension=mbstring\\s*":   "extension=mbstring",
+			";?\\s*extension=openssl\\s*":    "extension=openssl",
+			";?\\s*extension=pdo_mysql\\s*":  "extension=pdo_mysql",
+			";?\\s*extension=pdo_sqlite\\s*": "extension=pdo_sqlite",
+			";?\\s*extension=sqlite\\s*":     "extension=sqlite3",
+			";?\\s*extension=sockets\\s*":    "extension=sockets",
+			";?\\s*extension=zip\\s*":        "extension=zip",
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update extensions to php.ini")
+		}
+
+		cacertPath := filepath.Join(filepath.Dir(iniFilePath), "cacert.pem")
+
+		err = utils.DownloadFile(ctx, caCertURL, cacertPath)
+		if err != nil {
+			return errors.WithMessage(err, "failed to download cacert.pem")
+		}
+
+		err = utils.FindLineAndReplaceOrAdd(ctx, iniFilePath, map[string]string{
+			";?\\s*curl\\.cainfo\\s*":    fmt.Sprintf(`curl.cainfo="%s"`, cacertPath),
+			";?\\s*openssl\\.cafile\\s*": fmt.Sprintf(`openssl.cafile="%s"`, cacertPath),
+		})
+		if err != nil {
+			return errors.WithMessage(err, "failed to update cacert.pem path in php.ini")
+		}
+
+		return nil
 	},
 }
 
 var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	PHPPackage: func(_ context.Context, _ string) error {
-		p := repository[PHPPackage]
+	PHPPackage: func(_ context.Context, packagePath string) error {
+		log.Printf("Adding %s to PATH", packagePath)
 
 		path, _ := os.LookupEnv("PATH")
 
-		return os.Setenv("PATH", path+string(os.PathListSeparator)+p.DefaultInstallPath)
-	},
-	NginxPackage: func(_ context.Context, _ string) error {
-		p := repository[NginxPackage]
+		currentPath := strings.Split(path, string(filepath.ListSeparator))
+		if utils.Contains(currentPath, packagePath) {
+			log.Println("Path already contains ", packagePath)
+			log.Println("PATH: ", strings.Join(currentPath, string(filepath.ListSeparator)))
 
-		entries, err := os.ReadDir(p.DefaultInstallPath)
+			return nil
+		}
+
+		newPath := append(currentPath, packagePath)
+
+		log.Println("New PATH: ", strings.Join(newPath, string(filepath.ListSeparator)))
+
+		err := os.Setenv("PATH", path+string(os.PathListSeparator)+packagePath)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set PATH")
+		}
+
+		return nil
+	},
+	NginxPackage: func(_ context.Context, packagePath string) error {
+		entries, err := os.ReadDir(packagePath)
 		if err != nil {
 			return err
 		}
 
 		if len(entries) != 1 {
-			return NewErrInvalidDirContents(p.DefaultInstallPath)
+			return NewErrInvalidDirContents(packagePath)
 		}
 
-		d := filepath.Join(p.DefaultInstallPath, entries[0].Name())
+		d := filepath.Join(packagePath, entries[0].Name())
 
 		entries, err = os.ReadDir(d)
 		if err != nil {
 			return err
 		}
 		for _, entry := range entries {
-			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(p.DefaultInstallPath, entry.Name()))
+			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(packagePath, entry.Name()))
 			if err != nil {
 				return errors.WithMessage(err, "failed to move file")
 			}
@@ -452,6 +614,50 @@ var packagePostProcessors = map[string]func(ctx context.Context, packagePath str
 		log.Println("Removing", d)
 
 		return os.RemoveAll(d)
+	},
+	ComposerPackage: func(_ context.Context, _ string) error {
+		// Wait composer installation
+
+		defaultPath := "C:\\ProgramData\\ComposerSetup\\bin\\composer"
+
+		tries := 8
+		sleepTime := 1 * time.Second
+		for tries > 0 {
+			for _, p := range repository[ComposerPackage].LookupPath {
+				if _, err := exec.LookPath(p); err == nil {
+					return nil
+				}
+			}
+
+			if utils.IsFileExists(defaultPath) {
+				p := filepath.Dir(defaultPath)
+				log.Printf("Adding %s to PATH", p)
+
+				err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
+				if err != nil {
+					return errors.WithMessage(err, "failed to set PATH")
+				}
+
+				return nil
+			}
+
+			time.Sleep(sleepTime)
+			sleepTime *= 2
+			tries--
+		}
+
+		return errors.New("failed to install composer, failed to lookup composer executable")
+	},
+	NodeJSPackage: func(_ context.Context, _ string) error {
+		defaultPath := "C:\\Program Files\\nodejs\\node"
+		p := filepath.Dir(defaultPath)
+		log.Printf("Adding %s to PATH", p)
+		err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set PATH")
+		}
+
+		return nil
 	},
 }
 
@@ -472,9 +678,16 @@ type WinSWServiceConfig struct {
 		Username string `xml:"username,omitempty"`
 		Password string `xml:"password,omitempty"`
 	} `xml:"serviceaccount,omitempty"`
+
+	Env []env `xml:"env,omitempty"`
 }
 
 type onFailure struct {
 	Action string `xml:"action,attr"`
 	Delay  string `xml:"delay,attr,omitempty"`
+}
+
+type env struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
