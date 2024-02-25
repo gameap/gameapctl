@@ -23,6 +23,11 @@ const (
 	serviceStatusNotFound = "not found"
 )
 
+const (
+	gameapServiceName   = "gameap"
+	gameapDaemonService = "gameap-daemon"
+)
+
 func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 	cmd := strings.Split(m.Value, " ")
 	if len(cmd) == 0 {
@@ -86,8 +91,8 @@ func nodeInfo(ctx context.Context, w io.Writer, _ []string) error {
 }
 
 var replaceMap = map[string]string{
-	"daemon":       "gameap-daemon",
-	"gameapdaemon": "gameap-daemon",
+	"daemon":       gameapDaemonService,
+	"gameapdaemon": gameapDaemonService,
 	"mysql":        "mariadb",
 	"php":          "php-fpm",
 }
@@ -103,11 +108,11 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 		serviceName = replace
 	}
 
-	if serviceName == "gameap" {
+	if serviceName == gameapServiceName {
 		return gameapStatus(ctx, w, args)
 	}
 
-	if serviceName == "gameap-daemon" {
+	if serviceName == gameapDaemonService {
 		return daemonStatus(ctx, w, args)
 	}
 
@@ -200,7 +205,7 @@ func gameapInstall(_ context.Context, w io.Writer, args []string) error {
 	return nil
 }
 
-func serviceCommand(ctx context.Context, _ io.Writer, args []string) error {
+func serviceCommand(ctx context.Context, w io.Writer, args []string) error {
 	if len(args) < 2 {
 		return errors.New("not enough arguments, should be at least 2: command and service name")
 	}
@@ -210,6 +215,14 @@ func serviceCommand(ctx context.Context, _ io.Writer, args []string) error {
 
 	if replace, ok := replaceMap[serviceName]; ok {
 		serviceName = replace
+	}
+
+	if serviceName == gameapServiceName {
+		return errors.New("gameap service command is not supported")
+	}
+
+	if serviceName == gameapDaemonService {
+		return daemonCommand(ctx, w, []string{command})
 	}
 
 	log.Printf("Service command: %s %s", command, serviceName)
@@ -228,6 +241,32 @@ func serviceCommand(ctx context.Context, _ io.Writer, args []string) error {
 
 	if err != nil {
 		return errors.WithMessage(err, "failed to start service")
+	}
+
+	return nil
+}
+
+func daemonCommand(ctx context.Context, _ io.Writer, args []string) error {
+	if len(args) < 1 {
+		return errors.New("no command provided")
+	}
+
+	command := args[0]
+
+	var err error
+	switch command {
+	case "start":
+		err = daemon.Start(ctx)
+	case "stop":
+		err = daemon.Stop(ctx)
+	case "restart":
+		err = daemon.Restart(ctx)
+	default:
+		return errors.New("unknown command")
+	}
+
+	if err != nil {
+		return errors.WithMessage(err, "failed to execute command")
 	}
 
 	return nil
