@@ -15,7 +15,7 @@
             </div>
             <div class="flex flex-1 items-center justify-center sm:items-stretch sm:justify-start">
               <div class="flex flex-shrink-0 items-center">
-                <img class="h-8 w-auto" src="https://gameap.com/img/gameap_white.png" alt="GameAP" />
+                <img class="h-8 w-auto" src="/gameap.svg" alt="GameAP" />
               </div>
               <div class="hidden sm:ml-6 sm:block">
                 <div class="flex space-x-4">
