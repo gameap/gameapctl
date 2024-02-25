@@ -38,11 +38,12 @@ const installationFormRef = ref(null)
 const installationForm = ref({
   path: defaultPath,
   host: "127.0.0.1",
-  port: "80",
+  port: 80,
   source: "repo",
   branch: "master",
   webServer: "nginx",
   database: "mysql",
+  withDaemon: false,
 })
 const githubBranchOptions = [
   {label: "develop", value: "develop"},
@@ -87,6 +88,12 @@ function handleInstallButtonClick(e) {
   if (installationForm.value.source === "github") {
     params += " --source=github"
     params += " --branch=" + installationForm.value.branch
+  }
+
+  console.log(installationForm.value.withDaemon)
+
+  if (installationForm.value.withDaemon) {
+    params += " --with-daemon"
   }
 
   runActionWithoutDialog(
@@ -151,6 +158,8 @@ function handleInstallButtonClick(e) {
           ref="formRef"
           :model="installationFormRef"
           size="medium"
+          label-placement="left"
+          label-width="auto"
           :rules="installationFormRules"
       >
         <n-form-item label="Path" path="path">
@@ -174,16 +183,21 @@ function handleInstallButtonClick(e) {
             <n-select v-model:value="installationForm.branch" :options="githubBranchOptions" />
         </n-form-item>
         <n-form-item label="Host" path="host">
-          <n-input v-model:value="installationForm.host" placeholder="Host" />
-        </n-form-item>
-        <n-form-item label="Port" path="port">
-          <n-input v-model:value="installationForm.port" placeholder="Port" />
+          <n-input-group>
+            <n-input v-model:value="installationForm.host" placeholder="Host" />
+            <n-input-number v-model:value="installationForm.port" placeholder="Port" />
+          </n-input-group>
         </n-form-item>
         <n-form-item label="Web Server" path="webServer">
           <n-select v-model:value="installationForm.webServer" :options="webServerOptions" />
         </n-form-item>
         <n-form-item label="Database" path="database">
           <n-select v-model:value="installationForm.database" :options="databaseOptions" />
+        </n-form-item>
+        <n-form-item label="&nbsp;" path="withDaemon">
+          <n-checkbox v-model:checked="installationForm.withDaemon">
+            Install Daemon
+          </n-checkbox>
         </n-form-item>
       </n-form>
       <n-button type="primary" @click="handleInstallButtonClick">

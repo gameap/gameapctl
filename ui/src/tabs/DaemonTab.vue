@@ -95,8 +95,8 @@ function onClickDaemonUpgradingButton() {
   </div>
 
   <n-modal
-      :show="showInstallationAskModal"
-      :mask-closable="false"
+      v-model:show="showInstallationAskModal"
+      :mask-closable="true"
       >
     <n-card
         class="card"
