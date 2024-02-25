@@ -73,13 +73,21 @@ type daemonsInstallState struct {
 	Password string // Password for user (Windows only)
 }
 
-//nolint:funlen,gocognit
 func Handle(cliCtx *cli.Context) error {
+	return Install(
+		cliCtx.Context,
+		cliCtx.String("host"),
+		cliCtx.String("token"),
+	)
+}
+
+//nolint:funlen,gocognit
+func Install(ctx context.Context, host, token string) error {
 	fmt.Println("Install daemon")
 
 	state := daemonsInstallState{
-		Host:         cliCtx.String("host"),
-		Token:        cliCtx.String("token"),
+		Host:         host,
+		Token:        token,
 		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
@@ -99,15 +107,15 @@ func Handle(cliCtx *cli.Context) error {
 		state.CertsPath = gameap.DefaultDaemonCertPath
 	}
 
-	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
+	state.OSInfo = contextInternal.OSInfoFromContext(ctx)
 
-	pm, err := packagemanager.Load(cliCtx.Context)
+	pm, err := packagemanager.Load(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
 	fmt.Println("Checking for updates ...")
-	if err = pm.CheckForUpdates(cliCtx.Context); err != nil {
+	if err = pm.CheckForUpdates(ctx); err != nil {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
@@ -116,7 +124,7 @@ func Handle(cliCtx *cli.Context) error {
 		fmt.Println("Checking for curl ...")
 		if !utils.IsCommandAvailable("curl") {
 			fmt.Println("Installing curl ...")
-			if err = pm.Install(cliCtx.Context, packagemanager.CurlPackage); err != nil {
+			if err = pm.Install(ctx, packagemanager.CurlPackage); err != nil {
 				return errors.WithMessage(err, "failed to install curl")
 			}
 		}
@@ -124,26 +132,26 @@ func Handle(cliCtx *cli.Context) error {
 		fmt.Println("Checking for gpg ...")
 		if !utils.IsCommandAvailable("gpg") {
 			fmt.Println("Installing gpg ...")
-			if err = pm.Install(cliCtx.Context, packagemanager.GnuPGPackage); err != nil {
+			if err = pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
 				return errors.WithMessage(err, "failed to install gpg")
 			}
 		}
 	}
 
-	state, err = createUser(cliCtx.Context, state)
+	state, err = createUser(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
 	}
 
 	fmt.Println("Installing steamcmd ...")
-	state, err = installSteamCMD(cliCtx.Context, pm, state)
+	state, err = installSteamCMD(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed install SteamCMD")
 	}
 
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		if err = pm.Install(
-			cliCtx.Context,
+			ctx,
 			packagemanager.UnzipPackage,
 			packagemanager.XZUtilsPackage,
 		); err != nil {
@@ -152,50 +160,50 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Set user privileges ...")
-	state, err = setUserPrivileges(cliCtx.Context, state)
+	state, err = setUserPrivileges(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to set user privileges")
 	}
 
 	fmt.Println("Generating GameAP Daemon certificates ...")
-	state, err = generateCertificates(cliCtx.Context, state)
+	state, err = generateCertificates(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to generate certificates")
 	}
 
 	fmt.Println("Setting firewall rules ...")
-	state, err = setFirewallRules(cliCtx.Context, state)
+	state, err = setFirewallRules(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to set firewall rules")
 	}
 
 	fmt.Println("Downloading gameap-daemon binaries ...")
-	state, err = installDaemonBinaries(cliCtx.Context, pm, state)
+	state, err = installDaemonBinaries(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
 
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Downloading runner ...")
-		state, err = downloadRunner(cliCtx.Context, state, pm)
+		state, err = downloadRunner(ctx, state, pm)
 		if err != nil {
 			return errors.WithMessage(err, "failed to download runner")
 		}
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")
-	state, err = configureDaemon(cliCtx.Context, state)
+	state, err = configureDaemon(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to configure daemon")
 	}
 
-	state, err = saveDaemonConfig(cliCtx.Context, state)
+	state, err = saveDaemonConfig(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to save daemon config")
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
-	err = daemon.Start(cliCtx.Context)
+	err = daemon.Start(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
