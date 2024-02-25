@@ -1,4 +1,4 @@
-const conn = new WebSocket("ws://localhost:17080/ws")
+const conn = new WebSocket("ws://" + location.host + "/ws")
 
 let subscribers= new Map()
 
