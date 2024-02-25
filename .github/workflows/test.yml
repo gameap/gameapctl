@@ -193,17 +193,6 @@ jobs:
     needs: [test, integration-test, integration-test-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20.x'
-
-      - name: Build UI
-        run: |
-          cd ui
-          npm ci
-          npm run build --if-present
-
       - name: Install Go
         uses: actions/setup-go@v3
         with:
@@ -226,8 +215,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Unit Tests
-        run: go test -race -v $(go list ./... | grep -v /test/)
+
   finish:
     needs: [test, integration-test, integration-test-windows]
     runs-on: ubuntu-latest
