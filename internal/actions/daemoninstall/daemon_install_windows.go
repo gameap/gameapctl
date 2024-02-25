@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"os/user"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -21,7 +22,9 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 	userName := defaultUserName
 	var errUnknownUser user.UnknownUserError
 	systemUser, err := user.Lookup(userName)
-	if err != nil && !errors.As(err, &errUnknownUser) {
+	if err != nil &&
+		!errors.As(err, &errUnknownUser) &&
+		!strings.Contains(err.Error(), "No mapping between account") {
 		return state, errors.WithMessage(err, "failed to lookup user")
 	}
 
