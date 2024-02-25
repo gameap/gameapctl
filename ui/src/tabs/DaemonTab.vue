@@ -1,7 +1,7 @@
 <script setup>
 
 import ServicePanel from "../components/ServicePanel.vue";
-import {ArchiveBoxArrowDownIcon, ChevronDoubleUpIcon} from "@heroicons/vue/24/outline/index.js";
+import {ArchiveBoxArrowDownIcon, ChevronDoubleUpIcon, QuestionMarkCircleIcon} from "@heroicons/vue/24/outline/index.js";
 import {useServicesStore} from "../store/services.js";
 import {storeToRefs} from "pinia";
 import {computed, ref} from "vue";
@@ -27,7 +27,7 @@ const showInstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
-  host: "127.0.0.1",
+  host: "",
   installationToken: "",
 })
 const installationFormRules = {
@@ -110,13 +110,29 @@ function onClickDaemonUpgradingButton() {
           ref="installationFormRef"
           :model="installationForm"
           :rules="installationFormRules"
-          label-width="100px"
+          label-placement="left"
+          label-width="auto"
           >
         <n-form-item label="Host" prop="host">
-          <n-input v-model:value="installationForm.host" />
+          <n-input v-model:value="installationForm.host" placeholder="http://<your Host/IP>" />
+
+          <n-tooltip placement="top-start" trigger="hover">
+            <template #trigger>
+              <QuestionMarkCircleIcon class="ml-1 h-5 w-5 text-gray-400" />
+            </template>
+            Write the IP address or domain name of the server where the GameAP Daemon will be installed.
+          </n-tooltip>
+
         </n-form-item>
         <n-form-item label="Installation token" prop="installationToken">
-          <n-input v-model:value="installationForm.installationToken" />
+          <n-input v-model:value="installationForm.installationToken" placeholder="Token" />
+
+          <n-tooltip placement="top-start" trigger="hover">
+            <template #trigger>
+              <QuestionMarkCircleIcon class="ml-1 h-5 w-5 text-gray-400" />
+            </template>
+            Open GameAP, go to Dedicated Servers and click "Create" button, then copy the token from the installation form.
+          </n-tooltip>
         </n-form-item>
         <n-form-item>
           <n-button type="primary" @click="handleInstallButtonClick">

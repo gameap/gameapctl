@@ -390,7 +390,7 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 		"daemon",
 		"install",
 		"--host="+host,
-		"--create-token="+createToken,
+		"--token="+createToken,
 	)
 	cmd.Stdout = w
 	cmd.Stderr = w
