@@ -28,9 +28,13 @@ const defaultPath = computed(() => {
       : "/var/www/gameap"
 })
 
+const servicePanelsCols = computed(() => {
+  return window.innerWidth < 1000 ? 1 : 3
+})
+
 const showInstallationAskModal = ref(false)
 
-const installationFormRef = ref(null);
+const installationFormRef = ref(null)
 const installationForm = ref({
   path: defaultPath,
   host: "127.0.0.1",
@@ -123,17 +127,17 @@ function handleInstallButtonClick(e) {
     </n-grid>
   </div>
 
-  <div class="service-panels mt-6">
-    <n-grid x-gap="12" :y-gap="10" :cols="3">
-      <n-gi>
+  <div class="service-panels mt-6 flex">
+    <n-grid x-gap="12" y-gap="10" :cols="servicePanelsCols">
+      <n-grid-item>
         <service-panel name="Nginx" service-id="nginx" />
-      </n-gi>
-      <n-gi>
+      </n-grid-item>
+      <n-grid-item>
         <service-panel name="PHP" service-id="php-fpm"/>
-      </n-gi>
-      <n-gi>
+      </n-grid-item>
+      <n-grid-item>
         <service-panel name="MySQL/MariaDB" service-id="mysql" />
-      </n-gi>
+      </n-grid-item>
     </n-grid>
   </div>
 

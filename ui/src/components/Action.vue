@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useMessage, useDialog } from "naive-ui";
 import {XMarkIcon} from "@heroicons/vue/24/outline/index.js";
 import {send, subscribe, unsubscribe} from "../websocket.js";
@@ -13,6 +13,10 @@ const dialogContentRef = ref("Are you sure?");
 const topicRef = ref(String);
 
 const actionMessage = ref("")
+
+const logWithNewLine = computed(() => {
+  return log.value + "\n"
+})
 
 subscribeAction((dialogTitle, dialogContent, topic, message) => {
   dialogTitleRef.value = dialogTitle
@@ -61,6 +65,11 @@ function showDialog() {
 function run() {
   send(topicRef.value, actionMessage.value)
   subscribe(topicRef.value, (id, code, message) => {
+    const element = document.getElementById("log");
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "end", inline: "nearest" });
+    }
+
     if (code === "payload") {
       log.value += message
     }
@@ -98,7 +107,7 @@ function run() {
     >
       <template #default>
         <div class="log mr-3">
-          <n-code :trim="true" v-model:code="log"/>
+          <n-code id="log" :trim="true" v-model:code="logWithNewLine"/>
         </div>
       </template>
       <template #footer>

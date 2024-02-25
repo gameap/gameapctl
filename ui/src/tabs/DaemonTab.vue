@@ -4,8 +4,8 @@ import ServicePanel from "../components/ServicePanel.vue";
 import {ArchiveBoxArrowDownIcon, ChevronDoubleUpIcon} from "@heroicons/vue/24/outline/index.js";
 import {useServicesStore} from "../store/services.js";
 import {storeToRefs} from "pinia";
-import {computed} from "vue";
-import {runAction} from "../action.js";
+import {computed, ref} from "vue";
+import {runAction, runActionWithoutDialog} from "../action.js";
 
 const services = useServicesStore()
 
@@ -19,15 +19,34 @@ function daemonAvailable() {
   return daemonService.value.status !== undefined &&
       daemonService.value.status !== "" &&
       daemonService.value.status !== null &&
-      daemonService.value.status !== false
+      daemonService.value.status !== false &&
+      (daemonService.value.status === 'active' || daemonService.value.status === 'inactive')
+}
+
+const showInstallationAskModal = ref(false)
+
+const installationFormRef = ref(null)
+const installationForm = ref({
+  host: "127.0.0.1",
+  installationToken: "",
+})
+const installationFormRules = {
+
 }
 
 function onClickDaemonInstallationButton() {
-  runAction(
-      "GameAP Daemon Installation",
-      "Are you sure?",
+  showInstallationAskModal.value = true
+}
+
+function handleInstallButtonClick(e) {
+  showInstallationAskModal.value = false
+
+  let params = "--host=" + installationForm.value.host +
+      " --installation-token=" + installationForm.value.installationToken
+
+  runActionWithoutDialog(
       "daemon-install",
-      "daemon-install",
+      "daemon-install " + params,
   )
 }
 
@@ -74,9 +93,45 @@ function onClickDaemonUpgradingButton() {
       </n-gi>
     </n-grid>
   </div>
+
+  <n-modal
+      :show="showInstallationAskModal"
+      :mask-closable="false"
+      >
+    <n-card
+        class="card"
+        :bordered="false"
+        title="GameAP Daemon Installation"
+        size="huge"
+        role="dialog"
+        aria-modal="true"
+        >
+      <n-form
+          ref="installationFormRef"
+          :model="installationForm"
+          :rules="installationFormRules"
+          label-width="100px"
+          >
+        <n-form-item label="Host" prop="host">
+          <n-input v-model:value="installationForm.host" />
+        </n-form-item>
+        <n-form-item label="Installation token" prop="installationToken">
+          <n-input v-model:value="installationForm.installationToken" />
+        </n-form-item>
+        <n-form-item>
+          <n-button type="primary" @click="handleInstallButtonClick">
+            Install
+          </n-button>
+        </n-form-item>
+      </n-form>
+    </n-card>
+  </n-modal>
 </template>
 
 <style scoped>
+.card {
+  width: 600px;
+}
 .service-panels {
   text-align: center;
 }
