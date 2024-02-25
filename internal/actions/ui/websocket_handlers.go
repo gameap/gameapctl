@@ -16,6 +16,7 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/daemon"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/pkg/errors"
 )
@@ -400,6 +401,8 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to execute command")
 	}
+
+	packagemanager.UpdateEnvPath()
 
 	return nil
 }

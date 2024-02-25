@@ -29,7 +29,11 @@ func Handle(cliCtx *cli.Context) error {
 	http.Handle("/", http.StripPrefix("/", fs))
 	http.HandleFunc("/ws", serveWs)
 
-	addr := "localhost:17080"
+	addr := fmt.Sprintf("%s:%d", cliCtx.String("host"), cliCtx.Int("port"))
+
+	if addr == "" {
+		addr = "localhost:17080"
+	}
 	url := "http://" + addr
 
 	noBrowser := cliCtx.Bool("no-browser")

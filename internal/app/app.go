@@ -34,8 +34,8 @@ import (
 func Run(args []string) {
 	logfilepath := ""
 
-	if len(args) == 0 && runtime.GOOS == "windows" {
-		args = []string{"ui"}
+	if len(args) == 1 && runtime.GOOS == "windows" {
+		args = []string{args[0], "ui"}
 	}
 
 	app := &cli.App{
@@ -253,6 +253,14 @@ func Run(args []string) {
 				},
 				Action: ui.Handle,
 				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "host",
+						DefaultText: "localhost",
+					},
+					&cli.StringFlag{
+						Name:        "port",
+						DefaultText: "17080",
+					},
 					&cli.BoolFlag{
 						Name:  "no-browser",
 						Usage: "Do not open browser",
