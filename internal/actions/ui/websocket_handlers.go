@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -145,7 +146,12 @@ func gameapStatus(ctx context.Context, w io.Writer, _ []string) error {
 }
 
 func daemonStatus(ctx context.Context, w io.Writer, _ []string) error {
-	_, err := exec.LookPath("gameap-daemon")
+	path := "gameap-daemon"
+	if runtime.GOOS == "windows" {
+		path += ".exe"
+	}
+
+	_, err := exec.LookPath(path)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "gameap-daemon not found"))
 		_, _ = w.Write([]byte(serviceStatusNotFound))

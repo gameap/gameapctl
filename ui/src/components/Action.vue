@@ -41,6 +41,13 @@ function showDialog() {
     positiveText: "Yes",
     negativeText: "No",
     onPositiveClick: () => {
+      if (topicRef.value === "exit") {
+        log.value = "Exited. You can close the window."
+        showModal.value = true
+        run()
+        return
+      }
+
       log.value = ""
       complete.value = false
       showModal.value = true

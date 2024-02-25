@@ -64,12 +64,18 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		}
 		err = wsRequest(ctx, ws, mt, msg)
 		if err != nil {
+			if errors.Is(err, errClosed) {
+				break
+			}
+
 			log.Println(errors.WithMessage(err, "failed to handle request"))
 
 			break
 		}
 	}
 }
+
+var errClosed = errors.New("closed")
 
 func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) error {
 	var m message
@@ -82,6 +88,17 @@ func wsRequest(ctx context.Context, ws *websocket.Conn, mt int, msg []byte) erro
 	log.Printf("recv: %s", msg)
 
 	rw := newResponseWriter(ws, m.Topic)
+
+	if m.Topic == "exit" {
+		err = ws.Close()
+		if err != nil {
+			return errors.WithMessage(err, "failed to close connection")
+		}
+
+		done <- struct{}{}
+
+		return errClosed
+	}
 
 	err = cmdHandle(ctx, rw, m)
 	if err != nil {

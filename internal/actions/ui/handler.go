@@ -22,6 +22,8 @@ var (
 	ErrUnsupportedPlatform = errors.New("unsupported platform")
 )
 
+var done = make(chan struct{})
+
 func Handle(cliCtx *cli.Context) error {
 	fs := http.FileServer(http.FS(ui.Assets()))
 	http.Handle("/", http.StripPrefix("/", fs))
@@ -67,7 +69,11 @@ func Handle(cliCtx *cli.Context) error {
 	}()
 
 	// Wait for interrupt signal to gracefully shutdown the server with
-	<-cliCtx.Context.Done()
+	select {
+	case <-done:
+	case <-cliCtx.Context.Done():
+	}
+
 	log.Println("Shutting down the server...")
 	err := srv.Shutdown(cliCtx.Context)
 	if err != nil {

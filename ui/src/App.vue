@@ -23,14 +23,26 @@
                 </div>
               </div>
             </div>
+            <div class="hidden md:block">
+              <div class="ml-4 flex items-center md:ml-6">
+                <button @click="onClickExit()" class="text-red-500 hover:bg-red-600 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                  <XMarkIcon class="h-6 w-6" aria-hidden="true" />
+                  Exit
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <DisclosurePanel class="sm:hidden">
           <div class="space-y-1 px-2 pb-3 pt-2">
             <DisclosureButton v-for="item in navigation" :key="item.name" as="a" :href="item.href" :class="[item.current ? 'bg-gray-900 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white', 'block rounded-md px-3 py-2 text-base font-medium']" :aria-current="item.current ? 'page' : undefined">{{ item.name }}</DisclosureButton>
+            <DisclosureButton @click="onClickExit()" class="text-red-500 hover:bg-red-600 hover:text-white block rounded-md px-3 py-2 text-base font-medium">Exit</DisclosureButton>
           </div>
         </DisclosurePanel>
+
+
+
       </Disclosure>
 
       <Action />
@@ -53,6 +65,7 @@ import Action from "./components/Action.vue"
 import {reloadServices} from "./global.js"
 import {unarySend} from "./websocket.js"
 import {useNodeStore} from "./store/node.js"
+import {runAction} from "./action.js";
 
 const nodeStore = useNodeStore()
 
@@ -72,6 +85,15 @@ onBeforeMount(() => {
   })
   reloadServices()
 })
+
+function onClickExit() {
+  runAction(
+      "Exit",
+      "Are you want to exit?",
+      "exit",
+      "exit",
+  )
+}
 
 const navigation = ref([
   { name: 'GameAP Control', href: '#', current: true },

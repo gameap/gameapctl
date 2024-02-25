@@ -1,17 +1,25 @@
 <script setup>
 import { ref, computed } from 'vue'
-
+import {storeToRefs} from "pinia"
 import ServicePanel from "../components/ServicePanel.vue";
 import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon} from "@heroicons/vue/24/outline/index.js";
 
 import { runAction, runActionWithoutDialog } from "../action.js";
 
+import {useServicesStore} from "../store/services.js"
 import {useNodeStore} from "../store/node.js";
 
+const services = useServicesStore()
+
+const { getServiceByName } = storeToRefs(services)
 const { getNodeInfo } = useNodeStore()
 
 const nodeOS = computed(() => {
   return getNodeInfo("os")
+})
+
+const gameapActive = computed(() => {
+  return getServiceByName.value("gameap").status === "active"
 })
 
 const defaultPath = computed(() => {
@@ -90,14 +98,20 @@ function handleInstallButtonClick(e) {
     <n-grid x-gap="12" :y-gap="10" :cols="1">
       <n-gi>
         <n-card title="API/Web" class="service-panels">
-          <n-button @click="onClickGameAPInstallationButton()">
+          <n-button
+              :disabled="gameapActive"
+              @click="onClickGameAPInstallationButton()"
+          >
             <template #icon>
               <ArchiveBoxArrowDownIcon />
             </template>
             Install
           </n-button>
 
-          <n-button @click="onClickGameAPUpgradingButton()">
+          <n-button
+              :disabled="!gameapActive"
+              @click="onClickGameAPUpgradingButton()"
+          >
             <template #icon>
               <ChevronDoubleUpIcon />
             </template>
