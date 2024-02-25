@@ -206,6 +206,8 @@ func gameapInstall(_ context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to execute command")
 	}
 
+	packagemanager.UpdateEnvPath()
+
 	return nil
 }
 

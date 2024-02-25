@@ -24,7 +24,7 @@ const gameapActive = computed(() => {
 
 const defaultPath = computed(() => {
   return nodeOS.value === "windows"
-      ? "C:\\gameap"
+      ? "C:\\gameap\\web"
       : "/var/www/gameap"
 })
 
