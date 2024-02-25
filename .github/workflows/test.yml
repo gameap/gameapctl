@@ -17,6 +17,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
       - name: Install Go
         uses: actions/setup-go@v3
         with:
@@ -87,17 +98,6 @@ jobs:
 
       - name: Set up dependencies
         run: go mod download
-
-      - name: Use Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20.x'
-
-      - name: Install UI
-        run: |
-          cd ui
-          npm ci
-          npm run build --if-present
 
       - name: GameAP Installation Test
         run: |

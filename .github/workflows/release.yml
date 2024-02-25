@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Install UI
+      - name: Build UI
         run: |
           cd ui
           npm ci

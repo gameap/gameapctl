@@ -127,18 +127,12 @@ function handleInstallButtonClick(e) {
     </n-grid>
   </div>
 
-  <div class="service-panels mt-6 flex">
-    <n-grid x-gap="12" y-gap="10" :cols="servicePanelsCols">
-      <n-grid-item>
+  <div class="service-panels mt-6">
+    <div class="grid lg:grid-cols-3 gap-y-10 lg:gap-x-12">
         <service-panel name="Nginx" service-id="nginx" />
-      </n-grid-item>
-      <n-grid-item>
         <service-panel name="PHP" service-id="php-fpm"/>
-      </n-grid-item>
-      <n-grid-item>
         <service-panel name="MySQL/MariaDB" service-id="mysql" />
-      </n-grid-item>
-    </n-grid>
+    </div>
   </div>
 
   <n-modal
