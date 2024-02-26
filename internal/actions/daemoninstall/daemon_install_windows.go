@@ -99,3 +99,13 @@ func generatePassword(passwordLength int) (string, error) {
 
 	return string(password), nil
 }
+
+const (
+	defaultProcessManager = "winsw"
+)
+
+func configureProcessManager(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	state.ProcessManager = defaultProcessManager
+
+	return state, nil
+}
