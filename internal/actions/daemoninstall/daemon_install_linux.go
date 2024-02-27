@@ -22,6 +22,7 @@ func configureProcessManager(ctx context.Context, state daemonsInstallState) (da
 	p, err := process.NewProcess(1)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to get process 1"))
+
 		return state, nil
 	}
 
