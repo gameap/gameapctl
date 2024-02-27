@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"strconv"
 
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -70,5 +71,13 @@ func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsIns
 }
 
 func setFirewallRules(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	return state, nil
+}
+
+func installOSSpecificPackages(
+	_ context.Context,
+	_ packagemanager.PackageManager,
+	state daemonsInstallState,
+) (daemonsInstallState, error) {
 	return state, nil
 }

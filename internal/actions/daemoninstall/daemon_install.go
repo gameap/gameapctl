@@ -83,7 +83,7 @@ func Handle(cliCtx *cli.Context) error {
 	)
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func Install(ctx context.Context, host, token string) error {
 	fmt.Println("Install daemon")
 
@@ -159,6 +159,12 @@ func Install(ctx context.Context, host, token string) error {
 		); err != nil {
 			return errors.WithMessage(err, "failed to install archive managers")
 		}
+	}
+
+	fmt.Println("Installing gameap-daemon dependencies ...")
+	state, err = installOSSpecificPackages(ctx, pm, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set user privileges")
 	}
 
 	fmt.Println("Set user privileges ...")

@@ -37,7 +37,8 @@ type pack struct {
 
 const (
 	WinSWPackage      = "winsw"
-	VCRedist16Package = "vc_redist_16" //nolint:gosec
+	VCRedist16Package = "vc_redist_16"     //nolint:gosec
+	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
 	GameAPDaemon      = "gameap-daemon"
 )
 
@@ -121,6 +122,15 @@ var repository = map[string]pack{
 	VCRedist16Package: {
 		DownloadURLs: []string{
 			"https://aka.ms/vs/16/release/VC_redist.x64.exe",
+		},
+		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
+		AllowedInstallExitCodes: []int{
+			1638, // A newer version is already installed or already installed
+		},
+	},
+	VCRedist17X86: {
+		DownloadURLs: []string{
+			"https://aka.ms/vs/17/release/vc_redist.x86.exe",
 		},
 		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
 		AllowedInstallExitCodes: []int{
