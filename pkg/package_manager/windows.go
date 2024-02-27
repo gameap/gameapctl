@@ -132,7 +132,7 @@ var repository = map[string]pack{
 		DownloadURLs: []string{
 			"https://aka.ms/vs/17/release/vc_redist.x86.exe",
 		},
-		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
+		InstallCommand: "cmd /c \"VC_redist.x86.exe /install /quiet /norestart\"",
 		AllowedInstallExitCodes: []int{
 			1638, // A newer version is already installed or already installed
 		},
