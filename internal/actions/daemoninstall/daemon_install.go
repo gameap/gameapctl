@@ -138,6 +138,14 @@ func Install(ctx context.Context, host, token string) error {
 				return errors.WithMessage(err, "failed to install gpg")
 			}
 		}
+
+		fmt.Println("Checking for tmux ...")
+		if !utils.IsCommandAvailable("tmux") {
+			fmt.Println("Installing tmux ...")
+			if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
+				return errors.WithMessage(err, "failed to install tmux")
+			}
+		}
 	}
 
 	state, err = createUser(ctx, state)
