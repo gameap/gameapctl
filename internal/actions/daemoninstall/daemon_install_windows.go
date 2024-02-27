@@ -122,5 +122,6 @@ func installOSSpecificPackages(
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install Visual C++ Redistributable 2017 x86")
 	}
+
 	return state, nil
 }

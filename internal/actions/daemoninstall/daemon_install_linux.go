@@ -28,11 +28,13 @@ func configureProcessManager(ctx context.Context, state daemonsInstallState) (da
 	name, err := p.NameWithContext(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to get process name"))
+
 		return state, nil
 	}
 
 	if name == "systemd" {
 		state.ProcessManager = systemDProcessManager
+
 		return state, nil
 	}
 
