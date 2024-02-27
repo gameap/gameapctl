@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"strings"
 
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -98,4 +99,29 @@ func generatePassword(passwordLength int) (string, error) {
 	}
 
 	return string(password), nil
+}
+
+const (
+	defaultProcessManager = "winsw"
+)
+
+func configureProcessManager(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	state.ProcessManager = defaultProcessManager
+
+	return state, nil
+}
+
+func installOSSpecificPackages(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state daemonsInstallState,
+) (daemonsInstallState, error) {
+	// Some game services require Visual C++ Redistributable x86
+	// For example, Counter-Strike 1.6
+	err := pm.Install(ctx, packagemanager.VCRedist17X86)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install Visual C++ Redistributable 2017 x86")
+	}
+
+	return state, nil
 }

@@ -69,6 +69,8 @@ type daemonsInstallState struct {
 	NodeID   uint
 	APIKey   string
 
+	ProcessManager string
+
 	User     string
 	Password string // Password for user (Windows only)
 }
@@ -159,6 +161,12 @@ func Install(ctx context.Context, host, token string) error {
 		}
 	}
 
+	fmt.Println("Installing gameap-daemon dependencies ...")
+	state, err = installOSSpecificPackages(ctx, pm, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set user privileges")
+	}
+
 	fmt.Println("Set user privileges ...")
 	state, err = setUserPrivileges(ctx, state)
 	if err != nil {
@@ -183,12 +191,10 @@ func Install(ctx context.Context, host, token string) error {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
 
-	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		fmt.Println("Downloading runner ...")
-		state, err = downloadRunner(ctx, state, pm)
-		if err != nil {
-			return errors.WithMessage(err, "failed to download runner")
-		}
+	fmt.Println("Configuring process manager ...")
+	state, err = configureProcessManager(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to configure process manager")
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")
@@ -427,37 +433,6 @@ func installDaemonBinaries(
 	return state, nil
 }
 
-func downloadRunner(
-	ctx context.Context,
-	state daemonsInstallState,
-	pm packagemanager.PackageManager,
-) (daemonsInstallState, error) {
-	if err := pm.Install(
-		ctx,
-		packagemanager.TmuxPackage,
-	); err != nil {
-		return state, errors.WithMessage(err, "failed to install tmux")
-	}
-
-	runnerFilePath := filepath.Join(gameap.DefaultToolsPath, "runner.sh")
-
-	err := utils.DownloadFile(
-		ctx,
-		"https://raw.githubusercontent.com/gameap/scripts/master/process-manager/tmux/runner.sh",
-		runnerFilePath,
-	)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to download runner")
-	}
-
-	err = os.Chmod(runnerFilePath, 0755)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to chmod runner")
-	}
-
-	return state, nil
-}
-
 //nolint:funlen
 func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	hostname, err := os.Hostname()
@@ -658,6 +633,10 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		WorkPath:     state.WorkPath,
 		ToolsPath:    gameap.DefaultToolsPath,
 		SteamCMDPath: state.SteamCMDPath,
+
+		ProcessManager: ProcessManagerConfig{
+			Name: state.ProcessManager,
+		},
 	}
 
 	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
@@ -861,6 +840,11 @@ type DaemonSteamConfig struct {
 	Password string `yaml:"password,omitempty"`
 }
 
+type ProcessManagerConfig struct {
+	Name   string            `yaml:"name,omitempty"`
+	Config map[string]string `yaml:"config,omitempty"`
+}
+
 //nolint:tagliatelle
 type DaemonConfig struct {
 	NodeID uint `yaml:"ds_id"`
@@ -903,6 +887,8 @@ type DaemonConfig struct {
 	SteamConfig DaemonSteamConfig `yaml:"steam_config"`
 
 	Scripts DaemonConfigScripts `yaml:"-"`
+
+	ProcessManager ProcessManagerConfig `yaml:"process_manager,omitempty"`
 
 	Users map[string]string `yaml:"users"`
 }
