@@ -5,8 +5,6 @@ package daemoninstall
 
 import (
 	"context"
-	"crypto/rand"
-	"math/big"
 	"os/user"
 	"strings"
 
@@ -29,7 +27,7 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 		return state, errors.WithMessage(err, "failed to lookup user")
 	}
 
-	password, err := generatePassword(24)
+	password, err := utils.CryptoRandomString(24)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to generate password")
 	}
@@ -80,25 +78,6 @@ func setFirewallRules(_ context.Context, state daemonsInstallState) (daemonsInst
 	}
 
 	return state, nil
-}
-
-const (
-	characterSet = "abcdedfghijklmnopqrstABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-)
-
-func generatePassword(passwordLength int) (string, error) {
-	password := make([]byte, 0, passwordLength)
-	m := big.NewInt(int64(len(characterSet)))
-	for i := 0; i < passwordLength; i++ {
-		n, err := rand.Int(rand.Reader, m)
-		if err != nil {
-			return "", errors.WithMessage(err, "failed to generate random number")
-		}
-		character := characterSet[n.Int64()]
-		password = append(password, character)
-	}
-
-	return string(password), nil
 }
 
 const (
