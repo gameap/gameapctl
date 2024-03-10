@@ -87,7 +87,7 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Logs was sent")
 	fmt.Println("Logs ID:", id)
 	fmt.Println("Please, send this ID to GameAP support")
-	fmt.Println("Telegram: https://t.me/game_admin_panel")
+	fmt.Println("Telegram: https://t.me/gameap")
 
 	return nil
 }
