@@ -86,7 +86,7 @@ function handleInstallButtonClick(e) {
       " --database=" + installationForm.value.database
 
   if (installationForm.value.source === "github") {
-    params += " --source=github"
+    params += " --github"
     params += " --branch=" + installationForm.value.branch
   }
 

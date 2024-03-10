@@ -391,6 +391,18 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		return nil
 	}
 
+	if service.IsExists(ctx, p.ServiceConfig.ID) {
+		log.Printf("Service '%s' is already exists", p.ServiceConfig.ID)
+
+		return nil
+	}
+
+	if service.IsExists(ctx, p.ServiceConfig.Name) {
+		log.Printf("Service '%s' is already exists", p.ServiceConfig.Name)
+
+		return nil
+	}
+
 	serviceConfig := *p.ServiceConfig
 
 	if serviceConfig.WorkingDirectory == "" {

@@ -88,6 +88,7 @@ func SetupGameAPFromRepo(ctx context.Context, path string) error {
 		return errors.WithMessage(err, "failed to join url")
 	}
 
+	log.Println("Download path: ", downloadPath)
 	err = utils.Download(ctx, downloadPath, tempDir)
 	if err != nil {
 		return errors.WithMessagef(err, "failed to download gameap from '%s'", downloadPath)

@@ -196,6 +196,11 @@ func checkApacheWebServer(ctx context.Context, state panelInstallState) (panelIn
 
 //nolint:funlen
 func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	//nolint:goconst
+	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") {
+		return state, nil
+	}
+
 	_, err := net.LookupIP(state.Host)
 	var dnsErr *net.DNSError
 	if err != nil && errors.As(err, &dnsErr) {
