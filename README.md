@@ -13,10 +13,11 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### Windows
 
-| Version      | Supported | Notes                                   |
-|--------------|-----------|-----------------------------------------|
-| Server 2022  | ✔         | Latest manual test (v0.9.1): 02.03.2024 |
-| Server 2019  | ✔         | Latest manual test (v0.9.3): 02.03.2024 |
+| Version     | Supported | Notes                                   |
+|-------------|-----------|-----------------------------------------|
+| Server 2022 | ✔         | Latest manual test (v0.9.1): 02.03.2024 |
+| Server 2019 | ✔         | Latest manual test (v0.9.3): 02.03.2024 |
+| Server 2016 | ✔         | Latest manual test (v0.9.3): 10.03.2024 |
 
 ### Debian
 
@@ -30,25 +31,25 @@ Other operating systems may work as well, if they can run the required dependenc
 ### Ubuntu
 
 | Version | Supported | Notes                                                              |
-|---------|----------|--------------------------------------------------------------------|
-| 22.04   | ✔        | Latest manual test (v0.4.1): 12.11.2023                            |
-| 20.04   | ✔        | Latest manual test (v0.5.1): 16.11.2023                            |
-| 18.04   | ✔        | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
-| 16.04   | ✔        | Latest manual test (v0.5.6): 16.11.2023, used chrooted php package |
+|---------|-----------|--------------------------------------------------------------------|
+| 22.04   | ✔         | Latest manual test (v0.4.1): 12.11.2023                            |
+| 20.04   | ✔         | Latest manual test (v0.5.1): 16.11.2023                            |
+| 18.04   | ✔         | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
+| 16.04   | ✔         | Latest manual test (v0.5.6): 16.11.2023, used chrooted php package |
 
 ### CentOS
 
 | Version  | Supported | Notes                                   |
-|----------|----------|-----------------------------------------|
-| Stream 9 | ✔        | Latest manual test (v0.6.1): 17.11.2023 |
-| Stream 8 | ✔        | Latest manual test (v0.6.2): 17.11.2023 |
-| 7        | ✔        | Latest manual test (v0.6.2): 17.11.2023 |
+|----------|-----------|-----------------------------------------|
+| Stream 9 | ✔         | Latest manual test (v0.6.1): 17.11.2023 |
+| Stream 8 | ✔         | Latest manual test (v0.6.2): 17.11.2023 |
+| 7        | ✔         | Latest manual test (v0.6.2): 17.11.2023 |
 
 ### AlmaLinux
 
-| Version | Supported | Notes                                    |
-|---------|----------|------------------------------------------|
-| 9       | ✔        | Latest manual test (v0.6.10): 12.02.2024 |
+| Version | Supported | Notes                                    Z |
+|---------|-----------|--------------------------------------------|
+| 9       | ✔         | Latest manual test (v0.6.10): 12.02.2024   |
 
 ### Amazon Linux
 
