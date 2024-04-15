@@ -87,8 +87,7 @@ var repository = map[string]pack{
 	PHPPackage: {
 		LookupPath: []string{"php"},
 		DownloadURLs: []string{
-			"https://windows.php.net/downloads/releases/php-8.3.3-Win32-vs16-x64.zip",
-			"https://windows.php.net/downloads/releases/php-8.2.2-Win32-vs16-x64.zip",
+			"https://windows.php.net/downloads/releases/php-8.3.4-Win32-vs16-x64.zip",
 		},
 		DefaultInstallPath: "C:\\php",
 		ServiceConfig: &WinSWServiceConfig{
