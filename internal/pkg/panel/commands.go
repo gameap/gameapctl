@@ -14,17 +14,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	randomLength = 32
+)
+
 func GenerateEncryptionKey(ctx context.Context, dir string) error {
 	fmt.Println("Generating encryption key ...")
 
 	envPath := filepath.Join(dir, ".env")
 
-	random := make([]byte, 32)
+	random := make([]byte, randomLength)
 	n, err := rand.Read(random)
 	if err != nil {
 		return errors.WithMessage(err, "failed to generate random bytes")
 	}
-	if n != 32 {
+	if n != randomLength {
 		return errors.New("failed to generate 32 bytes")
 	}
 
