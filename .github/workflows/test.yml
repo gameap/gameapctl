@@ -67,10 +67,7 @@ jobs:
           - distro: 'debian:buster'
             database: 'sqlite'
         include:
-          - distro: 'ubuntu:18.04'
-            database: 'mysql'
-            experimental: true
-          - distro: 'debian:sid'
+          - distro: 'ubuntu:24.04'
             database: 'mysql'
             experimental: true
 

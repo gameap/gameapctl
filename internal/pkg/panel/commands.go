@@ -2,6 +2,8 @@ package panel
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os/exec"
@@ -12,24 +14,31 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GenerateEncryptionKey(_ context.Context, dir string) error {
+const (
+	randomLength = 32
+)
+
+func GenerateEncryptionKey(ctx context.Context, dir string) error {
 	fmt.Println("Generating encryption key ...")
 
-	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
-		filepath.Join(dir, "artisan"), "key:generate", "--force",
-	)
+	envPath := filepath.Join(dir, ".env")
+
+	random := make([]byte, randomLength)
+	n, err := rand.Read(random)
 	if err != nil {
-		return errors.WithMessage(err, "failed to define php command and args")
+		return errors.WithMessage(err, "failed to generate random bytes")
+	}
+	if n != randomLength {
+		return errors.New("failed to generate 32 bytes")
 	}
 
-	cmd := exec.Command(cmdName, args...)
-	cmd.Dir = dir
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
-	err = cmd.Run()
-	log.Println('\n', cmd.String())
+	encrypted := base64.StdEncoding.EncodeToString(random)
+
+	err = utils.FindLineAndReplace(ctx, envPath, map[string]string{
+		"APP_KEY=": "APP_KEY=base64:" + encrypted,
+	})
 	if err != nil {
-		return errors.WithMessage(err, "failed to execute key generate command")
+		return errors.WithMessage(err, "failed to set APP_KEY in .env")
 	}
 
 	return nil

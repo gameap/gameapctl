@@ -323,9 +323,11 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to generate encryption key")
 	}
 
-	state, err = runMigrationWithRetry(cliCtx.Context, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to run migration")
+	if state.Database != noneDatabase {
+		state, err = runMigrationWithRetry(cliCtx.Context, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed to run migration")
+		}
 	}
 
 	switch state.WebServer {
