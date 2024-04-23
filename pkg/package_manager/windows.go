@@ -24,13 +24,14 @@ import (
 )
 
 type pack struct {
-	DownloadURLs            []string
-	LookupPath              []string
-	InstallCommand          string
-	AllowedInstallExitCodes []int
-	DefaultInstallPath      string
-	ServiceConfig           *WinSWServiceConfig
-	Dependencies            []string
+	DownloadURLs                 []string
+	LookupPath                   []string
+	InstallCommand               string
+	WaitAfterInstallCommandUntil func(ctx context.Context) (stop bool, err error)
+	AllowedInstallExitCodes      []int
+	DefaultInstallPath           string
+	ServiceConfig                *WinSWServiceConfig
+	Dependencies                 []string
 
 	PreInstallFunc func(ctx context.Context, p pack, resolvedPackagePath string) (pack, error)
 }
@@ -76,6 +77,13 @@ var repository = map[string]pack{
 			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
 		},
 		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+		WaitAfterInstallCommandUntil: func(ctx context.Context) (stop bool, err error) {
+			if service.IsExists(ctx, "MariaDB") {
+				return true, nil
+			}
+
+			return false, nil
+		},
 	},
 	MariaDBServerPackage: {
 		LookupPath: []string{"mariadb", "mariadbd"},
@@ -315,6 +323,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return errors.WithMessage(err, "failed to download file")
 	}
 
+	//nolint:nestif
 	if p.InstallCommand != "" {
 		log.Println("Running install command for package ", packName)
 		splitted, err := shellquote.Split(p.InstallCommand)
@@ -338,6 +347,11 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 			}
 
 			return errors.WithMessage(err, "failed to execute install command")
+		}
+
+		err = waitUntil(ctx, p.WaitAfterInstallCommandUntil)
+		if err != nil {
+			return errors.WithMessage(err, "failed to execute install command wait after")
 		}
 	}
 
@@ -712,4 +726,39 @@ type onFailure struct {
 type env struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+const (
+	waitTriesMax = 10
+	waitTime     = 5 * time.Second
+)
+
+func waitUntil(ctx context.Context, f func(ctx context.Context) (stop bool, err error)) error {
+	if f == nil {
+		return nil
+	}
+
+	waitTries := waitTriesMax
+	ticker := time.NewTicker(waitTime)
+	for waitTries > 0 {
+		waitTries--
+
+		stop, err := f(ctx)
+		if err != nil {
+			return errors.WithMessage(err, "failed to execute wait after func")
+		}
+		if stop {
+			return nil
+		}
+
+		select {
+		case <-ticker.C:
+			log.Println("Waiting for install command to finish")
+		case <-ctx.Done():
+			waitTries = 0
+		}
+	}
+	ticker.Stop()
+
+	return errors.New("timeout waiting for install command to finish")
 }

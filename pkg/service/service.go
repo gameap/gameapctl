@@ -74,25 +74,24 @@ func Load(ctx context.Context) (srv Service, err error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	once.Do(func() {
-		switch osInfo.Distribution {
-		case "debian", "ubuntu", "centos", "almalinux", "rocky", "fedora", "rhel", "opensuse", "sles", "amzn":
-			_, err = exec.LookPath("service")
-			if err == nil {
-				service = NewBasic()
-
-				return
-			}
-
-			_, err := exec.LookPath("systemctl")
-			if err == nil {
-				service = NewSystemd()
-
-				return
-			}
-		case "windows":
+		if osInfo.Distribution == "windows" {
 			service = NewWindows()
-		default:
-			err = NewErrUnsupportedDistribution(osInfo.Distribution)
+
+			return
+		}
+
+		_, err = exec.LookPath("service")
+		if err == nil {
+			service = NewBasic()
+
+			return
+		}
+
+		_, err := exec.LookPath("systemctl")
+		if err == nil {
+			service = NewSystemd()
+
+			return
 		}
 	})
 

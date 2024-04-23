@@ -556,7 +556,7 @@ func installMariaDB(
 		if err = service.Start(ctx, "mysql"); err != nil {
 			if err = service.Start(ctx, "mysqld"); err != nil {
 				if err = service.Start(ctx, "mariadb"); err != nil {
-					return state, errors.WithMessage(err, "failed to start MySQL server")
+					return state, errors.WithMessage(err, "failed to start MariaDB server")
 				}
 			}
 		}
