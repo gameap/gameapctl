@@ -63,6 +63,7 @@ var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 	},
 }
 
+//nolint:goconst
 var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionCentOS: {
@@ -77,6 +78,8 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 				}
 
 				switch {
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
 				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
 					return "unix:/var/run/php-fpm/www.sock", nil
 				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
@@ -97,7 +100,18 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 					return "", err
 				}
 
-				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				switch {
+				case utils.IsFileExists(fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 		DistributionUbuntu: {
@@ -111,7 +125,18 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 					return "", err
 				}
 
-				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				switch {
+				case utils.IsFileExists(fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 	},
