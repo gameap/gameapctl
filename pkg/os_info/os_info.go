@@ -32,6 +32,14 @@ const (
 	DistributionWindows Distribution = "windows"
 )
 
+func (d Distribution) IsDebianLike() bool {
+	return d == DistributionDebian || d == DistributionUbuntu || d == DistributionRaspbian
+}
+
+func (d Distribution) IsWindows() bool {
+	return d == DistributionWindows
+}
+
 type Info struct {
 	Kernel               string
 	Core                 string
@@ -71,11 +79,11 @@ func (info Info) String() string {
 }
 
 func (info Info) IsDebianLike() bool {
-	return info.Distribution == DistributionDebian || info.Distribution == DistributionUbuntu
+	return info.Distribution.IsDebianLike()
 }
 
 func (info Info) IsWindows() bool {
-	return info.Distribution == DistributionWindows
+	return info.Distribution.IsWindows()
 }
 
 func GetOSInfo() (Info, error) {

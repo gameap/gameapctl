@@ -113,6 +113,7 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 		u = "https://" + hostPort + "/api/healthz"
 	}
 
+	log.Printf("Checking installation at %s\n", u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err

@@ -13,10 +13,12 @@ import (
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 var ErrConfigNotFound = errors.New("config not found")
+var ErrFailedToConfigure = errors.New("failed to configure")
 
 var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 	NginxPackage: {
@@ -64,8 +66,8 @@ var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionCentOS: {
-			"fpm_sock": func(ctx context.Context) (string, error) { //nolint:unparam
-				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
+			"fpm_sock": func(ctx context.Context) (string, error) {
+				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
 
@@ -74,7 +76,14 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 					return "127.0.0.1:9000", nil
 				}
 
-				return "unix:/run/php-fpm/www.sock", nil
+				switch {
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 		DistributionDebian: {

@@ -976,13 +976,18 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 	return state, nil
 }
 
-//nolint:funlen,gocognit
+//nolint:funlen
 func installNginx(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
 	state panelInstallState,
 ) (panelInstallState, error) {
-	err := pm.Install(ctx, packagemanager.NginxPackage)
+	state, err := installPHPForNginx(ctx, pm, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install php for nginx")
+	}
+
+	err = pm.Install(ctx, packagemanager.NginxPackage)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install package")
 	}
@@ -1063,7 +1068,7 @@ func installNginx(
 	}
 
 	switch {
-	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+	case state.OSInfo.IsWindows():
 
 		err = utils.Move(nginxMainConf, nginxMainConf+".old")
 		if err != nil {
@@ -1079,8 +1084,7 @@ func installNginx(
 			return state, errors.WithMessage(err, "failed to download nginx config")
 		}
 
-	case state.OSInfo.Distribution == packagemanager.DistributionUbuntu,
-		state.OSInfo.Distribution == packagemanager.DistributionDebian:
+	case state.OSInfo.IsDebianLike():
 
 		err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
 			"user": "user www-data;",
@@ -1090,6 +1094,19 @@ func installNginx(
 		}
 	}
 
+	err = service.Start(ctx, "nginx")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start nginx")
+	}
+
+	return state, nil
+}
+
+func installPHPForNginx(
+	ctx context.Context,
+	_ packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
 	phpServiceName := "php-fpm"
 
 	if state.OSInfo.IsDebianLike() {
@@ -1100,7 +1117,7 @@ func installNginx(
 		phpServiceName = "php" + phpVersion + "-fpm"
 	}
 
-	err = service.Start(ctx, phpServiceName)
+	err := service.Start(ctx, phpServiceName)
 	switch {
 	case err != nil && !state.OSInfo.IsDebianLike() && !state.OSInfo.IsWindows():
 		phpVersion, err := packagemanager.DefinePHPVersion()
@@ -1114,11 +1131,6 @@ func installNginx(
 		}
 	case err != nil:
 		return state, errors.WithMessage(err, "failed to start php-fpm")
-	}
-
-	err = service.Start(ctx, "nginx")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to start nginx")
 	}
 
 	return state, nil
