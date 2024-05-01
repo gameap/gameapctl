@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -232,7 +233,7 @@ func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	var funcsByDistroAndArch map[string]map[string]installationFunc
+	var funcsByDistroAndArch map[osinfo.Distribution]map[string]installationFunc
 	var funcsByArch map[string]installationFunc
 
 	updatedPacks := make([]string, 0, len(packs))
@@ -610,7 +611,7 @@ func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {
 
 type installationFunc func(ctx context.Context) error
 
-var installationFuncs = map[string]map[string]map[string]installationFunc{
+var installationFuncs = map[string]map[osinfo.Distribution]map[string]installationFunc{
 	ComposerPackage: {
 		Default: {
 			ArchDefault: func(_ context.Context) error {

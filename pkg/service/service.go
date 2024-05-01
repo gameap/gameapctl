@@ -99,7 +99,7 @@ func Load(ctx context.Context) (srv Service, err error) {
 		return nil, err
 	}
 	if service == nil {
-		err = NewErrUnsupportedDistribution(osInfo.Distribution)
+		err = NewErrUnsupportedDistribution(string(osInfo.Distribution))
 
 		return nil, err
 	}

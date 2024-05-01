@@ -99,5 +99,5 @@ func detectAndLoadPackageManager(
 		return newExtendedDNF(&yum{}), nil
 	}
 
-	return nil, NewErrUnsupportedDistribution(osInfo.Distribution)
+	return nil, NewErrUnsupportedDistribution(string(osInfo.Distribution))
 }

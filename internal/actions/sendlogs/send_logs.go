@@ -214,7 +214,7 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to write to file")
 	}
 	_, _ = f.WriteString("Core: " + osInfo.Core + "\n")
-	_, _ = f.WriteString("Distribution: " + osInfo.Distribution + "\n")
+	_, _ = f.WriteString(string("Distribution: " + osInfo.Distribution + "\n"))
 	_, _ = f.WriteString("DistributionVersion: " + osInfo.DistributionVersion + "\n")
 	_, _ = f.WriteString("DistributionCodename: " + osInfo.DistributionCodename + "\n")
 	_, _ = f.WriteString("Platform: " + osInfo.Platform + "\n")

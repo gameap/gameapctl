@@ -976,7 +976,7 @@ func updateDotEnv(ctx context.Context, state panelInstallState) (panelInstallSta
 	return state, nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func installNginx(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -1091,8 +1091,8 @@ func installNginx(
 	}
 
 	phpServiceName := "php-fpm"
-	if state.OSInfo.Distribution == packagemanager.DistributionDebian ||
-		state.OSInfo.Distribution == packagemanager.DistributionUbuntu {
+
+	if state.OSInfo.IsDebianLike() {
 		phpVersion, err := packagemanager.DefinePHPVersion()
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to define php version")
@@ -1101,7 +1101,18 @@ func installNginx(
 	}
 
 	err = service.Start(ctx, phpServiceName)
-	if err != nil {
+	switch {
+	case err != nil && !state.OSInfo.IsDebianLike() && !state.OSInfo.IsWindows():
+		phpVersion, err := packagemanager.DefinePHPVersion()
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to define php version")
+		}
+		phpServiceName = "php" + phpVersion + "-fpm"
+		err = service.Start(ctx, phpServiceName)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start php-fpm")
+		}
+	case err != nil:
 		return state, errors.WithMessage(err, "failed to start php-fpm")
 	}
 

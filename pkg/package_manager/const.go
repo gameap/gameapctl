@@ -1,5 +1,7 @@
 package packagemanager
 
+import osinfo "github.com/gameap/gameapctl/pkg/os_info"
+
 const ApachePackage = "apache2"
 const ComposerPackage = "composer"
 const CurlPackage = "curl"
@@ -20,12 +22,12 @@ const TmuxPackage = "tmux"
 const UnzipPackage = "unzip"
 const XZUtilsPackage = "xz-utils"
 
-const DistributionDebian = "debian"
-const DistributionUbuntu = "ubuntu"
-const DistributionCentOS = "centos"
-const DistributionAmazon = "amzn"
-const DistributionAlmaLinux = "almalinux"
-const DistributionWindows = "windows"
+const DistributionDebian = osinfo.DistributionDebian
+const DistributionUbuntu = osinfo.DistributionUbuntu
+const DistributionCentOS = osinfo.DistributionCentOS
+const DistributionAmazon = osinfo.DistributionAmazon
+const DistributionAlmaLinux = osinfo.DistributionAlmaLinux
+const DistributionWindows = osinfo.DistributionWindows
 
 const ArchDefault = "default"
 const ArchAMD64 = "amd64"

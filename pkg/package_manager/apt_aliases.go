@@ -1,6 +1,8 @@
 package packagemanager
 
-type distVersionPackagesMap map[string]map[string]map[string]map[string][]string
+import osinfo "github.com/gameap/gameapctl/pkg/os_info"
+
+type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[string][]string
 
 var aptPackageAliases = distVersionPackagesMap{
 	DistributionDebian: {

@@ -12,12 +12,13 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/pkg/errors"
 )
 
 var ErrConfigNotFound = errors.New("config not found")
 
-var staticConfigs = map[string]map[string]map[string]string{
+var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 	NginxPackage: {
 		Default: {
 			"nginx_conf":       "/etc/nginx/nginx.conf",
@@ -60,7 +61,7 @@ var staticConfigs = map[string]map[string]map[string]string{
 	},
 }
 
-var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
+var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionCentOS: {
 			"fpm_sock": func(ctx context.Context) (string, error) { //nolint:unparam

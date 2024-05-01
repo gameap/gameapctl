@@ -13,10 +13,29 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Distribution string
+
+const (
+	DistributionUnknown   Distribution = "unknown"
+	DistributionDebian    Distribution = "debian"
+	DistributionUbuntu    Distribution = "ubuntu"
+	DistributionCentOS    Distribution = "centos"
+	DistributionAlmaLinux Distribution = "almalinux"
+	DistributionFedora    Distribution = "fedora"
+	DistributionArch      Distribution = "arch"
+	DistributionGentoo    Distribution = "gentoo"
+	DistributionAlpine    Distribution = "alpine"
+	DistributionOpenSUSE  Distribution = "opensuse"
+	DistributionRaspbian  Distribution = "raspbian"
+	DistributionAmazon    Distribution = "amzn"
+
+	DistributionWindows Distribution = "windows"
+)
+
 type Info struct {
 	Kernel               string
 	Core                 string
-	Distribution         string
+	Distribution         Distribution
 	DistributionVersion  string
 	DistributionCodename string
 	Platform             string
@@ -25,30 +44,38 @@ type Info struct {
 	CPUs                 int
 }
 
-func (i Info) String() string {
+func (info Info) String() string {
 	b := strings.Builder{}
 	b.Grow(256) //nolint:gomnd
 
 	b.WriteString("Kernel: ")
-	b.WriteString(i.Kernel)
+	b.WriteString(info.Kernel)
 	b.WriteString("\nCore: ")
-	b.WriteString(i.Core)
+	b.WriteString(info.Core)
 	b.WriteString("\nDistribution: ")
-	b.WriteString(i.Distribution)
+	b.WriteString(string(info.Distribution))
 	b.WriteString("\nDistributionVersion: ")
-	b.WriteString(i.DistributionVersion)
+	b.WriteString(info.DistributionVersion)
 	b.WriteString("\nDistributionCodename: ")
-	b.WriteString(i.DistributionCodename)
+	b.WriteString(info.DistributionCodename)
 	b.WriteString("\nPlatform: ")
-	b.WriteString(i.Platform)
+	b.WriteString(info.Platform)
 	b.WriteString("\nOS: ")
-	b.WriteString(i.OS)
+	b.WriteString(info.OS)
 	b.WriteString("\nHostname: ")
-	b.WriteString(i.Hostname)
+	b.WriteString(info.Hostname)
 	b.WriteString("\nCPUs: ")
-	b.WriteString(strconv.Itoa(i.CPUs))
+	b.WriteString(strconv.Itoa(info.CPUs))
 
 	return b.String()
+}
+
+func (info Info) IsDebianLike() bool {
+	return info.Distribution == DistributionDebian || info.Distribution == DistributionUbuntu
+}
+
+func (info Info) IsWindows() bool {
+	return info.Distribution == DistributionWindows
 }
 
 func GetOSInfo() (Info, error) {
@@ -88,11 +115,11 @@ func GetOSInfo() (Info, error) {
 		if err != nil {
 			return result, err
 		}
-		result.Distribution = info.Name
+		result.Distribution = Distribution(info.Name)
 		result.DistributionVersion = info.Version
 		result.DistributionCodename = info.VersionCodename
 	} else {
-		result.Distribution = gi.OS
+		result.Distribution = Distribution(gi.OS)
 		result.DistributionVersion = gi.Kernel
 		result.DistributionCodename = gi.Kernel
 	}
