@@ -96,7 +96,7 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install daemon",
 						Usage:       "Install daemon",
-						Before: func(context *cli.Context) error {
+						Before: func(_ *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
 
 							packagemanager.UpdateEnvPath()
@@ -123,7 +123,7 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Update daemon to a new version",
 						Usage:       "Update daemon to a new version",
-						Before: func(context *cli.Context) error {
+						Before: func(_ *cli.Context) error {
 							packagemanager.UpdateEnvPath()
 
 							return nil
@@ -169,7 +169,7 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install panel",
 						Usage:       "Install panel",
-						Before: func(context *cli.Context) error {
+						Before: func(_ *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
 
 							packagemanager.UpdateEnvPath()
@@ -233,7 +233,7 @@ func Run(args []string) {
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
-						Before: func(context *cli.Context) error {
+						Before: func(_ *cli.Context) error {
 							packagemanager.UpdateEnvPath()
 
 							return nil
@@ -246,7 +246,7 @@ func Run(args []string) {
 				Name:        "ui",
 				Description: "Web interface in default browser. ",
 				Usage:       "Web interface in default browser. ",
-				Before: func(context *cli.Context) error {
+				Before: func(_ *cli.Context) error {
 					packagemanager.UpdateEnvPath()
 
 					return nil
@@ -295,7 +295,7 @@ func Run(args []string) {
 				Name:    "version",
 				Usage:   "Print version information",
 				Aliases: []string{"v"},
-				Action: func(context *cli.Context) error {
+				Action: func(_ *cli.Context) error {
 					fmt.Println("Version:", gameap.Version)
 					fmt.Println("Build Date:", gameap.BuildDate)
 

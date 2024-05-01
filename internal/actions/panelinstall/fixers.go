@@ -19,7 +19,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 
 	fixers := []fixer.Item{
 		{
-			Condition: func(ctx context.Context) (bool, error) {
+			Condition: func(_ context.Context) (bool, error) {
 				return true, nil
 			},
 			FixFunc: func(ctx context.Context) error {
@@ -32,7 +32,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
-			Condition: func(ctx context.Context) (bool, error) {
+			Condition: func(_ context.Context) (bool, error) {
 				return state.WebServer == nginxWebServer && utils.IsFileExists("/etc/nginx/conf.d/default.conf"), nil
 			},
 			FixFunc: func(ctx context.Context) error {
@@ -51,7 +51,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
-			Condition: func(ctx context.Context) (bool, error) {
+			Condition: func(_ context.Context) (bool, error) {
 				return state.WebServer == apacheWebServer, nil
 			},
 			FixFunc: func(ctx context.Context) error {
@@ -71,7 +71,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
-			Condition: func(ctx context.Context) (bool, error) {
+			Condition: func(_ context.Context) (bool, error) {
 				return utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost", nil
 			},
 			FixFunc: func(ctx context.Context) error {

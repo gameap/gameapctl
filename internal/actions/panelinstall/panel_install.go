@@ -1142,6 +1142,7 @@ func installApache(
 		return state, errors.WithMessage(err, "failed to download apache config")
 	}
 
+	//nolint:perfsprint
 	err = utils.FindLineAndReplace(ctx, gameapHostConf, map[string]string{
 		"ServerName":                         fmt.Sprintf("ServerName %s", state.Host),
 		"DocumentRoot":                       fmt.Sprintf("DocumentRoot %s/public", state.Path),

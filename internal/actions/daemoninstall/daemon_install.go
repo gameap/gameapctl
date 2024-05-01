@@ -650,7 +650,7 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
 		pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
 		cfg.Users = map[string]string{
-			state.User: fmt.Sprintf("base64:%s", pw),
+			state.User: "base64:" + pw,
 		}
 	}
 

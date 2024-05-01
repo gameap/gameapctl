@@ -113,7 +113,7 @@ var repository = map[string]pack{
 			},
 		},
 		Dependencies: []string{VCRedist16Package},
-		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
+		PreInstallFunc: func(_ context.Context, p pack, path string) (pack, error) {
 			if path != "" {
 				p.ServiceConfig.Arguments = fmt.Sprintf(
 					"-b 127.0.0.1:9934 -c %s",

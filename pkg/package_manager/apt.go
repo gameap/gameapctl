@@ -455,7 +455,6 @@ func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		}
 	}
 
-	//nolint:goconst
 	packages := []string{
 		"php" + versionAvailable + "-bcmath",
 		"php" + versionAvailable + "-bz2",
@@ -614,7 +613,7 @@ type installationFunc func(ctx context.Context) error
 var installationFuncs = map[string]map[string]map[string]installationFunc{
 	ComposerPackage: {
 		Default: {
-			ArchDefault: func(ctx context.Context) error {
+			ArchDefault: func(_ context.Context) error {
 				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
 					return nil
 				}

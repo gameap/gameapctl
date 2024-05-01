@@ -200,7 +200,7 @@ func mysqlCreateUser(ctx context.Context, db *sql.DB, username, password string)
 	if majorVersion == "8" {
 		_, err = db.ExecContext(
 			ctx,
-			"CREATE USER "+ //nolint:goconst
+			"CREATE USER "+
 				username+
 				"@'%' IDENTIFIED WITH mysql_native_password BY '"+
 				password+"'",

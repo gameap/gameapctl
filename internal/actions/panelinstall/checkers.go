@@ -208,7 +208,7 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 			fmt.Sprintf(
 				"Failed to resolve host: %s. "+
 					"Check that it is correct, without any typos. "+
-					"Further installation may fail.", state.Host, //nolint:goconst
+					"Further installation may fail.", state.Host,
 			),
 		)
 		if err != nil {
@@ -224,7 +224,7 @@ func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (pa
 		},
 		Timeout: 2 * time.Second,
 	}
-	url := "http://" + state.Host + ":" + state.Port //nolint:goconst
+	url := "http://" + state.Host + ":" + state.Port
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return state, err
