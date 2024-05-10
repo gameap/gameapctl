@@ -88,14 +88,15 @@ var repository = map[string]pack{
 	MariaDBServerPackage: {
 		LookupPath: []string{"mariadb", "mariadbd"},
 		DownloadURLs: []string{
-			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
+			"https://packages.gameap.com/deps/mariadb-10.6.17-winx64.msi",
+			"https://archive.mariadb.org/mariadb-10.6.17/winx64-packages/mariadb-10.6.17-winx64.msi",
 		},
 		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
 		DownloadURLs: []string{
-			"https://windows.php.net/downloads/releases/php-8.3.6-Win32-vs16-x64.zip",
+			"https://packages.gameap.com/deps/php-8.3.7-Win32-vs16-x64.zip",
 		},
 		DefaultInstallPath: "C:\\php",
 		ServiceConfig: &WinSWServiceConfig{
