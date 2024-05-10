@@ -60,7 +60,7 @@ jobs:
         distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
-        go-version: [ 1.21.x ]
+        go-version: [1.22.x]
         experimental: [false]
         exclude:
           - distro: 'ubuntu:20.04'
@@ -68,9 +68,14 @@ jobs:
           - distro: 'debian:buster'
             database: 'sqlite'
         include:
+          - distro: 'debian:sid'
+            database: 'mysql'
+            experimental: true
+            go-version: '1.22.x'
           - distro: 'ubuntu:24.04'
             database: 'mysql'
             experimental: true
+            go-version: '1.22.x'
 
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -101,7 +106,7 @@ jobs:
           npm run build --if-present
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -155,7 +160,7 @@ jobs:
           npm run build --if-present
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -192,9 +197,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.21.x
+          go-version: 1.22.x
 
       - name: Checkout code
         uses: actions/checkout@v3
