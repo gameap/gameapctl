@@ -101,7 +101,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 				}
 
 				switch {
-				case utils.IsFileExists(fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion)):
+				case utils.IsFileExists(fmt.Sprintf("/var/run/php/php%s-fpm.sock", phpVerion)):
 					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
 				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
 					return "unix:/etc/alternatives/php-fpm.sock", nil
@@ -126,7 +126,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 				}
 
 				switch {
-				case utils.IsFileExists(fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion)):
+				case utils.IsFileExists(fmt.Sprintf("/var/run/php/php%s-fpm.sock", phpVerion)):
 					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
 				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
 					return "unix:/etc/alternatives/php-fpm.sock", nil
