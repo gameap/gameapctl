@@ -86,6 +86,10 @@ func (info Info) IsWindows() bool {
 	return info.Distribution.IsWindows()
 }
 
+func (info Info) IsLinux() bool {
+	return runtime.GOOS == "linux"
+}
+
 func GetOSInfo() (Info, error) {
 	gi, err := goInfo.GetInfo()
 	if err != nil {

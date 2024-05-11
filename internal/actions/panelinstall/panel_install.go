@@ -130,6 +130,8 @@ func Handle(cliCtx *cli.Context) error {
 		state.OSInfo.Platform,
 	)
 
+	log.Println(state.OSInfo.String())
+
 	//nolint:nestif
 	if !state.NonInteractive {
 		needToAsk := make(map[string]struct{}, 4) //nolint:gomnd

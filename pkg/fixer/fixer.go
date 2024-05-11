@@ -8,6 +8,7 @@ import (
 )
 
 type Item struct {
+	Name      string
 	Condition func(ctx context.Context) (bool, error)
 	FixFunc   func(ctx context.Context) error
 }
@@ -18,7 +19,7 @@ func RunFixer(ctx context.Context, checkFunc CheckFunc, items []Item) error {
 	for _, item := range items {
 		condition, err := item.Condition(ctx)
 		if err != nil {
-			return errors.WithMessage(err, "failed to check condition")
+			return errors.WithMessagef(err, "failed to check condition in '%s' fixer", item.Name)
 		}
 
 		if !condition {
@@ -27,12 +28,12 @@ func RunFixer(ctx context.Context, checkFunc CheckFunc, items []Item) error {
 
 		err = item.FixFunc(ctx)
 		if err != nil {
-			return errors.WithMessage(err, "failed to fix")
+			return errors.WithMessagef(err, "failed to fix '%s'", item.Name)
 		}
 
 		err = checkFunc(ctx)
 		if err != nil {
-			log.Println(err)
+			log.Println(errors.WithMessagef(err, "failed to check after '%s' fix", item.Name))
 		} else {
 			return nil
 		}

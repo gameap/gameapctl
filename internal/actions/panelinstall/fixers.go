@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/fixer"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -19,6 +20,23 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 
 	fixers := []fixer.Item{
 		{
+			Name: "Reload nginx",
+			Condition: func(ctx context.Context) (bool, error) {
+				osInfo := contextInternal.OSInfoFromContext(ctx)
+
+				return osInfo.IsLinux(), nil
+			},
+			FixFunc: func(_ context.Context) error {
+				err := utils.ExecCommand("nginx", "-s", "reload")
+				if err != nil {
+					return errors.WithMessage(err, "failed to reload nginx")
+				}
+
+				return nil
+			},
+		},
+		{
+			Name: "Chown gameap directory",
 			Condition: func(_ context.Context) (bool, error) {
 				return true, nil
 			},
@@ -32,6 +50,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
+			Name: "Remove nginx default.conf",
 			Condition: func(_ context.Context) (bool, error) {
 				return state.WebServer == nginxWebServer && utils.IsFileExists("/etc/nginx/conf.d/default.conf"), nil
 			},
@@ -51,6 +70,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
+			Name: "Disable apache 000-default site",
 			Condition: func(_ context.Context) (bool, error) {
 				return state.WebServer == apacheWebServer, nil
 			},
@@ -71,6 +91,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 			},
 		},
 		{
+			Name: "Replace database host from localhost to 127.0.0.1",
 			Condition: func(_ context.Context) (bool, error) {
 				return utils.IsFileExists(state.Path+"/.env") && state.DBCreds.Host == "localhost", nil
 			},
