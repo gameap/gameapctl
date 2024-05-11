@@ -22,6 +22,7 @@ const TmuxPackage = "tmux"
 const UnzipPackage = "unzip"
 const XZUtilsPackage = "xz-utils"
 
+const DistributionDefault = Default
 const DistributionDebian = osinfo.DistributionDebian
 const DistributionUbuntu = osinfo.DistributionUbuntu
 const DistributionCentOS = osinfo.DistributionCentOS
@@ -29,7 +30,9 @@ const DistributionAmazon = osinfo.DistributionAmazon
 const DistributionAlmaLinux = osinfo.DistributionAlmaLinux
 const DistributionWindows = osinfo.DistributionWindows
 
-const ArchDefault = "default"
+const CodeNameDefault = Default
+
+const ArchDefault = Default
 const ArchAMD64 = "amd64"
 const ArchARM64 = "arm64"
 

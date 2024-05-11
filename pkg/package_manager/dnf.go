@@ -133,13 +133,13 @@ func replaceAliases(ctx context.Context, aliasesMap distVersionPackagesMap, pack
 			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][osInfo.Platform][pack]; exists {
 			replacedPacks = append(replacedPacks, aliases...)
 		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][Default][pack]; exists {
+			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][ArchDefault][pack]; exists {
 			replacedPacks = append(replacedPacks, aliases...)
 		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][Default][Default][pack]; exists {
+			aliasesMap[osInfo.Distribution][CodeNameDefault][ArchDefault][pack]; exists {
 			replacedPacks = append(replacedPacks, aliases...)
 		} else if aliases, exists =
-			aliasesMap[Default][Default][Default][pack]; exists {
+			aliasesMap[DistributionDefault][CodeNameDefault][ArchDefault][pack]; exists {
 			replacedPacks = append(replacedPacks, aliases...)
 		} else {
 			replacedPacks = append(replacedPacks, pack)

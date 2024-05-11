@@ -5,8 +5,15 @@ import osinfo "github.com/gameap/gameapctl/pkg/os_info"
 type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[string][]string
 
 var aptPackageAliases = distVersionPackagesMap{
+	DistributionDefault: {
+		CodeNameDefault: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
+	},
 	DistributionDebian: {
-		Default: {
+		CodeNameDefault: {
 			ArchDefault: {
 				Lib32GCCPackage: {},
 			},
@@ -73,7 +80,7 @@ var aptPackageAliases = distVersionPackagesMap{
 		},
 	},
 	DistributionUbuntu: {
-		Default: {
+		CodeNameDefault: {
 			ArchDefault: {
 				Lib32GCCPackage: {},
 			},
