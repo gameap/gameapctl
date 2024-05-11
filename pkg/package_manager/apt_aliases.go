@@ -6,6 +6,11 @@ type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[st
 
 var aptPackageAliases = distVersionPackagesMap{
 	DistributionDebian: {
+		Default: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
 		"squeeze": {
 			ArchDefault: {
 				MySQLServerPackage: {"mysql-server"},
@@ -68,6 +73,11 @@ var aptPackageAliases = distVersionPackagesMap{
 		},
 	},
 	DistributionUbuntu: {
+		Default: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
 		"precise": {
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
