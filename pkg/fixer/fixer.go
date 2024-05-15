@@ -30,6 +30,7 @@ func RunFixer(ctx context.Context, checkFunc CheckFunc, items []Item) error {
 		err = item.FixFunc(ctx)
 		if err != nil {
 			log.Println(errors.WithMessagef(err, "failed to fix '%s'", item.Name))
+
 			return errors.WithMessagef(err, "failed to fix '%s'", item.Name)
 		}
 
