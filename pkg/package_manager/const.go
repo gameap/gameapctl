@@ -23,11 +23,12 @@ const UnzipPackage = "unzip"
 const XZUtilsPackage = "xz-utils"
 
 const DistributionDefault = Default
-const DistributionDebian = osinfo.DistributionDebian
-const DistributionUbuntu = osinfo.DistributionUbuntu
-const DistributionCentOS = osinfo.DistributionCentOS
-const DistributionAmazon = osinfo.DistributionAmazon
 const DistributionAlmaLinux = osinfo.DistributionAlmaLinux
+const DistributionAmazon = osinfo.DistributionAmazon
+const DistributionCentOS = osinfo.DistributionCentOS
+const DistributionDebian = osinfo.DistributionDebian
+const DistributionRocky = osinfo.DistributionRocky
+const DistributionUbuntu = osinfo.DistributionUbuntu
 const DistributionWindows = osinfo.DistributionWindows
 
 const CodeNameDefault = Default

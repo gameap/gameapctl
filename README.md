@@ -57,3 +57,9 @@ Other operating systems may work as well, if they can run the required dependenc
 | Version | Supported | Notes                                                                                                                                      |
 |---------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | 2023    | ⚠️        | Latest manual test (v0.7.1): 12.02.2024<br/>Web part tested with SQLite Database<br/>Amazon Linux 2023 no longer ships any i686 user space |
+
+### Rocky Linux
+
+| Version | Supported | Notes                                                                                                                                    |
+|---------|-----------|------------------------------------------------------------------------------------------------------------------------------------------|
+| 9.3     | ⚠️        | Latest manual test (v0.10.0): 15.05.2024<br/>Web part tested with MySQL Database<br/>Rocky Linux 9.3 no longer ships any i686 user space |

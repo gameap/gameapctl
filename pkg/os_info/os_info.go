@@ -16,18 +16,19 @@ import (
 type Distribution string
 
 const (
-	DistributionUnknown   Distribution = "unknown"
-	DistributionDebian    Distribution = "debian"
-	DistributionUbuntu    Distribution = "ubuntu"
-	DistributionCentOS    Distribution = "centos"
 	DistributionAlmaLinux Distribution = "almalinux"
-	DistributionFedora    Distribution = "fedora"
-	DistributionArch      Distribution = "arch"
-	DistributionGentoo    Distribution = "gentoo"
 	DistributionAlpine    Distribution = "alpine"
+	DistributionAmazon    Distribution = "amzn"
+	DistributionArch      Distribution = "arch"
+	DistributionCentOS    Distribution = "centos"
+	DistributionDebian    Distribution = "debian"
+	DistributionFedora    Distribution = "fedora"
+	DistributionGentoo    Distribution = "gentoo"
 	DistributionOpenSUSE  Distribution = "opensuse"
 	DistributionRaspbian  Distribution = "raspbian"
-	DistributionAmazon    Distribution = "amzn"
+	DistributionRocky     Distribution = "rocky"
+	DistributionUbuntu    Distribution = "ubuntu"
+	DistributionUnknown   Distribution = "unknown"
 
 	DistributionWindows Distribution = "windows"
 )
