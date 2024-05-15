@@ -34,10 +34,6 @@ var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 			"nginx_conf":       "/etc/nginx/nginx.conf",
 			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
 		},
-		DistributionWindows: {
-			"nginx_conf":       "C:\\gameap\\tools\\nginx\\conf\\nginx.conf",
-			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf\\gameap.conf",
-		},
 	},
 	ApachePackage: {
 		Default: {
@@ -54,9 +50,6 @@ var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 		},
 	},
 	PHPPackage: {
-		Default: {
-			"fpm_sock": "unix:/run/php-fpm/www.sock",
-		},
 		DistributionWindows: {
 			"fpm_sock": "127.0.0.1:9934",
 		},
@@ -196,6 +189,15 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 func ConfigForDistro(ctx context.Context, packName string, configName string) (string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
+	// Static config
+	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; ok {
+		return staticConfigs[packName][osInfo.Distribution][configName], nil
+	}
+
+	if _, ok := staticConfigs[packName][Default][configName]; ok {
+		return staticConfigs[packName][Default][configName], nil
+	}
+
 	// Dynamic config
 	if configFunc, ok := dynamicConfig[packName][osInfo.Distribution][configName]; ok {
 		config, err := configFunc(ctx)
@@ -214,15 +216,6 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 		if config != "" {
 			return config, nil
 		}
-	}
-
-	// Static config
-	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; ok {
-		return staticConfigs[packName][osInfo.Distribution][configName], nil
-	}
-
-	if _, ok := staticConfigs[packName][Default][configName]; ok {
-		return staticConfigs[packName][Default][configName], nil
 	}
 
 	return "", ErrConfigNotFound
