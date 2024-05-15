@@ -1,6 +1,8 @@
 package packagemanager
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -8,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -32,7 +35,9 @@ func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error
 		return nil, errors.WithMessage(err, "failed to search package")
 	}
 
-	log.Println("Search result: ", search)
+	if len(search) == 0 {
+		return apt.searchAptCache(context.Background(), packName)
+	}
 
 	result := make([]PackageInfo, 0, len(search))
 
@@ -54,6 +59,71 @@ func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error
 	}
 
 	return result, nil
+}
+
+func (apt *apt) searchAptCache(_ context.Context, packName string) ([]PackageInfo, error) {
+	cmd := exec.Command(
+		"apt-cache",
+		"show",
+		packName,
+	)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+
+	out, err := cmd.CombinedOutput()
+	log.Print(string(out))
+	if err != nil {
+		// Avoid returning an error if the list is empty
+		if bytes.Contains(out, []byte("E: No packages found")) {
+			return []PackageInfo{}, nil
+		}
+
+		return nil, errors.WithMessage(err, "failed to run apt-cache")
+	}
+
+	return parseAPTCacheShowOutput(out), nil
+}
+
+func parseAPTCacheShowOutput(out []byte) []PackageInfo {
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+
+	var packageInfos []PackageInfo
+
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		info := PackageInfo{}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "PackageInfo":
+			info.Name = value
+		case "Architecture":
+			info.Architecture = value
+		case "Version":
+			info.Version = value
+		case "Size":
+			info.Size = value
+		case "Description":
+			info.Description = value
+		case "Installed-Size":
+			size, err := strconv.Atoi(value)
+			if err != nil {
+				// Ignore error
+				size = 0
+			}
+			info.InstalledSizeKB = size
+		}
+
+		packageInfos = append(packageInfos, info)
+	}
+
+	return packageInfos
 }
 
 // CheckForUpdates runs an apt update to retrieve new packages available

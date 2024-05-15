@@ -41,8 +41,6 @@ func Search(q string) ([]Package, error) {
 		return nil, errors.WithMessage(err, "failed to list all packages")
 	}
 
-	log.Println("All packages: ", packages)
-
 	return aptSearch(q, packages, false)
 }
 
