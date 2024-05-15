@@ -54,7 +54,7 @@ type Info struct {
 
 func (info Info) String() string {
 	b := strings.Builder{}
-	b.Grow(256) //nolint:gomnd
+	b.Grow(256) //nolint:mnd
 
 	b.WriteString("Kernel: ")
 	b.WriteString(info.Kernel)

@@ -134,7 +134,7 @@ func Handle(cliCtx *cli.Context) error {
 
 	//nolint:nestif
 	if !state.NonInteractive {
-		needToAsk := make(map[string]struct{}, 4) //nolint:gomnd
+		needToAsk := make(map[string]struct{}, 4) //nolint:mnd
 		if state.Host == "" {
 			needToAsk["host"] = struct{}{}
 		}

@@ -332,7 +332,7 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 	}
 
 	client := http.DefaultClient
-	client.Timeout = 5 * time.Second //nolint:gomnd
+	client.Timeout = 5 * time.Second //nolint:mnd
 
 	req, err := http.NewRequestWithContext(
 		ctx,

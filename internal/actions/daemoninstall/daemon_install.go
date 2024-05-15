@@ -278,7 +278,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	}
 
 	if _, err := os.Stat(state.CertsPath); os.IsNotExist(err) {
-		err = os.MkdirAll(state.CertsPath, 0700) //nolint:gomnd
+		err = os.MkdirAll(state.CertsPath, 0700) //nolint:mnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create certificates directory")
 		}
@@ -290,7 +290,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
+		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:mnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -511,7 +511,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	_, _ = fw.Write([]byte("server-command {id} {command}"))
 
 	client := http.Client{
-		Timeout: 30 * time.Second, //nolint:gomnd
+		Timeout: 30 * time.Second, //nolint:mnd
 	}
 
 	u, err := url.JoinPath(state.Host, "/gdaemon/create/", state.Token)
@@ -559,7 +559,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.New("invalid response body")
 	}
 
-	statusParts := bytes.SplitN(parts[0], []byte(" "), 3) //nolint:gomnd
+	statusParts := bytes.SplitN(parts[0], []byte(" "), 3) //nolint:mnd
 
 	if string(statusParts[0]) != "Success" {
 		dumpRequestAndResponse(requestClone, response)
@@ -572,7 +572,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, UnableToSetupNodeError("error, no message")
 	}
 
-	//nolint:gomnd
+	//nolint:mnd
 	if len(statusParts) < 3 {
 		return state, UnableToSetupNodeError("error, invalid status message")
 	}
@@ -676,7 +676,7 @@ func detectLocation() string {
 	}
 
 	client := http.Client{
-		Timeout: 5 * time.Second, //nolint:gomnd
+		Timeout: 5 * time.Second, //nolint:mnd
 	}
 
 	for _, d := range detectors {
@@ -695,7 +695,7 @@ func detectLocation() string {
 			}
 		}(r.Body)
 
-		//nolint:gomnd
+		//nolint:mnd
 		if r.ContentLength > 20 {
 			continue
 		}

@@ -310,7 +310,7 @@ func Run(args []string) {
 	err := app.RunContext(ctx, args)
 	if err != nil && errors.Is(err, context.Canceled) {
 		fmt.Println("Terminated")
-		os.Exit(130) //nolint:gomnd
+		os.Exit(130) //nolint:mnd
 	}
 	if err != nil {
 		fmt.Println(err)

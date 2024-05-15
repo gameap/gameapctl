@@ -20,10 +20,10 @@ linters:
     - gocyclo
     - godot
     - godox
-    - goerr113
+    - err113
     - gofmt
     - goimports
-    - gomnd
+    - mnd
     - gomodguard
     - goprintffuncname
     - gosec
@@ -81,7 +81,7 @@ issues:
         - stylecheck
 
 linters-settings:
-  gomnd:
+  mnd:
     ignored-numbers:
       - '0600'
       - '0644'

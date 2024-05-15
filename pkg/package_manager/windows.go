@@ -495,7 +495,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
-		buf.Grow(100) //nolint:gomnd
+		buf.Grow(100) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -525,7 +525,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd = exec.Command("php", "-r", "echo php_ini_loaded_file();")
 		buf = &bytes.Buffer{}
-		buf.Grow(100) //nolint:gomnd
+		buf.Grow(100) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())

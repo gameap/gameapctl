@@ -21,7 +21,7 @@ func Repository() string {
 
 		for _, cr := range repos {
 			client := http.DefaultClient
-			client.Timeout = 5 * time.Second //nolint:gomnd
+			client.Timeout = 5 * time.Second //nolint:mnd
 
 			//nolint:bodyclose,noctx
 			r, err := client.Get(cr)
