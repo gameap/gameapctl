@@ -22,6 +22,10 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 		{
 			Name: "Reload nginx",
 			Condition: func(ctx context.Context) (bool, error) {
+				if state.WebServer != nginxWebServer {
+					return false, nil
+				}
+
 				osInfo := contextInternal.OSInfoFromContext(ctx)
 
 				return osInfo.IsLinux(), nil
