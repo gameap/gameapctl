@@ -83,11 +83,6 @@ jobs:
             database: 'mysql'
             experimental: true
             go-version: '1.22.x'
-          - distro: 'almalinux:9'
-            web-server: 'nginx'
-            database: 'mysql'
-            experimental: true
-            go-version: '1.22.x'
 
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -97,6 +92,12 @@ jobs:
       volumes:
         - /usr/local/share/ca-certificates:/usr/local/share/ca-certificates
     steps:
+      - name: Container preparation
+        run: |
+          apt -y update
+          apt-get install ca-certificates -y
+          update-ca-certificates
+
       - name: Checkout code
         uses: actions/checkout@v4
 
