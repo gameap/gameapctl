@@ -131,11 +131,11 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 	}(response.Body)
 
 	if response.StatusCode != http.StatusOK {
-		log.Println("unsuccessful response from panel")
+		log.Println("unsuccessful response from panel, invalid status code")
 		body, _ := io.ReadAll(response.Body)
 		log.Println(string(body))
 
-		return errors.New("unsuccessful response from panel")
+		return errors.New("unsuccessful response from panel, invalid status code")
 	}
 
 	r := struct {
@@ -149,7 +149,7 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 	}
 
 	if r.Status != "ok" {
-		return errors.New("unsuccessful response from panel")
+		return errors.New("unsuccessful response from panel, invalid status in response")
 	}
 
 	return nil
