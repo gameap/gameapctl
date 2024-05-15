@@ -1,7 +1,6 @@
 package apt
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -35,12 +34,6 @@ type RepoArchive struct {
 	ListFileName string
 }
 
-type packageNotFoundError string
-
-func (e packageNotFoundError) Error() string {
-	return fmt.Sprintf("package %s not found, try performing an apt update", string(e))
-}
-
 func Search(q string) ([]Package, error) {
 	packages, err := aptListAllPackages()
 	if err != nil {
@@ -64,9 +57,6 @@ func aptSearch(searchPackage string, packagesList []Package, searchExactName boo
 				filteredPackageList = append(filteredPackageList, singlePackage)
 			}
 		}
-	}
-	if len(filteredPackageList) == 0 {
-		return nil, packageNotFoundError(searchPackage)
 	}
 
 	return filteredPackageList, nil
