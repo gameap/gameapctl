@@ -121,6 +121,12 @@ func Install(ctx context.Context, host, token string) error {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
+	fmt.Println("Defining process manager ...")
+	state, err = defineProcessManager(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to configure process manager")
+	}
+
 	//nolint:nestif
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Checking for curl ...")
@@ -139,11 +145,13 @@ func Install(ctx context.Context, host, token string) error {
 			}
 		}
 
-		fmt.Println("Checking for tmux ...")
-		if !utils.IsCommandAvailable("tmux") {
-			fmt.Println("Installing tmux ...")
-			if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
-				return errors.WithMessage(err, "failed to install tmux")
+		if state.ProcessManager == "tmux" {
+			fmt.Println("Checking for tmux ...")
+			if !utils.IsCommandAvailable("tmux") {
+				fmt.Println("Installing tmux ...")
+				if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
+					return errors.WithMessage(err, "failed to install tmux")
+				}
 			}
 		}
 	}
@@ -197,12 +205,6 @@ func Install(ctx context.Context, host, token string) error {
 	state, err = installDaemonBinaries(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
-	}
-
-	fmt.Println("Configuring process manager ...")
-	state, err = configureProcessManager(ctx, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to configure process manager")
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")

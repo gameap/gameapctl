@@ -9,7 +9,7 @@ const (
 	defaultProcessManager = "tmux"
 )
 
-func configureProcessManager(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func defineProcessManager(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	state.ProcessManager = defaultProcessManager
 
 	return state, nil
