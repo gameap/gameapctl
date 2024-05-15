@@ -109,7 +109,7 @@ func collectGameapCTLLogs(_ context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to copy gameapctl logs")
 	}
 
-	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
+	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:mnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
 	}
@@ -139,7 +139,7 @@ func collectDaemonLogs(_ context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to copy daemon logs")
 	}
 
-	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
+	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:mnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
 	}
@@ -182,7 +182,7 @@ func collectPanelLogs(ctx context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to copy gameap logs")
 	}
 
-	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
+	err = utils.ChownR(destinationDir, 1000, 1000) //nolint:mnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
 	}
@@ -214,7 +214,7 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 		return errors.WithMessage(err, "failed to write to file")
 	}
 	_, _ = f.WriteString("Core: " + osInfo.Core + "\n")
-	_, _ = f.WriteString("Distribution: " + osInfo.Distribution + "\n")
+	_, _ = f.WriteString(string("Distribution: " + osInfo.Distribution + "\n"))
 	_, _ = f.WriteString("DistributionVersion: " + osInfo.DistributionVersion + "\n")
 	_, _ = f.WriteString("DistributionCodename: " + osInfo.DistributionCodename + "\n")
 	_, _ = f.WriteString("Platform: " + osInfo.Platform + "\n")
@@ -270,7 +270,7 @@ func collectAdditionalLogs(_ context.Context, logs []string, destinationDir stri
 		}
 	}
 
-	err := utils.ChownR(destinationDir, 1000, 1000) //nolint:gomnd
+	err := utils.ChownR(destinationDir, 1000, 1000) //nolint:mnd
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to change owner"))
 	}

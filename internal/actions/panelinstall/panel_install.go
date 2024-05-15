@@ -130,9 +130,11 @@ func Handle(cliCtx *cli.Context) error {
 		state.OSInfo.Platform,
 	)
 
+	log.Println(state.OSInfo.String())
+
 	//nolint:nestif
 	if !state.NonInteractive {
-		needToAsk := make(map[string]struct{}, 4) //nolint:gomnd
+		needToAsk := make(map[string]struct{}, 4) //nolint:mnd
 		if state.Host == "" {
 			needToAsk["host"] = struct{}{}
 		}
@@ -982,7 +984,12 @@ func installNginx(
 	pm packagemanager.PackageManager,
 	state panelInstallState,
 ) (panelInstallState, error) {
-	err := pm.Install(ctx, packagemanager.NginxPackage)
+	state, err := installPHPForNginx(ctx, pm, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install php for nginx")
+	}
+
+	err = pm.Install(ctx, packagemanager.NginxPackage)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install package")
 	}
@@ -1063,7 +1070,7 @@ func installNginx(
 	}
 
 	switch {
-	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+	case state.OSInfo.IsWindows():
 
 		err = utils.Move(nginxMainConf, nginxMainConf+".old")
 		if err != nil {
@@ -1079,8 +1086,7 @@ func installNginx(
 			return state, errors.WithMessage(err, "failed to download nginx config")
 		}
 
-	case state.OSInfo.Distribution == packagemanager.DistributionUbuntu,
-		state.OSInfo.Distribution == packagemanager.DistributionDebian:
+	case state.OSInfo.IsDebianLike():
 
 		err = utils.FindLineAndReplace(ctx, nginxMainConf, map[string]string{
 			"user": "user www-data;",
@@ -1090,9 +1096,22 @@ func installNginx(
 		}
 	}
 
+	err = service.Start(ctx, "nginx")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start nginx")
+	}
+
+	return state, nil
+}
+
+func installPHPForNginx(
+	ctx context.Context,
+	_ packagemanager.PackageManager,
+	state panelInstallState,
+) (panelInstallState, error) {
 	phpServiceName := "php-fpm"
-	if state.OSInfo.Distribution == packagemanager.DistributionDebian ||
-		state.OSInfo.Distribution == packagemanager.DistributionUbuntu {
+
+	if state.OSInfo.IsDebianLike() {
 		phpVersion, err := packagemanager.DefinePHPVersion()
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to define php version")
@@ -1100,14 +1119,20 @@ func installNginx(
 		phpServiceName = "php" + phpVersion + "-fpm"
 	}
 
-	err = service.Start(ctx, phpServiceName)
-	if err != nil {
+	err := service.Start(ctx, phpServiceName)
+	switch {
+	case err != nil && !state.OSInfo.IsDebianLike() && !state.OSInfo.IsWindows():
+		phpVersion, err := packagemanager.DefinePHPVersion()
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to define php version")
+		}
+		phpServiceName = "php" + phpVersion + "-fpm"
+		err = service.Start(ctx, phpServiceName)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to start php-fpm")
+		}
+	case err != nil:
 		return state, errors.WithMessage(err, "failed to start php-fpm")
-	}
-
-	err = service.Start(ctx, "nginx")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to start nginx")
 	}
 
 	return state, nil
@@ -1142,6 +1167,7 @@ func installApache(
 		return state, errors.WithMessage(err, "failed to download apache config")
 	}
 
+	//nolint:perfsprint
 	err = utils.FindLineAndReplace(ctx, gameapHostConf, map[string]string{
 		"ServerName":                         fmt.Sprintf("ServerName %s", state.Host),
 		"DocumentRoot":                       fmt.Sprintf("DocumentRoot %s/public", state.Path),

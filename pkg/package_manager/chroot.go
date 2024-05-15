@@ -218,7 +218,7 @@ type chrootPackage struct {
 	AfterInstallFunc func(ctx context.Context) error
 }
 
-//nolint:gomnd
+//nolint:mnd
 var chrootPackages = map[string]map[string]chrootPackage{
 	PHPPackage: {
 		ArchAMD64: {

@@ -91,7 +91,7 @@ var repository = map[string]pack{
 			"https://packages.gameap.com/deps/mariadb-10.6.17-winx64.msi",
 			"https://archive.mariadb.org/mariadb-10.6.17/winx64-packages/mariadb-10.6.17-winx64.msi",
 		},
-		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
+		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.17-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
 	},
 	PHPPackage: {
 		LookupPath: []string{"php"},
@@ -113,7 +113,7 @@ var repository = map[string]pack{
 			},
 		},
 		Dependencies: []string{VCRedist16Package},
-		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
+		PreInstallFunc: func(_ context.Context, p pack, path string) (pack, error) {
 			if path != "" {
 				p.ServiceConfig.Arguments = fmt.Sprintf(
 					"-b 127.0.0.1:9934 -c %s",
@@ -495,7 +495,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
-		buf.Grow(100) //nolint:gomnd
+		buf.Grow(100) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -525,7 +525,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd = exec.Command("php", "-r", "echo php_ini_loaded_file();")
 		buf = &bytes.Buffer{}
-		buf.Grow(100) //nolint:gomnd
+		buf.Grow(100) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())

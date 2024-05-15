@@ -1,8 +1,8 @@
 package packagemanager
 
 var dnfPackageAliases = distVersionPackagesMap{
-	Default: {
-		Default: {
+	DistributionDefault: {
+		CodeNameDefault: {
 			ArchDefault: {
 				Lib32GCCPackage:   {"libgcc.i686"},
 				Lib32Stdc6Package: {"libstdc++.i686"},
@@ -20,7 +20,7 @@ var dnfPackageAliases = distVersionPackagesMap{
 		},
 	},
 	DistributionCentOS: {
-		Default: {
+		CodeNameDefault: {
 			ArchDefault: {
 				Lib32GCCPackage:   {"libgcc.i686"},
 				Lib32Stdc6Package: {"libstdc++.i686"},
@@ -38,7 +38,7 @@ var dnfPackageAliases = distVersionPackagesMap{
 		},
 	},
 	DistributionAmazon: {
-		Default: {
+		CodeNameDefault: {
 			ArchDefault: {
 				Lib32GCCPackage:      {"libgcc.i686"},
 				Lib32Stdc6Package:    {"libstdc++.i686"},

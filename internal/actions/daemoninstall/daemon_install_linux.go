@@ -16,7 +16,7 @@ const (
 	systemDProcessManager = "systemd"
 )
 
-func configureProcessManager(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func defineProcessManager(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	state.ProcessManager = defaultProcessManager
 	// check that pid=1 is systemd
 	p, err := process.NewProcess(1)

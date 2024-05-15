@@ -113,6 +113,7 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 		u = "https://" + hostPort + "/api/healthz"
 	}
 
+	log.Printf("Checking installation at %s\n", u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
@@ -130,11 +131,11 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 	}(response.Body)
 
 	if response.StatusCode != http.StatusOK {
-		log.Println("unsuccessful response from panel")
+		log.Println("unsuccessful response from panel, invalid status code")
 		body, _ := io.ReadAll(response.Body)
 		log.Println(string(body))
 
-		return errors.New("unsuccessful response from panel")
+		return errors.New("unsuccessful response from panel, invalid status code")
 	}
 
 	r := struct {
@@ -148,7 +149,7 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 	}
 
 	if r.Status != "ok" {
-		return errors.New("unsuccessful response from panel")
+		return errors.New("unsuccessful response from panel, invalid status in response")
 	}
 
 	return nil

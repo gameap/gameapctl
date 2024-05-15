@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
 
@@ -29,7 +29,7 @@ jobs:
           npm run build --if-present
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -38,9 +38,10 @@ jobs:
           go mod download
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v5
         with:
-          version: v1.55.1
+          version: v1.58
+          args: --timeout=10m
 
       - name: Unit Tests
         run: go test -race -v $(go list ./... | grep -v /test/) -coverprofile=coverage.out
@@ -56,10 +57,10 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
-        go-version: [ 1.21.x ]
+        go-version: [1.22.x]
         experimental: [false]
         exclude:
           - distro: 'ubuntu:20.04'
@@ -67,9 +68,16 @@ jobs:
           - distro: 'debian:buster'
             database: 'sqlite'
         include:
-          - distro: 'ubuntu:24.04'
+          - distro: 'debian:sid'
+            web-server: 'nginx'
             database: 'mysql'
             experimental: true
+            go-version: '1.22.x'
+          - distro: 'debian:buster'
+            web-server: 'nginx'
+            database: 'mysql'
+            experimental: true
+            go-version: '1.22.x'
 
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -100,7 +108,7 @@ jobs:
           npm run build --if-present
 
       - name: Install Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -154,7 +162,7 @@ jobs:
           npm run build --if-present
 
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -191,9 +199,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.21.x
+          go-version: 1.22.x
 
       - name: Checkout code
         uses: actions/checkout@v3

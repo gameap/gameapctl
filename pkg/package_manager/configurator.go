@@ -12,12 +12,15 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 var ErrConfigNotFound = errors.New("config not found")
+var ErrFailedToConfigure = errors.New("failed to configure")
 
-var staticConfigs = map[string]map[string]map[string]string{
+var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 	NginxPackage: {
 		Default: {
 			"nginx_conf":       "/etc/nginx/nginx.conf",
@@ -51,20 +54,45 @@ var staticConfigs = map[string]map[string]map[string]string{
 		},
 	},
 	PHPPackage: {
-		Default: {
-			"fpm_sock": "unix:/run/php-fpm/www.sock",
-		},
 		DistributionWindows: {
 			"fpm_sock": "127.0.0.1:9934",
 		},
 	},
 }
 
-var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (string, error){
+//nolint:goconst
+var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
-		DistributionCentOS: {
-			"fpm_sock": func(ctx context.Context) (string, error) { //nolint:unparam
+		DistributionDefault: {
+			"fpm_sock": func(_ context.Context) (string, error) {
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
+					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
+				}
+
+				phpVerion, err := DefinePHPVersion()
+				if err != nil {
+					return "", err
+				}
+
+				switch {
+				case utils.IsFileExists(fmt.Sprintf("/var/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists(fmt.Sprintf("/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
+			},
+		},
+		DistributionCentOS: {
+			"fpm_sock": func(ctx context.Context) (string, error) {
+				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
 
@@ -73,7 +101,16 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 					return "127.0.0.1:9000", nil
 				}
 
-				return "unix:/run/php-fpm/www.sock", nil
+				switch {
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 		DistributionDebian: {
@@ -87,7 +124,20 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 					return "", err
 				}
 
-				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				switch {
+				case utils.IsFileExists(fmt.Sprintf("/var/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists(fmt.Sprintf("/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 		DistributionUbuntu: {
@@ -101,7 +151,20 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 					return "", err
 				}
 
-				return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				switch {
+				case utils.IsFileExists(fmt.Sprintf("/var/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/var/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists(fmt.Sprintf("/run/php/php%s-fpm.sock", phpVerion)):
+					return fmt.Sprintf("unix:/run/php/php%s-fpm.sock", phpVerion), nil
+				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
+					return "unix:/etc/alternatives/php-fpm.sock", nil
+				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
+					return "unix:/var/run/php-fpm/www.sock", nil
+				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
+					return "unix:/var/run/php/php-fpm.sock", nil
+				}
+
+				return "", ErrFailedToConfigure
 			},
 		},
 	},
@@ -130,6 +193,15 @@ var dynamicConfig = map[string]map[string]map[string]func(ctx context.Context) (
 func ConfigForDistro(ctx context.Context, packName string, configName string) (string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
+	// Static config
+	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; ok {
+		return staticConfigs[packName][osInfo.Distribution][configName], nil
+	}
+
+	if _, ok := staticConfigs[packName][Default][configName]; ok {
+		return staticConfigs[packName][Default][configName], nil
+	}
+
 	// Dynamic config
 	if configFunc, ok := dynamicConfig[packName][osInfo.Distribution][configName]; ok {
 		config, err := configFunc(ctx)
@@ -140,7 +212,7 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 			return config, nil
 		}
 	}
-	if configFunc, ok := dynamicConfig[packName][Default][configName]; ok {
+	if configFunc, ok := dynamicConfig[packName][DistributionDefault][configName]; ok {
 		config, err := configFunc(ctx)
 		if err != nil {
 			return "", errors.WithMessage(err, "failed to get dynamic config")
@@ -148,15 +220,6 @@ func ConfigForDistro(ctx context.Context, packName string, configName string) (s
 		if config != "" {
 			return config, nil
 		}
-	}
-
-	// Static config
-	if _, ok := staticConfigs[packName][osInfo.Distribution][configName]; ok {
-		return staticConfigs[packName][osInfo.Distribution][configName], nil
-	}
-
-	if _, ok := staticConfigs[packName][Default][configName]; ok {
-		return staticConfigs[packName][Default][configName], nil
 	}
 
 	return "", ErrConfigNotFound
@@ -228,7 +291,7 @@ func findNginxDirWindows(_ context.Context) (string, error) {
 func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {
 	cmd := exec.Command("sc", "qc", serviceName)
 	buf := &bytes.Buffer{}
-	buf.Grow(1024) //nolint:gomnd
+	buf.Grow(1024) //nolint:mnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
 

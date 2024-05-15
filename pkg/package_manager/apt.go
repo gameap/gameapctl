@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +15,8 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	aptPkg "github.com/gameap/gameapctl/pkg/package_manager/apt"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -28,6 +32,41 @@ type apt struct{}
 // Search list packages available in the system that match the search
 // pattern.
 func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error) {
+	search, err := aptPkg.Search(packName)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to search package")
+	}
+
+	if len(search) == 0 {
+		// Fall back to apt-cache search
+		log.Println("Package not found using inner apt package. Running apt-cache search")
+
+		return apt.searchAptCache(context.Background(), packName)
+	}
+
+	result := make([]PackageInfo, 0, len(search))
+
+	for _, p := range search {
+		installedSize, err := strconv.Atoi(p.InstalledSize)
+		if err != nil {
+			// Ignore error
+			installedSize = 0
+		}
+
+		result = append(result, PackageInfo{
+			Name:            p.PackageName,
+			Architecture:    p.Architecture,
+			Version:         p.Version,
+			Size:            p.Size,
+			Description:     p.Description,
+			InstalledSizeKB: installedSize,
+		})
+	}
+
+	return result, nil
+}
+
+func (apt *apt) searchAptCache(_ context.Context, packName string) ([]PackageInfo, error) {
 	cmd := exec.Command(
 		"apt-cache",
 		"show",
@@ -44,7 +83,7 @@ func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error
 			return []PackageInfo{}, nil
 		}
 
-		return nil, errors.WithMessage(err, "failed to run dpkg-query")
+		return nil, errors.WithMessage(err, "failed to run apt-cache")
 	}
 
 	return parseAPTCacheShowOutput(out), nil
@@ -232,7 +271,7 @@ func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	var funcsByDistroAndArch map[string]map[string]installationFunc
+	var funcsByDistroAndArch map[osinfo.Distribution]map[string]installationFunc
 	var funcsByArch map[string]installationFunc
 
 	updatedPacks := make([]string, 0, len(packs))
@@ -455,7 +494,6 @@ func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 		}
 	}
 
-	//nolint:goconst
 	packages := []string{
 		"php" + versionAvailable + "-bcmath",
 		"php" + versionAvailable + "-bz2",
@@ -516,10 +554,46 @@ func (e *extendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+//nolint:funlen
 func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
+	if utils.IsFileExists(sourcesListNginx) {
+		return nil
+	}
+
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	err := utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("https://nginx.org/packages/%s/dists/%s/",
+			strings.ToLower(string(osInfo.Distribution)),
+			strings.ToLower(osInfo.DistributionCodename),
+		),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	//nolint:bodyclose
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to get nginx repository"))
+
+		return nil
+	}
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to close response body"))
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	err = utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
 	if err != nil {
 		return err
 	}
@@ -541,7 +615,7 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
-	if osInfo.Distribution == DistributionUbuntu && !utils.IsFileExists(sourcesListNginx) {
+	if osInfo.Distribution == DistributionUbuntu {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
 			sourcesListNginx,
@@ -551,7 +625,7 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 		}
 	}
 
-	if osInfo.Distribution == DistributionDebian && !utils.IsFileExists(sourcesListNginx) {
+	if osInfo.Distribution == DistributionDebian {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
 			sourcesListNginx,
@@ -611,10 +685,10 @@ func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {
 
 type installationFunc func(ctx context.Context) error
 
-var installationFuncs = map[string]map[string]map[string]installationFunc{
+var installationFuncs = map[string]map[osinfo.Distribution]map[string]installationFunc{
 	ComposerPackage: {
 		Default: {
-			ArchDefault: func(ctx context.Context) error {
+			ArchDefault: func(_ context.Context) error {
 				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
 					return nil
 				}

@@ -121,6 +121,12 @@ func Install(ctx context.Context, host, token string) error {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
+	fmt.Println("Defining process manager ...")
+	state, err = defineProcessManager(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to configure process manager")
+	}
+
 	//nolint:nestif
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
 		fmt.Println("Checking for curl ...")
@@ -139,11 +145,13 @@ func Install(ctx context.Context, host, token string) error {
 			}
 		}
 
-		fmt.Println("Checking for tmux ...")
-		if !utils.IsCommandAvailable("tmux") {
-			fmt.Println("Installing tmux ...")
-			if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
-				return errors.WithMessage(err, "failed to install tmux")
+		if state.ProcessManager == "tmux" {
+			fmt.Println("Checking for tmux ...")
+			if !utils.IsCommandAvailable("tmux") {
+				fmt.Println("Installing tmux ...")
+				if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
+					return errors.WithMessage(err, "failed to install tmux")
+				}
 			}
 		}
 	}
@@ -197,12 +205,6 @@ func Install(ctx context.Context, host, token string) error {
 	state, err = installDaemonBinaries(ctx, pm, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
-	}
-
-	fmt.Println("Configuring process manager ...")
-	state, err = configureProcessManager(ctx, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to configure process manager")
 	}
 
 	fmt.Println("Configuring gameap-daemon ...")
@@ -276,7 +278,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	}
 
 	if _, err := os.Stat(state.CertsPath); os.IsNotExist(err) {
-		err = os.MkdirAll(state.CertsPath, 0700) //nolint:gomnd
+		err = os.MkdirAll(state.CertsPath, 0700) //nolint:mnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create certificates directory")
 		}
@@ -288,7 +290,7 @@ func generateCertificates(_ context.Context, state daemonsInstallState) (daemons
 	_, err = os.Stat(privKeyFilePath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:gomnd
+		privKeyRsa, err := rsa.GenerateKey(rand.Reader, 2048) //nolint:mnd
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to generate key")
 		}
@@ -509,7 +511,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	_, _ = fw.Write([]byte("server-command {id} {command}"))
 
 	client := http.Client{
-		Timeout: 30 * time.Second, //nolint:gomnd
+		Timeout: 30 * time.Second, //nolint:mnd
 	}
 
 	u, err := url.JoinPath(state.Host, "/gdaemon/create/", state.Token)
@@ -557,7 +559,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.New("invalid response body")
 	}
 
-	statusParts := bytes.SplitN(parts[0], []byte(" "), 3) //nolint:gomnd
+	statusParts := bytes.SplitN(parts[0], []byte(" "), 3) //nolint:mnd
 
 	if string(statusParts[0]) != "Success" {
 		dumpRequestAndResponse(requestClone, response)
@@ -570,7 +572,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, UnableToSetupNodeError("error, no message")
 	}
 
-	//nolint:gomnd
+	//nolint:mnd
 	if len(statusParts) < 3 {
 		return state, UnableToSetupNodeError("error, invalid status message")
 	}
@@ -650,7 +652,7 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
 		pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
 		cfg.Users = map[string]string{
-			state.User: fmt.Sprintf("base64:%s", pw),
+			state.User: "base64:" + pw,
 		}
 	}
 
@@ -674,7 +676,7 @@ func detectLocation() string {
 	}
 
 	client := http.Client{
-		Timeout: 5 * time.Second, //nolint:gomnd
+		Timeout: 5 * time.Second, //nolint:mnd
 	}
 
 	for _, d := range detectors {
@@ -693,7 +695,7 @@ func detectLocation() string {
 			}
 		}(r.Body)
 
-		//nolint:gomnd
+		//nolint:mnd
 		if r.ContentLength > 20 {
 			continue
 		}

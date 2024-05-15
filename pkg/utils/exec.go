@@ -18,7 +18,7 @@ func ExecCommand(command string, args ...string) error {
 func ExecCommandWithOutput(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	buf := &bytes.Buffer{}
-	buf.Grow(1024) //nolint:gomnd
+	buf.Grow(1024) //nolint:mnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
 	log.Println('\n', cmd.String())

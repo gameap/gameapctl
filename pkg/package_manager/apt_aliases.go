@@ -1,9 +1,23 @@
 package packagemanager
 
-type distVersionPackagesMap map[string]map[string]map[string]map[string][]string
+import osinfo "github.com/gameap/gameapctl/pkg/os_info"
+
+type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[string][]string
 
 var aptPackageAliases = distVersionPackagesMap{
+	DistributionDefault: {
+		CodeNameDefault: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
+	},
 	DistributionDebian: {
+		CodeNameDefault: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
 		"squeeze": {
 			ArchDefault: {
 				MySQLServerPackage: {"mysql-server"},
@@ -66,6 +80,11 @@ var aptPackageAliases = distVersionPackagesMap{
 		},
 	},
 	DistributionUbuntu: {
+		CodeNameDefault: {
+			ArchDefault: {
+				Lib32GCCPackage: {},
+			},
+		},
 		"precise": {
 			ArchDefault: {
 				Lib32GCCPackage: {"lib32gcc1"},
