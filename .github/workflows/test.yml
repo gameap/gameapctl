@@ -97,12 +97,6 @@ jobs:
       volumes:
         - /usr/local/share/ca-certificates:/usr/local/share/ca-certificates
     steps:
-      - name: Container preparation
-        run: |
-          apt -y update
-          apt-get install ca-certificates -y
-          update-ca-certificates
-
       - name: Checkout code
         uses: actions/checkout@v4
 
