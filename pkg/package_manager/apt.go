@@ -32,6 +32,8 @@ func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error
 		return nil, errors.WithMessage(err, "failed to search package")
 	}
 
+	log.Println("Search result: ", search)
+
 	result := make([]PackageInfo, 0, len(search))
 
 	for _, p := range search {

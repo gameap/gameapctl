@@ -1,9 +1,10 @@
 package apt
 
 import (
+	"bufio"
+	"bytes"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -40,7 +41,7 @@ func Search(q string) ([]Package, error) {
 		return nil, errors.WithMessage(err, "failed to list all packages")
 	}
 
-	return aptSearch(q, packages, true)
+	return aptSearch(q, packages, false)
 }
 
 // aptSearch allows to perform a targeted search using the exact name of the package to be searched,
@@ -87,9 +88,8 @@ func getRepoFileList() ([]string, error) {
 		return nil, errReadDir
 	}
 	var matchingPackagesFiles []string
-	filterPackagesFile := regexp.MustCompile(`.*\_Packages$`)
 	for _, packagesFile := range allPackagesFiles {
-		if filterPackagesFile.MatchString(packagesFile.Name()) {
+		if strings.HasSuffix(packagesFile.Name(), "_Packages") {
 			matchingPackagesFiles = append(matchingPackagesFiles, packagesFile.Name())
 		}
 	}
@@ -101,63 +101,61 @@ func getRepoFileList() ([]string, error) {
 //
 //nolint:funlen
 func buildPackagesList(repoList []string) ([]Package, error) {
-	var packagesList []Package
+	var packageList []Package
 	for _, packagesFile := range repoList {
 		readPackageFile, errOpen := os.ReadFile(filepath.Join(aptListPath, packagesFile))
 		if errOpen != nil {
 			return nil, errOpen
 		}
-		lines := strings.Split(string(readPackageFile), "\n")
-		var packageNameFromList string
-		var versionFromList string
-		var architectureFromList string
-		var dependsFromList []string
-		var sizeFromList string
-		var installedSizeFromList string
-		var descriptionFromList string
-		var sectionFromList string
-		var md5sumFromList string
-		var sha256FromList string
-		for _, line := range lines {
-			switch {
-			case strings.HasPrefix(line, "Package:"):
-				packageNameFromList, _ = strings.CutPrefix(line, "Package:")
-			case strings.HasPrefix(line, "Version:"):
-				versionFromList, _ = strings.CutPrefix(line, "Version:")
-			case strings.HasPrefix(line, "Architecture:"):
-				architectureFromList, _ = strings.CutPrefix(line, "Architecture:")
-			case strings.HasPrefix(line, "Depends:"):
-				dependsList, _ := strings.CutPrefix(line, "Depends:")
-				dependsFromList = strings.Split(dependsList, ",")
-			case strings.HasPrefix(line, "Description:"):
-				descriptionFromList, _ = strings.CutPrefix(line, "Description:")
-			case strings.HasPrefix(line, "Size:"):
-				sizeFromList, _ = strings.CutPrefix(line, "Size:")
-			case strings.HasPrefix(line, "Installed-Size:"):
-				installedSizeFromList, _ = strings.CutPrefix(line, "Installed-Size:")
-			case strings.HasPrefix(line, "Section:"):
-				sectionFromList, _ = strings.CutPrefix(line, "Section:")
-			case strings.HasPrefix(line, "MD5sum:"):
-				md5sumFromList, _ = strings.CutPrefix(line, "MD5sum:")
-			case strings.HasPrefix(line, "SHA256:"):
-				sha256FromList, _ = strings.CutPrefix(line, "SHA256:")
-			case line == "":
-				// information dump because each new line starts a new package
-				packagesList = append(packagesList, Package{
-					PackageName:   strings.TrimSpace(packageNameFromList),
-					Version:       strings.TrimSpace(versionFromList),
-					Architecture:  strings.TrimSpace(architectureFromList),
-					Depends:       dependsFromList,
-					Size:          strings.TrimSpace(sizeFromList),
-					InstalledSize: strings.TrimSpace(installedSizeFromList),
-					Description:   strings.TrimSpace(descriptionFromList),
-					Section:       strings.TrimSpace(sectionFromList),
-					Md5sum:        strings.TrimSpace(md5sumFromList),
-					Sha256:        strings.TrimSpace(sha256FromList),
-				})
+
+		scanner := bufio.NewScanner(bytes.NewReader(readPackageFile))
+
+		var p Package
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if line == "" {
+				if p.PackageName != "" {
+					packageList = append(packageList, p)
+					p = Package{}
+				}
+
+				continue
+			}
+
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) < 2 {
+				continue
+			}
+
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+
+			switch key {
+			case "Package":
+				p.PackageName = value
+			case "Version":
+				p.Version = value
+			case "Architecture":
+				p.Architecture = value
+			case "Depends":
+				p.Depends = strings.Split(value, ",")
+			case "Size":
+				p.Size = value
+			case "Installed-Size":
+				p.InstalledSize = value
+			case "Description":
+				p.Description = value
+			case "Section":
+				p.Section = value
+			case "MD5sum":
+				p.Md5sum = value
+			case "SHA256":
+				p.Sha256 = value
 			}
 		}
 	}
 
-	return packagesList, nil
+	return packageList, nil
 }
