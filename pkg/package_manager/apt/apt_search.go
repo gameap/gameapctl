@@ -2,7 +2,7 @@ package apt
 
 import (
 	"bufio"
-	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +40,8 @@ func Search(q string) ([]Package, error) {
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to list all packages")
 	}
+
+	log.Println("All packages: ", packages)
 
 	return aptSearch(q, packages, false)
 }
@@ -103,12 +105,18 @@ func getRepoFileList() ([]string, error) {
 func buildPackagesList(repoList []string) ([]Package, error) {
 	var packageList []Package
 	for _, packagesFile := range repoList {
-		readPackageFile, errOpen := os.ReadFile(filepath.Join(aptListPath, packagesFile))
+		f, errOpen := os.Open(filepath.Join(aptListPath, packagesFile))
 		if errOpen != nil {
 			return nil, errOpen
 		}
+		defer func() {
+			err := f.Close()
+			if err != nil {
+				log.Println("failed to close file", err)
+			}
+		}()
 
-		scanner := bufio.NewScanner(bytes.NewReader(readPackageFile))
+		scanner := bufio.NewScanner(f)
 
 		var p Package
 
