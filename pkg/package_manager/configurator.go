@@ -34,6 +34,10 @@ var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 			"nginx_conf":       "/etc/nginx/nginx.conf",
 			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
 		},
+		DistributionWindows: {
+			"nginx_conf":       "C:\\gameap\\tools\\nginx\\conf\\nginx.conf",
+			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf\\gameap.conf",
+		},
 	},
 	ApachePackage: {
 		Default: {
