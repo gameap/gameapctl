@@ -57,7 +57,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [1.22.x]
@@ -69,11 +69,6 @@ jobs:
             database: 'sqlite'
         include:
           - distro: 'debian:sid'
-            web-server: 'nginx'
-            database: 'mysql'
-            experimental: true
-            go-version: '1.22.x'
-          - distro: 'ubuntu:24.04'
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
