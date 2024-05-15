@@ -2,11 +2,13 @@ package apt
 
 import (
 	"bufio"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/pierrec/lz4/v4"
 	"github.com/pkg/errors"
 )
 
@@ -89,7 +91,8 @@ func getRepoFileList() ([]string, error) {
 	}
 	var matchingPackagesFiles []string
 	for _, packagesFile := range allPackagesFiles {
-		if strings.HasSuffix(packagesFile.Name(), "_Packages") {
+		if strings.HasSuffix(packagesFile.Name(), "_Packages") ||
+			strings.HasSuffix(packagesFile.Name(), "_Packages.lz4") {
 			matchingPackagesFiles = append(matchingPackagesFiles, packagesFile.Name())
 		}
 	}
@@ -114,7 +117,15 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 			}
 		}()
 
-		scanner := bufio.NewScanner(f)
+		var r io.Reader
+
+		if strings.HasSuffix(packagesFile, ".lz4") {
+			r = lz4.NewReader(f)
+		} else {
+			r = f
+		}
+
+		scanner := bufio.NewScanner(r)
 
 		var p Package
 

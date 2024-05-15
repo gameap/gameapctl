@@ -36,6 +36,9 @@ func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error
 	}
 
 	if len(search) == 0 {
+		// Fall back to apt-cache search
+		log.Println("Package not found using inner apt package. Running apt-cache search")
+
 		return apt.searchAptCache(context.Background(), packName)
 	}
 
