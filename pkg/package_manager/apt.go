@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -552,10 +554,46 @@ func (e *extendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+//nolint:funlen
 func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
+	if utils.IsFileExists(sourcesListNginx) {
+		return nil
+	}
+
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	err := utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("https://nginx.org/packages/%s/dists/%s/",
+			strings.ToLower(string(osInfo.Distribution)),
+			strings.ToLower(osInfo.DistributionCodename),
+		),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	//nolint:bodyclose
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println(errors.WithMessage(err, "failed to get nginx repository"))
+
+		return nil
+	}
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to close response body"))
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	err = utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
 	if err != nil {
 		return err
 	}
@@ -577,7 +615,7 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to write nginx gpg key")
 	}
 
-	if osInfo.Distribution == DistributionUbuntu && !utils.IsFileExists(sourcesListNginx) {
+	if osInfo.Distribution == DistributionUbuntu {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
 			sourcesListNginx,
@@ -587,7 +625,7 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 		}
 	}
 
-	if osInfo.Distribution == DistributionDebian && !utils.IsFileExists(sourcesListNginx) {
+	if osInfo.Distribution == DistributionDebian {
 		err := utils.WriteContentsToFile(
 			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
 			sourcesListNginx,
