@@ -27,7 +27,7 @@ func tryToFixPanelInstallation(ctx context.Context, state panelInstallState) (pa
 				return osInfo.IsLinux(), nil
 			},
 			FixFunc: func(_ context.Context) error {
-				err := utils.ExecCommand("nginx", "-s", "reload")
+				err = utils.ExecCommand("nginx", "-s", "reload")
 				if err != nil {
 					return errors.WithMessage(err, "failed to reload nginx")
 				}

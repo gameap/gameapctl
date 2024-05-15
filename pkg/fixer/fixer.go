@@ -26,7 +26,7 @@ func RunFixer(ctx context.Context, checkFunc CheckFunc, items []Item) error {
 			continue
 		}
 
-		log.Println("Trying to run fix ", item.Name)
+		log.Println("Trying to run fix", item.Name)
 		err = item.FixFunc(ctx)
 		if err != nil {
 			return errors.WithMessagef(err, "failed to fix '%s'", item.Name)
