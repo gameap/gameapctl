@@ -117,7 +117,7 @@ jobs:
 
       - name: GameAP Installation Test
         run: |
-          ls /var/lib/apt/lists/ | true
+          ls /var/lib/apt/lists/ || true
           cd cmd/gameapctl/
           go build .
           ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
