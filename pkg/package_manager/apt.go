@@ -1,8 +1,6 @@
 package packagemanager
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -10,10 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	aptPkg "github.com/gameap/gameapctl/pkg/package_manager/apt"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -29,68 +27,31 @@ type apt struct{}
 // Search list packages available in the system that match the search
 // pattern.
 func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error) {
-	cmd := exec.Command(
-		"apt-cache",
-		"show",
-		packName,
-	)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
-
-	out, err := cmd.CombinedOutput()
-	log.Print(string(out))
+	search, err := aptPkg.Search(packName)
 	if err != nil {
-		// Avoid returning an error if the list is empty
-		if bytes.Contains(out, []byte("E: No packages found")) {
-			return []PackageInfo{}, nil
-		}
-
-		return nil, errors.WithMessage(err, "failed to run dpkg-query")
+		return nil, errors.WithMessage(err, "failed to search package")
 	}
 
-	return parseAPTCacheShowOutput(out), nil
-}
+	result := make([]PackageInfo, 0, len(search))
 
-func parseAPTCacheShowOutput(out []byte) []PackageInfo {
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-
-	var packageInfos []PackageInfo
-
-	for scanner.Scan() {
-		parts := strings.SplitN(scanner.Text(), ":", 2)
-		if len(parts) < 2 {
-			continue
+	for _, p := range search {
+		installedSize, err := strconv.Atoi(p.InstalledSize)
+		if err != nil {
+			// Ignore error
+			installedSize = 0
 		}
 
-		info := PackageInfo{}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		switch key {
-		case "PackageInfo":
-			info.Name = value
-		case "Architecture":
-			info.Architecture = value
-		case "Version":
-			info.Version = value
-		case "Size":
-			info.Size = value
-		case "Description":
-			info.Description = value
-		case "Installed-Size":
-			size, err := strconv.Atoi(value)
-			if err != nil {
-				// Ignore error
-				size = 0
-			}
-			info.InstalledSizeKB = size
-		}
-
-		packageInfos = append(packageInfos, info)
+		result = append(result, PackageInfo{
+			Name:            p.PackageName,
+			Architecture:    p.Architecture,
+			Version:         p.Version,
+			Size:            p.Size,
+			Description:     p.Description,
+			InstalledSizeKB: installedSize,
+		})
 	}
 
-	return packageInfos
+	return result, nil
 }
 
 // CheckForUpdates runs an apt update to retrieve new packages available
