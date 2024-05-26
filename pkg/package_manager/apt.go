@@ -659,7 +659,7 @@ func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
 	}
 
 	err = utils.WriteContentsToFile(
-		[]byte("deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_16.x nodistro main"),
+		[]byte("deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"),
 		sourcesListNode,
 	)
 	if err != nil {
