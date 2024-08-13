@@ -2,7 +2,7 @@ package packagemanager
 
 import osinfo "github.com/gameap/gameapctl/pkg/os_info"
 
-type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[string][]string
+type distVersionPackagesMap map[osinfo.Distribution]map[string]map[osinfo.Platform]map[string][]string
 
 var aptPackageAliases = distVersionPackagesMap{
 	DistributionDefault: {

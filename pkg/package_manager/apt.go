@@ -271,8 +271,8 @@ func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []stri
 func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	var funcsByDistroAndArch map[osinfo.Distribution]map[string]installationFunc
-	var funcsByArch map[string]installationFunc
+	var funcsByDistroAndArch map[osinfo.Distribution]map[osinfo.Platform]installationFunc
+	var funcsByArch map[osinfo.Platform]installationFunc
 
 	updatedPacks := make([]string, 0, len(packs))
 
@@ -685,7 +685,7 @@ func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {
 
 type installationFunc func(ctx context.Context) error
 
-var installationFuncs = map[string]map[osinfo.Distribution]map[string]installationFunc{
+var installationFuncs = map[string]map[osinfo.Distribution]map[osinfo.Platform]installationFunc{
 	ComposerPackage: {
 		Default: {
 			ArchDefault: func(_ context.Context) error {

@@ -2,6 +2,7 @@ package packagemanager
 
 import (
 	"context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"io/fs"
 	"log"
 	"os"
@@ -219,7 +220,7 @@ type chrootPackage struct {
 }
 
 //nolint:mnd
-var chrootPackages = map[string]map[string]chrootPackage{
+var chrootPackages = map[string]map[osinfo.Platform]chrootPackage{
 	PHPPackage: {
 		ArchAMD64: {
 			ArchiveURL:       gameap.Repository() + "/chroots/php/php8.1-amd64.tar.gz",
