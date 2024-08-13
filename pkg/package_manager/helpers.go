@@ -110,7 +110,7 @@ func TryBindPHPDirectories(_ context.Context, source string) error {
 
 	if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err != nil {
 		// No chroot php package
-		//nolint:nilerr
+
 		return nil
 	}
 

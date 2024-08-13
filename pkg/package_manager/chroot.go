@@ -2,7 +2,6 @@ package packagemanager
 
 import (
 	"context"
-	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"io/fs"
 	"log"
 	"os"
@@ -11,6 +10,7 @@ import (
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
