@@ -24,6 +24,7 @@ Other operating systems may work as well, if they can run the required dependenc
 
 | Version       | Supported | Notes                                    |
 |---------------|-----------|------------------------------------------|
+| 13 (trixie)   | ✔         |                                          |
 | 12 (bookworm) | ✔         | Latest manual test (v0.4.1): 12.11.2023  |
 | 11 (bullseye) | ✔         | Latest manual test (v0.4.3): 13.11.2023  |
 | 10 (buster)   | ✔         | Latest manual test (v0.10.0): 25.05.2024 |
