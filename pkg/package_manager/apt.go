@@ -417,8 +417,36 @@ func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 
 	var repoAdded bool
 	for {
-		log.Println("Checking for PHP 8.2 version available...")
-		pk, err := e.apt.Search(ctx, "php8.2")
+		log.Println("Checking for PHP 8.4 version availability...")
+		pk, err := e.apt.Search(ctx, "php8.4")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "8.4"
+			log.Println("PHP 8.4 version found")
+
+			break
+		}
+
+		log.Println("PHP 8.4 version not found")
+
+		log.Println("Checking for PHP 8.3 version availability...")
+		pk, err = e.apt.Search(ctx, "php8.3")
+		if err != nil {
+			return nil, err
+		}
+		if len(pk) > 0 {
+			versionAvailable = "8.3"
+			log.Println("PHP 8.3 version found")
+
+			break
+		}
+
+		log.Println("PHP 8.3 version not found")
+
+		log.Println("Checking for PHP 8.2 version availability...")
+		pk, err = e.apt.Search(ctx, "php8.2")
 		if err != nil {
 			return nil, err
 		}
@@ -431,7 +459,7 @@ func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 
 		log.Println("PHP 8.2 version not found")
 
-		log.Println("Checking for PHP 8.1 version available...")
+		log.Println("Checking for PHP 8.1 version availability...")
 		pk, err = e.apt.Search(ctx, "php8.1")
 		if err != nil {
 			return nil, err
@@ -593,65 +621,18 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 		return nil
 	}
 
-	err = utils.DownloadFile(ctx, "https://nginx.org/keys/nginx_signing.key", "/etc/apt/trusted.gpg.d/nginx.key")
-	if err != nil {
-		return err
-	}
-
-	err = utils.ExecCommand("gpg", "--keyserver", "keyserver.ubuntu.com", "--recv-keys", "ABF5BD827BD9BF62")
-	if err != nil {
-		return errors.WithMessage(err, "failed to receive nginx gpg key")
-	}
-
-	cmd := exec.Command("gpg", "--export", "ABF5BD827BD9BF62")
-	log.Println('\n', cmd.String())
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.WithMessage(err, "failed to export nginx gpg key")
-	}
-	//nolint:gosec
-	err = os.WriteFile("/etc/apt/trusted.gpg.d/nginx.gpg", out, 0644)
-	if err != nil {
-		return errors.WithMessage(err, "failed to write nginx gpg key")
-	}
-
-	if osInfo.Distribution == DistributionUbuntu {
-		err := utils.WriteContentsToFile(
-			[]byte(fmt.Sprintf("deb http://nginx.org/packages/ubuntu/ %s nginx", osInfo.DistributionCodename)),
-			sourcesListNginx,
-		)
+	if !utils.IsFileExists("/usr/share/keyrings/") {
+		err = os.Mkdir("/usr/share/keyrings/", 0755)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, "failed to create /usr/share/keyrings/ directory")
 		}
 	}
 
-	if osInfo.Distribution == DistributionDebian {
-		err := utils.WriteContentsToFile(
-			[]byte(fmt.Sprintf("deb http://nginx.org/packages/debian/ %s nginx", osInfo.DistributionCodename)),
-			sourcesListNginx,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
-	var err error
-	if !utils.IsFileExists("/etc/apt/keyrings") {
-		err = os.Mkdir("/etc/apt/keyrings", 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create /etc/apt/keyrings directory")
-		}
-	}
-
-	if !utils.IsFileExists("/etc/apt/keyrings/nodesource.gpg") {
+	if !utils.IsFileExists("/usr/share/keyrings/nginx-archive-keyring.gpg") {
 		err = utils.ExecCommand(
 			"bash", "-c",
-			"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |"+
-				" gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg",
+			"curl -fsSL https://nginx.org/keys/nginx_signing.key | "+
+				"gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg",
 		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to receive nodejs gpg key")
@@ -659,7 +640,43 @@ func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
 	}
 
 	err = utils.WriteContentsToFile(
-		[]byte("deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"),
+		[]byte(
+			fmt.Sprintf(
+				"deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian/ %s nginx",
+				osInfo.DistributionCodename,
+			),
+		),
+		sourcesListNginx,
+	)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to write nginx source list to %s", sourcesListNginx)
+	}
+
+	return nil
+}
+
+func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
+	var err error
+	if !utils.IsFileExists("/usr/share/keyrings/") {
+		err = os.Mkdir("/usr/share/keyrings/", 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create /usr/share/keyrings/ directory")
+		}
+	}
+
+	if !utils.IsFileExists("/usr/share/keyrings/nodesource.gpg") {
+		err = utils.ExecCommand(
+			"bash", "-c",
+			"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |"+
+				" gpg --dearmor -o /usr/share/keyrings/nodesource.gpg",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to receive nodejs gpg key")
+		}
+	}
+
+	err = utils.WriteContentsToFile(
+		[]byte("deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"),
 		sourcesListNode,
 	)
 	if err != nil {

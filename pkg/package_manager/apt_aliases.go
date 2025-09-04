@@ -67,6 +67,17 @@ var aptPackageAliases = distVersionPackagesMap{
 				NodeJSPackage:     {"nodejs", "npm"},
 			},
 		},
+		"trixie": {
+			ArchDefault: {
+				MySQLServerPackage: {"default-mysql-server"},
+				Lib32GCCPackage:    {"lib32gcc-s1"},
+			},
+			ArchARM64: {
+				Lib32z1Package:    {""},
+				Lib32GCCPackage:   {"lib32gcc-s1-amd64-cross"},
+				Lib32Stdc6Package: {"lib32stdc++6-amd64-cross"},
+			},
+		},
 		"sid": {
 			ArchDefault: {
 				MySQLServerPackage: {"default-mysql-server"},
