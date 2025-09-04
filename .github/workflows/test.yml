@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.22.x]
+        go-version: [1.25.x]
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
@@ -60,7 +60,7 @@ jobs:
         distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
-        go-version: [1.22.x]
+        go-version: [1.25.x]
         experimental: [false]
         exclude:
           - distro: 'ubuntu:20.04'
@@ -72,12 +72,12 @@ jobs:
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
-            go-version: '1.22.x'
+            go-version: '1.25.x'
           - distro: 'debian:buster'
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
-            go-version: '1.22.x'
+            go-version: '1.25.x'
 
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -141,7 +141,7 @@ jobs:
       matrix:
         database: [ mysql, sqlite ]
         web-server: [ nginx ]
-        go-version: [ 1.22.x ]
+        go-version: [ 1.25.x ]
         experimental: [ false ]
 
     runs-on: windows-latest
@@ -201,7 +201,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
+          go-version: 1.25.x
 
       - name: Checkout code
         uses: actions/checkout@v3
