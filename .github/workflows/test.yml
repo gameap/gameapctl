@@ -128,7 +128,7 @@ jobs:
           ./gameapctl --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: logs
@@ -184,7 +184,7 @@ jobs:
           .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1:3080 --token=test_auto_setup_token
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: logs_windows
