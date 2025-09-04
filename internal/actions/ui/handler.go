@@ -75,7 +75,7 @@ func Handle(cliCtx *cli.Context) error {
 	// Wait for interrupt signal to gracefully shutdown the server with
 	select {
 	case <-done:
-	case <-cliCtx.Context.Done():
+	case <-cliCtx.Done():
 	}
 
 	log.Println("Shutting down the server...")

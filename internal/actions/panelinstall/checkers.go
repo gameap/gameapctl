@@ -194,9 +194,34 @@ func checkApacheWebServer(ctx context.Context, state panelInstallState) (panelIn
 	return state, nil
 }
 
+func checkPortAvailability(ctx context.Context, state panelInstallState) (panelInstallState, error) {
+	if state.Port == "" {
+		state.Port = "80"
+	}
+
+	listener, err := net.Listen("tcp", net.JoinHostPort(state.Host, state.Port))
+	if err != nil {
+		err = warning(ctx, state,
+			fmt.Sprintf(
+				"Port %s is already in use. "+
+					"You can specify other available port. "+
+					"Further installation may fail.", state.Port,
+			),
+		)
+		if err != nil {
+			return state, err
+		}
+	}
+	err = listener.Close()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to close listener")
+	}
+
+	return state, nil
+}
+
 //nolint:funlen
 func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	//nolint:goconst
 	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") {
 		return state, nil
 	}

@@ -217,7 +217,7 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 	_, _ = f.WriteString(string("Distribution: " + osInfo.Distribution + "\n"))
 	_, _ = f.WriteString("DistributionVersion: " + osInfo.DistributionVersion + "\n")
 	_, _ = f.WriteString("DistributionCodename: " + osInfo.DistributionCodename + "\n")
-	_, _ = f.WriteString("Platform: " + osInfo.Platform + "\n")
+	_, _ = f.WriteString("Platform: " + osInfo.Platform.String() + "\n")
 	_, _ = f.WriteString("OS: " + osInfo.OS + "\n")
 	_, _ = f.WriteString("Hostname: " + osInfo.Hostname + "\n")
 

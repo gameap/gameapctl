@@ -16,18 +16,19 @@ import (
 type Distribution string
 
 const (
-	DistributionUnknown   Distribution = "unknown"
-	DistributionDebian    Distribution = "debian"
-	DistributionUbuntu    Distribution = "ubuntu"
-	DistributionCentOS    Distribution = "centos"
 	DistributionAlmaLinux Distribution = "almalinux"
-	DistributionFedora    Distribution = "fedora"
-	DistributionArch      Distribution = "arch"
-	DistributionGentoo    Distribution = "gentoo"
 	DistributionAlpine    Distribution = "alpine"
+	DistributionAmazon    Distribution = "amzn"
+	DistributionArch      Distribution = "arch"
+	DistributionCentOS    Distribution = "centos"
+	DistributionDebian    Distribution = "debian"
+	DistributionFedora    Distribution = "fedora"
+	DistributionGentoo    Distribution = "gentoo"
 	DistributionOpenSUSE  Distribution = "opensuse"
 	DistributionRaspbian  Distribution = "raspbian"
-	DistributionAmazon    Distribution = "amzn"
+	DistributionRocky     Distribution = "rocky"
+	DistributionUbuntu    Distribution = "ubuntu"
+	DistributionUnknown   Distribution = "unknown"
 
 	DistributionWindows Distribution = "windows"
 )
@@ -40,13 +41,34 @@ func (d Distribution) IsWindows() bool {
 	return d == DistributionWindows
 }
 
+type Platform string
+
+const (
+	PlatformX86    Platform = "x86"
+	PlatformAmd64  Platform = "amd64"
+	PlatformArm    Platform = "arm"
+	PlatformArm64  Platform = "arm64"
+	PlatformMips   Platform = "mips"
+	PlatformMips64 Platform = "mips64"
+
+	PlatformUnknown Platform = "unknown"
+)
+
+func (p Platform) IsX86() bool {
+	return p == PlatformX86 || p == PlatformAmd64
+}
+
+func (p Platform) String() string {
+	return string(p)
+}
+
 type Info struct {
 	Kernel               string
 	Core                 string
 	Distribution         Distribution
 	DistributionVersion  string
 	DistributionCodename string
-	Platform             string
+	Platform             Platform
 	OS                   string
 	Hostname             string
 	CPUs                 int
@@ -67,7 +89,7 @@ func (info Info) String() string {
 	b.WriteString("\nDistributionCodename: ")
 	b.WriteString(info.DistributionCodename)
 	b.WriteString("\nPlatform: ")
-	b.WriteString(info.Platform)
+	b.WriteString(info.Platform.String())
 	b.WriteString("\nOS: ")
 	b.WriteString(info.OS)
 	b.WriteString("\nHostname: ")
@@ -99,28 +121,12 @@ func GetOSInfo() (Info, error) {
 	result := Info{
 		Kernel:   gi.Kernel,
 		Core:     gi.Core,
-		Platform: gi.Platform,
 		OS:       gi.OS,
 		Hostname: gi.Hostname,
 		CPUs:     gi.CPUs,
 	}
 
-	if result.Platform == "" || result.Platform == "unknown" {
-		result.Platform = runtime.GOARCH
-	}
-
-	switch result.Platform {
-	case "x86_64":
-		result.Platform = "amd64"
-	case "i686":
-		result.Platform = "386"
-	case "i386":
-		result.Platform = "386"
-	case "aarch64":
-		result.Platform = "arm64"
-	case "armv7l":
-		result.Platform = "arm"
-	}
+	result.Platform = detectPlatform()
 
 	if gi.OS == "GNU/Linux" {
 		info, err := detectLinuxDist()
@@ -145,7 +151,7 @@ type distInfo struct {
 	VersionCodename string
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func detectLinuxDist() (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"
@@ -265,6 +271,25 @@ func detectLinuxDist() (distInfo, error) {
 	result.VersionCodename = strings.ToLower(result.VersionCodename)
 
 	return result, nil
+}
+
+func detectPlatform() Platform {
+	switch runtime.GOARCH {
+	case "386":
+		return PlatformX86
+	case "amd64":
+		return PlatformAmd64
+	case "arm":
+		return PlatformArm
+	case "arm64":
+		return PlatformArm64
+	case "mips":
+		return PlatformMips
+	case "mips64":
+		return PlatformMips64
+	}
+
+	return PlatformUnknown
 }
 
 func extractField(data []byte, key string) string {

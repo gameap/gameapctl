@@ -342,7 +342,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 		}
 	}
 
-	return nil, nil
+	return nil, NewNotFoundError(serviceName)
 }
 
 type windowsServiceState int

@@ -87,6 +87,7 @@ func duplicateLogWriter(ctx context.Context, w io.Writer) {
 	}()
 }
 
+//nolint:unparam
 func nodeInfo(ctx context.Context, w io.Writer, _ []string) error {
 	info := contextInternal.OSInfoFromContext(ctx)
 	_, _ = w.Write([]byte(info.String()))

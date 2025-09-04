@@ -56,4 +56,13 @@ var dnfPackageAliases = distVersionPackagesMap{
 			},
 		},
 	},
+	DistributionRocky: {
+		CodeNameDefault: {
+			ArchDefault: {
+				Lib32GCCPackage:   {""},
+				Lib32Stdc6Package: {""},
+				Lib32z1Package:    {""},
+			},
+		},
+	},
 }

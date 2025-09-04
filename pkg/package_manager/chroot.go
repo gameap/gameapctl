@@ -10,6 +10,7 @@ import (
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -219,7 +220,7 @@ type chrootPackage struct {
 }
 
 //nolint:mnd
-var chrootPackages = map[string]map[string]chrootPackage{
+var chrootPackages = map[string]map[osinfo.Platform]chrootPackage{
 	PHPPackage: {
 		ArchAMD64: {
 			ArchiveURL:       gameap.Repository() + "/chroots/php/php8.1-amd64.tar.gz",

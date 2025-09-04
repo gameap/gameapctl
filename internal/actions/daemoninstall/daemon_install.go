@@ -161,10 +161,12 @@ func Install(ctx context.Context, host, token string) error {
 		return errors.WithMessage(err, "failed to create user")
 	}
 
-	fmt.Println("Installing steamcmd ...")
-	state, err = installSteamCMD(ctx, pm, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed install SteamCMD")
+	if state.OSInfo.Platform.IsX86() {
+		fmt.Println("Installing steamcmd ...")
+		state, err = installSteamCMD(ctx, pm, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed install SteamCMD")
+		}
 	}
 
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
@@ -580,6 +582,9 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	nodeID, err := strconv.Atoi(string(statusParts[1]))
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to convert node id to int")
+	}
+	if nodeID < 0 {
+		return state, errors.New("node id cannot be negative")
 	}
 
 	state.NodeID = uint(nodeID)

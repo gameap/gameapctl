@@ -2,7 +2,7 @@ package packagemanager
 
 import osinfo "github.com/gameap/gameapctl/pkg/os_info"
 
-type distVersionPackagesMap map[osinfo.Distribution]map[string]map[string]map[string][]string
+type distVersionPackagesMap map[osinfo.Distribution]map[string]map[osinfo.Platform]map[string][]string
 
 var aptPackageAliases = distVersionPackagesMap{
 	DistributionDefault: {
@@ -65,6 +65,17 @@ var aptPackageAliases = distVersionPackagesMap{
 				Lib32GCCPackage:   {"lib32gcc-s1-amd64-cross"},
 				Lib32Stdc6Package: {"lib32stdc++6-amd64-cross"},
 				NodeJSPackage:     {"nodejs", "npm"},
+			},
+		},
+		"trixie": {
+			ArchDefault: {
+				MySQLServerPackage: {"default-mysql-server"},
+				Lib32GCCPackage:    {"lib32gcc-s1"},
+			},
+			ArchARM64: {
+				Lib32z1Package:    {""},
+				Lib32GCCPackage:   {"lib32gcc-s1-amd64-cross"},
+				Lib32Stdc6Package: {"lib32stdc++6-amd64-cross"},
 			},
 		},
 		"sid": {

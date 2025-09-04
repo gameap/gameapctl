@@ -10,7 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.22.x]
+        go-version: [1.25.x]
         os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
@@ -38,9 +38,9 @@ jobs:
           go mod download
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.58
+          version: v2.4.0
           args: --timeout=10m
 
       - name: Unit Tests
@@ -57,27 +57,25 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:buster', 'debian:bullseye', 'debian:bookworm' ]
+        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bullseye', 'debian:bookworm', 'debian:trixie' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
-        go-version: [1.22.x]
+        go-version: [1.25.x]
         experimental: [false]
         exclude:
           - distro: 'ubuntu:20.04'
-            database: 'sqlite'
-          - distro: 'debian:buster'
             database: 'sqlite'
         include:
           - distro: 'debian:sid'
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
-            go-version: '1.22.x'
-          - distro: 'debian:buster'
+            go-version: '1.25.x'
+          - distro: 'debian:bullseye'
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
-            go-version: '1.22.x'
+            go-version: '1.25.x'
 
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }}
@@ -128,7 +126,7 @@ jobs:
           ./gameapctl --non-interactive daemon install --host=http://127.0.0.1 --token=test_auto_setup_token
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: logs
@@ -141,7 +139,7 @@ jobs:
       matrix:
         database: [ mysql, sqlite ]
         web-server: [ nginx ]
-        go-version: [ 1.22.x ]
+        go-version: [ 1.25.x ]
         experimental: [ false ]
 
     runs-on: windows-latest
@@ -184,7 +182,7 @@ jobs:
           .\gameapctl.exe --non-interactive daemon install --host=http://127.0.0.1:3080 --token=test_auto_setup_token
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: logs_windows
@@ -201,7 +199,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
+          go-version: 1.25.x
 
       - name: Checkout code
         uses: actions/checkout@v3

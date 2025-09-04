@@ -198,6 +198,11 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check path")
 	}
 
+	state, err = checkPortAvailability(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check port availability")
+	}
+
 	state, err = filterAndCheckHost(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check host")
@@ -548,6 +553,7 @@ func installMariaDB(
 	}
 
 	fmt.Println("Starting MariaDB server ...")
+	//nolint:staticcheck
 	switch {
 	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
 		err = service.Start(ctx, "mariadb")
@@ -580,9 +586,10 @@ func installMariaDB(
 	state, err = checkMySQLConnection(ctx, state)
 	if err != nil {
 		log.Println(err)
-		if state.DBCreds.Host == "localhost" {
+		switch state.DBCreds.Host {
+		case "localhost":
 			state.DBCreds.Host = "127.0.0.1"
-		} else if state.DBCreds.Host == "127.0.0.1" {
+		case "127.0.0.1":
 			state.DBCreds.Host = "localhost"
 		}
 
@@ -643,8 +650,8 @@ func installMySQL(
 	}
 
 	fmt.Println("Starting MySQL server ...")
-	switch {
-	case state.OSInfo.Distribution == packagemanager.DistributionWindows:
+	switch state.OSInfo.Distribution {
+	case packagemanager.DistributionWindows:
 		var errNotFound *service.NotFoundError
 		err = service.Start(ctx, "mysql")
 		if err != nil && errors.As(err, &errNotFound) {
@@ -689,9 +696,10 @@ func installMySQL(
 	state, err = checkMySQLConnection(ctx, state)
 	if err != nil {
 		log.Println(err)
-		if state.DBCreds.Host == "localhost" {
+		switch state.DBCreds.Host {
+		case "localhost":
 			state.DBCreds.Host = "127.0.0.1"
-		} else if state.DBCreds.Host == "127.0.0.1" {
+		case "127.0.0.1":
 			state.DBCreds.Host = "localhost"
 		}
 		state, err = checkMySQLConnection(ctx, state)

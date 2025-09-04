@@ -13,26 +13,28 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### Windows
 
-| Version     | Supported | Notes                                   |
-|-------------|-----------|-----------------------------------------|
-| Server 2022 | ✔         | Latest manual test (v0.9.1): 02.03.2024 |
-| Server 2019 | ✔         | Latest manual test (v0.9.3): 02.03.2024 |
-| Server 2016 | ✔         | Latest manual test (v0.9.3): 10.03.2024 |
+| Version     | Supported | Notes                                    |
+|-------------|-----------|------------------------------------------|
+| Server 2022 | ✔         | Latest manual test (v0.9.1): 02.03.2024  |
+| Server 2019 | ✔         | Latest manual test (v0.9.3): 02.03.2024  |
+| Server 2016 | ✔         | Latest manual test (v0.9.3): 10.03.2024  |
+| 10          | ✔         | Latest manual test (v0.10.0): 26.05.2024 |
 
 ### Debian
 
-| Version       | Supported | Notes                                   |
-|---------------|-----------|-----------------------------------------|
-| 12 (bookworm) | ✔         | Latest manual test (v0.4.1): 12.11.2023 |
-| 11 (bullseye) | ✔         | Latest manual test (v0.4.3): 13.11.2023 |
-| 10 (buster)   | ✔         |                                         |
-| 9 (stretch)   | ✔         |                                         | 
+| Version       | Supported | Notes                                    |
+|---------------|-----------|------------------------------------------|
+| 13 (trixie)   | ✔         |                                          |
+| 12 (bookworm) | ✔         | Latest manual test (v0.4.1): 12.11.2023  |
+| 11 (bullseye) | ✔         | Latest manual test (v0.4.3): 13.11.2023  |
+| 10 (buster)   | ✔         | Latest manual test (v0.10.0): 25.05.2024 |
+| 9 (stretch)   | ✔         |                                          | 
 
 ### Ubuntu
 
 | Version | Supported | Notes                                                              |
 |---------|-----------|--------------------------------------------------------------------|
-| 24.04   | ✔         |                                                                    |
+| 24.04   | ✔         | Latest manual test (v0.10.0): 15.05.2024                           |
 | 22.04   | ✔         | Latest manual test (v0.4.1): 12.11.2023                            |
 | 20.04   | ✔         | Latest manual test (v0.5.1): 16.11.2023                            |
 | 18.04   | ✔         | Latest manual test (v0.5.0): 16.11.2023, used chrooted php package |
@@ -57,3 +59,9 @@ Other operating systems may work as well, if they can run the required dependenc
 | Version | Supported | Notes                                                                                                                                      |
 |---------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | 2023    | ⚠️        | Latest manual test (v0.7.1): 12.02.2024<br/>Web part tested with SQLite Database<br/>Amazon Linux 2023 no longer ships any i686 user space |
+
+### Rocky Linux
+
+| Version | Supported | Notes                                                                                                                                    |
+|---------|-----------|------------------------------------------------------------------------------------------------------------------------------------------|
+| 9.3     | ⚠️        | Latest manual test (v0.10.0): 15.05.2024<br/>Web part tested with MySQL Database<br/>Rocky Linux 9.3 no longer ships any i686 user space |
