@@ -410,7 +410,7 @@ func (e *extendedAPT) installAPTRepositoriesDependencies(ctx context.Context) er
 	return nil
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 	var versionAvailable string
 	log.Println("Searching for PHP packages...")

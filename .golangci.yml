@@ -35,7 +35,6 @@ linters:
     - nilerr
     - nilnil
     - nlreturn
-    - noctx
     - nolintlint
     - prealloc
     - predeclared
@@ -60,6 +59,14 @@ linters:
         - "0666"
         - "0755"
         - "2"
+    goconst:
+      ignore-string-values:
+        - "localhost"
+        - "windows"
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
   exclusions:
     generated: lax
     presets:

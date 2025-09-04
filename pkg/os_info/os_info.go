@@ -151,7 +151,7 @@ type distInfo struct {
 	VersionCodename string
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func detectLinuxDist() (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"

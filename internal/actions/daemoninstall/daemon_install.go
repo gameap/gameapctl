@@ -583,6 +583,9 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to convert node id to int")
 	}
+	if nodeID < 0 {
+		return state, errors.New("node id cannot be negative")
+	}
 
 	state.NodeID = uint(nodeID)
 	state.APIKey = string(statusParts[2])

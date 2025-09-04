@@ -222,7 +222,6 @@ func checkPortAvailability(ctx context.Context, state panelInstallState) (panelI
 
 //nolint:funlen
 func checkHTTPHostAvailability(ctx context.Context, state panelInstallState) (panelInstallState, error) {
-	//nolint:goconst
 	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") {
 		return state, nil
 	}
