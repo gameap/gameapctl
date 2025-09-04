@@ -642,7 +642,8 @@ func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 	err = utils.WriteContentsToFile(
 		[]byte(
 			fmt.Sprintf(
-				"deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian/ %s nginx",
+				"deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/%s/ %s nginx",
+				osInfo.Distribution,
 				osInfo.DistributionCodename,
 			),
 		),
