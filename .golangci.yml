@@ -62,6 +62,7 @@ linters:
     goconst:
       ignore-string-values:
         - "localhost"
+        - "127.0.0.1"
         - "windows"
     revive:
       rules:
