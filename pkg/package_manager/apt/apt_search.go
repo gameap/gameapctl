@@ -120,7 +120,7 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 		var r io.Reader
 
 		if strings.HasSuffix(packagesFile, ".lz4") {
-			r = lz4.NewReader(f)
+			r = lz4.NewReader(f) //nolint:all
 		} else {
 			r = f
 		}

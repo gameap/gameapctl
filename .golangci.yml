@@ -1,3 +1,4 @@
+version: "2"
 linters:
   enable:
     - asciicheck
@@ -7,9 +8,8 @@ linters:
     - dogsled
     - dupl
     - dupword
-    - errcheck
+    - err113
     - errname
-    - exportloopref
     - forcetypeassert
     - funlen
     - gocheckcompilerdirectives
@@ -20,21 +20,15 @@ linters:
     - gocyclo
     - godot
     - godox
-    - err113
-    - gofmt
-    - goimports
-    - mnd
     - gomodguard
     - goprintffuncname
     - gosec
-    - gosimple
-    - govet
-    - ineffassign
     - ireturn
     - lll
     - makezero
     - mirror
     - misspell
+    - mnd
     - musttag
     - nakedret
     - nestif
@@ -51,40 +45,55 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagalign
     - tagliatelle
-    - tenv
     - thelper
-    - typecheck
     - unconvert
     - unparam
-    - unused
     - usestdlibvars
     - whitespace
-issues:
-  exclude-rules:
-    - path: test
-      linters:
-        - funlen
-        - lll
-        - dupl
-        - gosec
-        - scopelint
-    - path: internal/app/di
-      linters:
-        - govet
-    - path: internal/app/di/internal/definitions
-      linters:
-        - funlen
-        - revive
-        - stylecheck
-
-linters-settings:
-  mnd:
-    ignored-numbers:
-      - '0600'
-      - '0644'
-      - '0666'
-      - '0755'
-      - '2'
+  settings:
+    mnd:
+      ignored-numbers:
+        - "0600"
+        - "0644"
+        - "0666"
+        - "0755"
+        - "2"
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - funlen
+          - gosec
+          - lll
+          - scopelint
+        path: test
+      - linters:
+          - govet
+        path: internal/app/di
+      - linters:
+          - funlen
+          - revive
+          - staticcheck
+        path: internal/app/di/internal/definitions
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
