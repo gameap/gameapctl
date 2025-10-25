@@ -512,6 +512,11 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	fw, _ = w.CreateFormField("script_send_command")
 	_, _ = fw.Write([]byte("server-command {id} {command}"))
 
+	err = w.Close()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to close multipart writer")
+	}
+
 	client := http.Client{
 		Timeout: 30 * time.Second, //nolint:mnd
 	}
