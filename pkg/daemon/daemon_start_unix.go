@@ -171,8 +171,15 @@ func startDaemonFork(ctx context.Context) error {
 	}
 	log.Println("Found", exePath)
 
+	if _, err := os.Stat(gameap.DefaultWorkPath); errors.Is(err, fs.ErrNotExist) {
+		err := os.Mkdir(gameap.DefaultWorkPath, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create work path")
+		}
+	}
+
 	attr := os.ProcAttr{
-		Dir:   "/srv/gameap",
+		Dir:   gameap.DefaultWorkPath,
 		Env:   os.Environ(),
 		Sys:   &syscall.SysProcAttr{Noctty: true},
 		Files: []*os.File{os.Stdin, nil, nil},
@@ -182,7 +189,7 @@ func startDaemonFork(ctx context.Context) error {
 		log.Println(errors.WithMessage(err, "failed to start process"))
 
 		attr = os.ProcAttr{
-			Dir:   "/srv/gameap",
+			Dir:   gameap.DefaultWorkPath,
 			Env:   os.Environ(),
 			Files: []*os.File{os.Stdin, nil, nil},
 		}
