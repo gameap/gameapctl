@@ -12,14 +12,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
-	"github.com/gameap/gameapctl/internal/actions/daemonrestart"
-	"github.com/gameap/gameapctl/internal/actions/daemonstart"
-	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
-	"github.com/gameap/gameapctl/internal/actions/daemonstop"
-	"github.com/gameap/gameapctl/internal/actions/daemonupdate"
-	"github.com/gameap/gameapctl/internal/actions/panelinstall"
-	"github.com/gameap/gameapctl/internal/actions/panelupdate"
+	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
+	daemonrestart "github.com/gameap/gameapctl/internal/actions/daemon/restart"
+	daemonstart "github.com/gameap/gameapctl/internal/actions/daemon/start"
+	daemonstatus "github.com/gameap/gameapctl/internal/actions/daemon/status"
+	daemonstop "github.com/gameap/gameapctl/internal/actions/daemon/stop"
+	daemonupdate "github.com/gameap/gameapctl/internal/actions/daemon/update"
+	panelinstall "github.com/gameap/gameapctl/internal/actions/panel/install"
+	panelrestart "github.com/gameap/gameapctl/internal/actions/panel/restart"
+	panelstart "github.com/gameap/gameapctl/internal/actions/panel/start"
+	panelstatus "github.com/gameap/gameapctl/internal/actions/panel/status"
+	panelstop "github.com/gameap/gameapctl/internal/actions/panel/stop"
+	panelupdate "github.com/gameap/gameapctl/internal/actions/panel/update"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
 	"github.com/gameap/gameapctl/internal/actions/ui"
@@ -195,6 +199,11 @@ func Run(args []string) {
 								Name:  "develop",
 								Usage: "Install develop version of panel.",
 							},
+							&cli.StringFlag{
+								Name:  "version",
+								Usage: "Install specific version of panel (3 for PHP, 4 for Go)",
+								Value: "3",
+							},
 							&cli.BoolFlag{
 								Name:  "github",
 								Usage: "Install gameap from GitHub.",
@@ -228,6 +237,26 @@ func Run(args []string) {
 								Usage: "Daemon will be also installed with panel. ",
 							},
 						},
+					},
+					{
+						Name:   "start",
+						Usage:  "Start GameAP",
+						Action: panelstart.Handle,
+					},
+					{
+						Name:   "stop",
+						Usage:  "Stop GameAP",
+						Action: panelstop.Handle,
+					},
+					{
+						Name:   "restart",
+						Usage:  "Restart GameAP",
+						Action: panelrestart.Handle,
+					},
+					{
+						Name:   "status",
+						Usage:  "GameAP Status",
+						Action: panelstatus.Handle,
 					},
 					{
 						Name:    "upgrade",

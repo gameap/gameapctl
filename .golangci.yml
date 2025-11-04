@@ -6,7 +6,7 @@ linters:
     - containedctx
     - decorder
     - dogsled
-    - dupl
+    #- dupl
     - dupword
     - err113
     - errname

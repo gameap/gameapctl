@@ -9,20 +9,22 @@ import (
 	"log"
 	"os"
 
+	"github.com/gameap/gameapctl/pkg/oscore"
+	"github.com/gameap/gameapctl/pkg/runhelper"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/pkg/errors"
 )
 
 func Restart(ctx context.Context) error {
-	init, err := detectInit(ctx)
+	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
 	}
 
 	switch init {
-	case initSystemd:
+	case runhelper.InitSystemd:
 		err = restartDaemonSystemd(ctx)
-	case initUnknown:
+	case runhelper.InitUnknown:
 		err = restartDaemonProcess(ctx)
 	}
 
@@ -55,7 +57,7 @@ func restartDaemonProcess(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to find daemon process")
 	}
 	if p != nil {
-		err := terminateAndKillProcess(ctx, p)
+		err := oscore.TerminateAndKillProcess(ctx, p)
 		if err != nil {
 			return errors.WithMessage(err, "failed to terminate/kill daemon process")
 		}

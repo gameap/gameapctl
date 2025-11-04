@@ -1,14 +1,15 @@
-package utils
+package oscore
 
 import (
 	"bytes"
+	"context"
 	"log"
 	"os/exec"
 )
 
-// Deprecated: use oscore.ExecCommand
-func ExecCommand(command string, args ...string) error {
-	cmd := exec.Command(command, args...)
+func ExecCommand(ctx context.Context, command string, args ...string) error {
+	cmd := exec.CommandContext(ctx, command, args...)
+
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 	log.Println('\n', cmd.String())
@@ -16,9 +17,9 @@ func ExecCommand(command string, args ...string) error {
 	return cmd.Run()
 }
 
-// Deprecated: use oscore.ExecCommandWithOutput
-func ExecCommandWithOutput(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
+func ExecCommandWithOutput(ctx context.Context, command string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, command, args...)
+
 	buf := &bytes.Buffer{}
 	buf.Grow(1024) //nolint:mnd
 	cmd.Stdout = buf

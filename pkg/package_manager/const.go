@@ -4,6 +4,7 @@ import osinfo "github.com/gameap/gameapctl/pkg/os_info"
 
 const ApachePackage = "apache2"
 const ComposerPackage = "composer"
+const CACertificatesPackage = "ca-certificates"
 const CurlPackage = "curl"
 const GitPackage = "git"
 const GnuPGPackage = "gnupg"

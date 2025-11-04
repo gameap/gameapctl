@@ -1,7 +1,4 @@
-//go:build linux || darwin
-// +build linux darwin
-
-package daemon
+package panel
 
 import (
 	"context"
@@ -30,54 +27,54 @@ func Stop(ctx context.Context) error {
 	case runhelper.InitSystemd:
 		err = stopDaemonSystemd(ctx)
 	case runhelper.InitUnknown:
-		err = stopDaemonProcess(ctx)
+		err = stopProcess(ctx)
 	}
 
 	if err != nil {
-		return errors.WithMessage(err, "failed to stop daemon")
+		return errors.WithMessage(err, "failed to stop gameap")
 	}
 
 	return nil
 }
 
 func stopDaemonSystemd(ctx context.Context) error {
-	_, err := os.Stat(daemonSystemdConfigPath)
+	_, err := os.Stat(systemdConfigPath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return errors.WithMessagef(
-			err,
-			"daemon service configuration file %s not found",
-			daemonSystemdConfigPath,
+			ErrGameAPNotInstalled,
+			"gameap systemd configuration file %s not found",
+			systemdConfigPath,
 		)
 	}
 	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap-daemon service configuration")
+		return errors.WithMessage(err, "failed to stat gameap service configuration")
 	}
 
-	err = service.Stop(ctx, "gameap-daemon")
+	err = service.Stop(ctx, "gameap")
 	if err != nil {
-		return errors.WithMessage(err, "failed to stop gameap-daemon")
+		return errors.WithMessage(err, "failed to stop gameap")
 	}
 
 	return nil
 }
 
-func stopDaemonProcess(ctx context.Context) error {
-	p, err := FindProcess(ctx)
+func stopProcess(ctx context.Context) error {
+	p, err := oscore.FindProcessByName(ctx, processName)
 	if err != nil {
-		return errors.WithMessage(err, "failed to find daemon process")
+		return errors.WithMessage(err, "failed to find gameap process")
 	}
 	if p == nil {
-		return errors.New("daemon process not found")
+		return errors.New("gameap process not found")
 	}
 
-	log.Printf("Found daemon process with pid %d \n", p.Pid)
+	log.Printf("Found gameap process with pid %d \n", p.Pid)
 
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTerminateWaitTimeout)
 	defer cancel()
 
 	err = oscore.TerminateAndKillProcess(ctxWithTimeout, p)
 	if err != nil {
-		return errors.WithMessage(err, "failed to terminate/kill daemon process")
+		return errors.WithMessage(err, "failed to terminate/kill gameap process")
 	}
 
 	return nil
