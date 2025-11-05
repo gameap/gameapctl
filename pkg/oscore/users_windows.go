@@ -46,29 +46,24 @@ func CreateUser(
 	// Create user with net user command
 	args := []string{"user", username}
 
+	// Add password
 	if options.password != "" {
 		args = append(args, options.password)
 	} else {
 		args = append(args, "*")
 	}
 
-	args = append(args, "/add")
+	// Set home directory if specified
+	if options.workDir != "" {
+		args = append(args, "/HOMEDIR:"+options.workDir)
+	}
 
-	// Add full name comment if specified
-	args = append(args, "/fullname:"+username)
+	// Add flags
+	args = append(args, "/ADD", "/Y")
 
 	err = ExecCommand(ctx, "net", args...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create user")
-	}
-
-	// Set user directory if specified (requires additional wmi or registry manipulation)
-	// Windows home directory is typically set automatically by the system
-	if options.workDir != "" { //nolint:staticcheck
-		// Note: Setting custom home directory on Windows requires additional
-		// WMI or registry manipulation, which is not trivially done via net command
-		// This would require using Windows API or PowerShell
-		// For now, we'll skip this or could implement via PowerShell
 	}
 
 	return nil
