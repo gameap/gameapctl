@@ -190,6 +190,7 @@ var repository = map[string]pack{
 			ID:               "GameAP",
 			Name:             "GameAP",
 			Executable:       "gameap",
+			Arguments:        "--env C:\\gameap\\web\\config.env",
 			WorkingDirectory: "C:\\gameap\\web",
 			OnFailure: []onFailure{
 				{Action: "restart", Delay: "1 sec"},

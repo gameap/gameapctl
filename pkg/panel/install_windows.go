@@ -13,7 +13,7 @@ func install(ctx context.Context, _ InstallConfig) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	err = pm.Install(ctx, packagemanager.GameAPDaemon)
+	err = pm.Install(ctx, packagemanager.GameAP)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install gameap")
 	}
