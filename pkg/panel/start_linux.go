@@ -167,6 +167,7 @@ func startFork(ctx context.Context) error {
 		state, waitErr := p.Wait()
 		if waitErr != nil {
 			log.Printf("Error waiting for process (pid %d): %v\n", p.Pid, waitErr)
+
 			return
 		}
 		log.Printf("Process (pid %d) exited with status: %s\n", p.Pid, state.String())
