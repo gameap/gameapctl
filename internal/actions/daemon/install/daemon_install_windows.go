@@ -16,6 +16,8 @@ const (
 	defaultUserName = "gameap"
 )
 
+const passwordLength = 24
+
 func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	userName := defaultUserName
 	var errUnknownUser user.UnknownUserError
@@ -26,7 +28,7 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 		return state, errors.WithMessage(err, "failed to lookup user")
 	}
 
-	password, err := utils.CryptoRandomString(24)
+	password, err := utils.CryptoRandomString(passwordLength)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to generate password")
 	}

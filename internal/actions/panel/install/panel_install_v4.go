@@ -69,7 +69,7 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	return state, nil
 }
 
-//nolint:funlen,gocognit,gocyclo
+//nolint:gocognit,gocyclo,funlen
 func HandleV4(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
@@ -408,7 +408,7 @@ func installMySQLOrMariaDBV4(
 	return state, nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit
 func installMariaDBV4(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -503,7 +503,7 @@ func installMariaDBV4(
 	return state, err
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func installMySQLV4(
 	ctx context.Context,
 	pm packagemanager.PackageManager,

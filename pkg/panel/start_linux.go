@@ -67,8 +67,10 @@ func readEnvFromFile(configPath string) ([]string, error) {
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			log.Println("Config file not found, using system environment only")
+
 			return envVars, nil
 		}
+
 		return nil, errors.WithMessage(err, "failed to open config file")
 	}
 	defer func(file *os.File) {

@@ -15,7 +15,6 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-//nolint:funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 

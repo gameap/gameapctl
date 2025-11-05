@@ -102,7 +102,6 @@ func isChrootPHPAvailable() bool {
 
 var bindMu = sync.Mutex{}
 
-//nolint:funlen
 func TryBindPHPDirectories(_ context.Context, source string) error {
 	if runtime.GOOS != "linux" {
 		return nil

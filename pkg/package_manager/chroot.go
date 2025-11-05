@@ -66,7 +66,6 @@ func (ch *chRoot) Install(ctx context.Context, packs ...string) error {
 	return nil
 }
 
-//nolint:funlen
 func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	if _, ok := skipChrootPackages[pack]; ok {
 		return nil

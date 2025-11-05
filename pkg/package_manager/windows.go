@@ -221,7 +221,7 @@ func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) e
 	return nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName string, p pack) error {
 	log.Println("Installing", packName, "package")
 	var err error
@@ -387,7 +387,6 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
 }
 
-//nolint:funlen
 func (pm *WindowsPackageManager) installService(ctx context.Context, packName string, p pack) error {
 	_, err := exec.LookPath(repository[WinSWPackage].LookupPath[0])
 	if err != nil {

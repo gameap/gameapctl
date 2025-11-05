@@ -4,7 +4,6 @@ package oscore
 
 import (
 	"context"
-	"fmt"
 	"os/exec"
 	"os/user"
 
@@ -15,7 +14,7 @@ func CreateGroup(ctx context.Context, groupname string, opts ...CreateGroupOptio
 	// Check if group already exists
 	cmd := exec.CommandContext(ctx, "net", "localgroup", groupname)
 	if err := cmd.Run(); err == nil {
-		return fmt.Errorf("group %s already exists", groupname)
+		return NewGroupAlreadyExistsError(groupname)
 	}
 
 	// Create group with net localgroup command
@@ -35,7 +34,7 @@ func CreateUser(
 	// Check if user already exists
 	_, err := user.Lookup(username)
 	if err == nil {
-		return fmt.Errorf("user %s already exists", username)
+		return NewUserAlreadyExistsError(username)
 	}
 
 	// Create user with net user command
@@ -59,7 +58,7 @@ func CreateUser(
 
 	// Set user directory if specified (requires additional wmi or registry manipulation)
 	// Windows home directory is typically set automatically by the system
-	if options.workDir != "" {
+	if options.workDir != "" { //nolint:staticcheck
 		// Note: Setting custom home directory on Windows requires additional
 		// WMI or registry manipulation, which is not trivially done via net command
 		// This would require using Windows API or PowerShell

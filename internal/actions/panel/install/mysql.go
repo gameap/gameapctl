@@ -15,7 +15,6 @@ import (
 
 // Some mysql helpers
 
-//nolint:funlen
 func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) (*sql.DB, error) {
 	mysqlCfgs := []mysql.Config{
 		{

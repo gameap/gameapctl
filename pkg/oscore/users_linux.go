@@ -18,7 +18,7 @@ func CreateGroup(ctx context.Context, groupname string, opts ...CreateGroupOptio
 	// Check if group already exists
 	err := ExecCommand(ctx, "getent", "group", groupname)
 	if err == nil {
-		return fmt.Errorf("group %s already exists", groupname)
+		return NewGroupAlreadyExistsError(groupname)
 	}
 
 	// Build groupadd arguments
@@ -47,7 +47,7 @@ func CreateUser(
 	// Check if user already exists
 	_, err := user.Lookup(username)
 	if err == nil {
-		return fmt.Errorf("user %s already exists", username)
+		return NewUserAlreadyExistsError(username)
 	}
 
 	// Build useradd arguments

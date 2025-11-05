@@ -50,6 +50,7 @@ type createGroupOptions struct {
 	gid string
 }
 
+//nolint:unused,nolintlint
 func applyCreateGroupOptions(opts ...CreateGroupOption) *createGroupOptions {
 	o := &createGroupOptions{}
 

@@ -84,7 +84,6 @@ func findNextAvailableGID(ctx context.Context) (string, error) {
 	return strconv.Itoa(maxGID + 1), nil
 }
 
-//nolint:funlen
 func CreateUser(
 	ctx context.Context, username string, opts ...CreateUserOption,
 ) error {

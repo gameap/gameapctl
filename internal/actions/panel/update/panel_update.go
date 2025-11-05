@@ -15,7 +15,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 

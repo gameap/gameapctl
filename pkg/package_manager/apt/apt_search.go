@@ -101,8 +101,6 @@ func getRepoFileList() ([]string, error) {
 }
 
 // buildPackagesList: return packages available from a list of repositories.
-//
-//nolint:funlen
 func buildPackagesList(repoList []string) ([]Package, error) {
 	var packageList []Package
 	for _, packagesFile := range repoList {
@@ -120,7 +118,7 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 		var r io.Reader
 
 		if strings.HasSuffix(packagesFile, ".lz4") {
-			r = lz4.NewReader(f) //nolint:all
+			r = lz4.NewReader(f)
 		} else {
 			r = f
 		}

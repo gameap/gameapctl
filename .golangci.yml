@@ -68,6 +68,9 @@ linters:
       rules:
         - name: var-naming
           disabled: true
+    funlen:
+      lines: 100
+      statements: 60
   exclusions:
     generated: lax
     presets:

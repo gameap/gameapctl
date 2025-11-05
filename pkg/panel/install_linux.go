@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Install installs GameAP v4
+// Install installs GameAP v4.
 func install(ctx context.Context, config InstallConfig) error {
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
@@ -62,7 +62,7 @@ func createSystemdUnit(ctx context.Context, config InstallConfig) error {
 	}
 
 	unitPath := filepath.Join(defaultSystemdUnitDir, "gameap.service")
-	if err := os.WriteFile(unitPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(unitPath, buf.Bytes(), 0600); err != nil {
 		return errors.WithMessage(err, "failed to write systemd unit file")
 	}
 

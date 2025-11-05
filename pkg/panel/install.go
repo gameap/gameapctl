@@ -79,8 +79,6 @@ type ConfigEnvData struct {
 }
 
 // Install installs GameAP v4.
-//
-//nolint:funlen
 func Install(ctx context.Context, config InstallConfig) error {
 	// Set defaults if not provided
 	if config.ConfigDirectory == "" {

@@ -17,7 +17,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 	tmpDir, err := os.MkdirTemp("", "gameapctl-send-logs")

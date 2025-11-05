@@ -90,7 +90,7 @@ type databaseCredentials struct {
 	RootPassword string
 }
 
-//nolint:funlen,gocognit,gocyclo
+//nolint:gocognit,gocyclo,funlen
 func HandleV3(cliCtx *cli.Context) error {
 	var err error
 	state := panelInstallStateV3{}
@@ -512,7 +512,7 @@ func installMySQLOrMariaDB(
 	return state, nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit
 func installMariaDB(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -607,7 +607,7 @@ func installMariaDB(
 	return state, err
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func installMySQL(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -1153,7 +1153,6 @@ func installPHPForNginx(
 	return state, nil
 }
 
-//nolint:funlen
 func installApache(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -1220,7 +1219,6 @@ func installApache(
 	return state, nil
 }
 
-//nolint:funlen
 func configureCron(_ context.Context, state panelInstallStateV3) error {
 	fmt.Println("Configuring cron ...")
 

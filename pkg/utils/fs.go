@@ -177,7 +177,7 @@ func findInFileAndReplaceOrAdd(ctx context.Context, path string, replaceMap map[
 	return nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit
 func findLineAndReplaceOrAdd(
 	_ context.Context,
 	r io.Reader,

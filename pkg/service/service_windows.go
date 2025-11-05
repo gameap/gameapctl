@@ -49,6 +49,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
 		log.Println(err)
+
 		return err
 	}
 
@@ -67,6 +68,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		return nil
 	}
 
+	//nolint:nestif
 	if commandExists {
 		var cmd []string
 		cmd, err = shellquote.Split(c.Start)
@@ -179,6 +181,7 @@ func (s *Windows) Status(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
+
 		return NewNotFoundError(serviceName)
 	}
 	if svc == nil {
@@ -196,6 +199,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
+
 		return NewNotFoundError(serviceName)
 	}
 	if svc == nil {
@@ -207,6 +211,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is already running\n", serviceName)
 	case windowsServiceStateStartPending:
 		log.Printf("Service '%s' is starting\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	default:
 		err = utils.ExecCommand("sc", "start", serviceName)
@@ -222,6 +227,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 
 	if svc.State != windowsServiceStateStartPending {
 		log.Printf("Service '%s' is starting\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
@@ -241,6 +247,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is already stopped\n", serviceName)
 	case windowsServiceStateStopPending:
 		log.Printf("Service '%s' is stopping\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
 	}
 	if err != nil {
@@ -254,6 +261,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 
 	if svc.State != windowsServiceStateStartPending {
 		log.Printf("Service '%s' is starting\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
@@ -263,7 +271,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 func (s *Windows) waitStatus(ctx context.Context, serviceName string, status windowsServiceState) error {
 	log.Println("Waiting for service status")
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(5 * time.Second) //nolint:mnd
 	defer func() {
 		t.Stop()
 	}()
@@ -290,7 +298,6 @@ func (s *Windows) waitStatus(ctx context.Context, serviceName string, status win
 			svc.State != windowsServiceStateStopPending &&
 			svc.State != windowsServiceStateContinuePending &&
 			svc.State != windowsServiceStatePausePending {
-
 			return errors.New("failed to wait service status, service state is not pending")
 		}
 
@@ -312,7 +319,7 @@ func IsExists(ctx context.Context, serviceName string) bool {
 func findService(_ context.Context, serviceName string) (*windowsService, error) {
 	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
 	buf := &bytes.Buffer{}
-	buf.Grow(10240)
+	buf.Grow(10240) //nolint:mnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
 
@@ -326,6 +333,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
 		log.Println(buf.String())
+
 		return nil, err
 	}
 
@@ -336,7 +344,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	log.Println("Services: ", strings.Join(serviceNames, ", "))
 
 	for _, winservice := range services {
-		if strings.ToLower(winservice.ServiceName) == strings.ToLower(serviceName) {
+		if strings.EqualFold(winservice.ServiceName, serviceName) {
 			return &winservice, nil
 		}
 	}
@@ -382,6 +390,7 @@ type windowsService struct {
 	Flags         string
 }
 
+//nolint:unparam
 func parseScQueryex(buf []byte) ([]windowsService, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(buf))
 	services := make([]windowsService, 0)

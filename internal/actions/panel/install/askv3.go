@@ -21,7 +21,7 @@ type askedParamsV3 struct {
 	webServer string
 }
 
-//nolint:funlen,gocognit,gocyclo
+//nolint:gocognit,gocyclo,funlen
 func askUserV3(ctx context.Context, state panelInstallStateV3, needToAsk map[string]struct{}) (askedParamsV3, error) {
 	var err error
 	result := askedParamsV3{}

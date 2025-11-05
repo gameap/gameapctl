@@ -3,7 +3,7 @@ package oscore
 import "context"
 
 // ChownRecursiveToUser is a no-op on Windows.
-func ChownRecursiveToUser(_ context.Context, _ string, _ string) error {
+func ChownRecursive(_ context.Context, _ string, _ string, _ string) error {
 	return nil
 }
 

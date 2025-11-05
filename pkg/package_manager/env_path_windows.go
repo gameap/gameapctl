@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+//nolint:gocognit
 func UpdateEnvPath() {
 	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
 	appendPath := make([]string, 0, len(repository)*2)
@@ -37,6 +38,7 @@ func UpdateEnvPath() {
 		appendPath = append(appendPath, p.DefaultInstallPath)
 	}
 
+	//nolint:nestif
 	if utils.IsFileExists(gameap.DefaultToolsPath) {
 		entries, err := os.ReadDir(gameap.DefaultToolsPath)
 		if err != nil {

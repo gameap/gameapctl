@@ -83,7 +83,7 @@ func Handle(cliCtx *cli.Context) error {
 	)
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func Install(ctx context.Context, host, token string) error {
 	fmt.Println("Install daemon")
 
@@ -272,7 +272,7 @@ func installSteamCMD(
 	return state, nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func generateCertificates(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	hostname, err := os.Hostname()
 	if err != nil {

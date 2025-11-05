@@ -9,5 +9,5 @@ const (
 )
 
 const (
-	processName = "gameap.exe"
+	processName = "gameap.exe" //nolint:unused
 )

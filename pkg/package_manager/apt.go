@@ -410,7 +410,7 @@ func (e *extendedAPT) installAPTRepositoriesDependencies(ctx context.Context) er
 	return nil
 }
 
-//nolint:funlen,gocognit
+//nolint:gocognit,funlen
 func (e *extendedAPT) findPHPPackages(ctx context.Context) ([]string, error) {
 	var versionAvailable string
 	log.Println("Searching for PHP packages...")
@@ -582,7 +582,6 @@ func (e *extendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-//nolint:funlen
 func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
 	if utils.IsFileExists(sourcesListNginx) {
 		return nil
