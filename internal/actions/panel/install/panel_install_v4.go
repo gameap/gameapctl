@@ -266,6 +266,16 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to start GameAP")
 	}
 
+	err = waitForPanelHealthCheck(
+		ctx,
+		fmt.Sprintf("http://%s:%s", state.Host, state.Port),
+		30, //nolint:mnd
+		2*time.Second,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to wait for GameAP health check")
+	}
+
 	state, err = updateAdminPasswordv4(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to update admin password")
@@ -696,7 +706,7 @@ func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstall
 	return state, nil
 }
 
-//nolint:gocognit,funlen
+//nolint:funlen
 func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
 
@@ -765,39 +775,18 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 	host := "http://" + state.Host + ":" + state.Port
 
 	// Wait for GameAP panel to be ready using health check
-	client := &http.Client{
-		Timeout: 5 * time.Second, //nolint:mnd
-	}
-
-	healthCheckURL := fmt.Sprintf("%s/health", host)
 	maxRetries := 30
 	retryDelay := 2 * time.Second
 
-	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthCheckURL, nil)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to create health check request")
-		}
-
-		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-
-			break
-		}
-
-		if resp != nil {
-			resp.Body.Close()
-		}
-
-		if i == maxRetries-1 {
-			return state, errors.New("GameAP panel failed to become ready in time")
-		}
-
-		time.Sleep(retryDelay)
+	err = waitForPanelHealthCheck(ctx, host, maxRetries, retryDelay)
+	if err != nil {
+		return state, err
 	}
 
 	// Make HTTP GET request to retrieve createToken
+	client := &http.Client{
+		Timeout: 5 * time.Second, //nolint:mnd
+	}
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
@@ -850,6 +839,40 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 	}
 
 	return state, nil
+}
+
+func waitForPanelHealthCheck(ctx context.Context, host string, maxRetries int, retryDelay time.Duration) error {
+	client := &http.Client{
+		Timeout: 5 * time.Second, //nolint:mnd
+	}
+
+	healthCheckURL := fmt.Sprintf("%s/health", host)
+
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthCheckURL, nil)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create health check request")
+		}
+
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+
+			return nil
+		}
+
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		if i == maxRetries-1 {
+			return errors.New("GameAP panel failed to become ready in time")
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	return nil
 }
 
 func updateAdminPasswordv4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
