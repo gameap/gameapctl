@@ -7,7 +7,7 @@ const DefaultWorkPath = "/srv/gameap"
 
 // GameAP v4.
 
-const DefaultConfigPath = "/etc/gameap/config.env"
+const DefaultConfigFilePath = "/etc/gameap/config.env"
 const DefaultDataPath = "/var/lib/gameap"
 const DefaultBinaryPath = "/usr/bin/gameap"
 

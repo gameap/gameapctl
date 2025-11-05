@@ -160,11 +160,17 @@ func startFork(ctx context.Context) error {
 	}
 
 	log.Println("Process started with pid", p.Pid)
-	log.Println("Releasing process")
-	err = p.Release()
-	if err != nil {
-		return errors.WithMessage(err, "failed to release process")
-	}
+
+	// Start a goroutine to wait for the process and reap it when it terminates
+	// This prevents zombie processes from accumulating
+	go func() {
+		state, waitErr := p.Wait()
+		if waitErr != nil {
+			log.Printf("Error waiting for process (pid %d): %v\n", p.Pid, waitErr)
+			return
+		}
+		log.Printf("Process (pid %d) exited with status: %s\n", p.Pid, state.String())
+	}()
 
 	return nil
 }

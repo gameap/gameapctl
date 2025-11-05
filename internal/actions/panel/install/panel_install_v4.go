@@ -4,12 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
+	"github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
@@ -17,6 +24,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
+	"github.com/sethvargo/go-password/password"
 	"github.com/urfave/cli/v2"
 )
 
@@ -63,8 +71,8 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
 
 	// Set default directories
-	state.ConfigDirectory = "/etc/gameap"
-	state.DataDirectory = "/var/lib/gameap"
+	state.ConfigDirectory = filepath.Dir(gameap.DefaultConfigFilePath)
+	state.DataDirectory = gameap.DefaultDataPath
 
 	return state, nil
 }
@@ -148,8 +156,6 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	_ = pm
-
 	state, err = checkSELinuxV4(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check selinux")
@@ -188,16 +194,7 @@ func HandleV4(cliCtx *cli.Context) error {
 			fmt.Println()
 			fmt.Println("Re-run the installer again to apply updated certificates:")
 
-			if state.OSInfo.IsWindows() {
-				fmt.Printf("gameapctl.exe ")
-			} else {
-				fmt.Printf("gameapctl ")
-			}
-
-			fmt.Printf(
-				"panel install --version 4 --host %s --port %s --database %s\n",
-				state.Host, state.Port, state.Database,
-			)
+			fmt.Println(cmdLineFromPanelInstallStateV4(state))
 
 			return nil
 		}
@@ -251,13 +248,15 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to install gameap")
 	}
 
-	log.Println("GameAP successfully installed")
+	var daemonInstalled bool
 
 	if state.WithDaemon {
 		state, err = daemonInstallV4(ctx, state)
 		if err != nil {
 			fmt.Println("Failed to install daemon: ", err.Error())
 			log.Println(errors.WithMessage(err, "failed to install daemon, try to install it manually"))
+		} else {
+			daemonInstalled = true
 		}
 	}
 
@@ -266,6 +265,22 @@ func HandleV4(cliCtx *cli.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to start GameAP")
 	}
+
+	state, err = updateAdminPasswordv4(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to update admin password")
+	}
+
+	if daemonInstalled {
+		err = daemon.Start(ctx)
+		if err != nil {
+			fmt.Println("Failed to start daemon: ", err.Error())
+			log.Println(errors.WithMessage(err, "failed to start GameAP daemon"))
+		}
+	}
+
+	fmt.Println()
+	log.Println("GameAP successfully installed")
 
 	fmt.Println("---------------------------------")
 	fmt.Println("DONE!")
@@ -681,6 +696,203 @@ func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstall
 	return state, nil
 }
 
-func daemonInstallV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+//nolint:gocognit,funlen
+func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
+
+	configPath := filepath.Join(state.ConfigDirectory, "config.env")
+
+	// Append DAEMON_SETUP_TOKEN to config.env
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to open config.env")
+	}
+
+	tokenLine := fmt.Sprintf("\nDAEMON_SETUP_TOKEN=%s\n", token)
+	_, err = f.WriteString(tokenLine)
+	if err != nil {
+		closeErr := f.Close()
+		if closeErr != nil {
+			log.Println(errors.WithMessage(closeErr, "failed to close config.env after write error"))
+		}
+
+		return state, errors.WithMessage(err, "failed to write DAEMON_SETUP_TOKEN to config.env")
+	}
+	closeErr := f.Close()
+	if closeErr != nil {
+		log.Println(errors.WithMessage(closeErr, "failed to close config.env after write error"))
+	}
+
+	// Remove token from config after daemon installation
+	defer func() {
+		// Read the config file
+		content, err := os.ReadFile(configPath)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to read config.env for cleanup"))
+
+			return
+		}
+
+		// Remove the DAEMON_SETUP_TOKEN line
+		lines := strings.Split(string(content), "\n")
+		var filteredLines []string
+		for _, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), "DAEMON_SETUP_TOKEN=") {
+				filteredLines = append(filteredLines, line)
+			}
+		}
+
+		// Write back without the token line
+		err = os.WriteFile(configPath, []byte(strings.Join(filteredLines, "\n")), 0600)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to remove DAEMON_SETUP_TOKEN from config.env"))
+		}
+	}()
+
+	// Temporary start gameap with DAEMON_SETUP_TOKEN in config.env
+	err = panel.Start(ctx)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to start GameAP")
+	}
+
+	defer func() {
+		err = panel.Stop(ctx)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to stop GameAP"))
+		}
+	}()
+
+	host := "http://" + state.Host + ":" + state.Port
+
+	// Wait for GameAP panel to be ready using health check
+	client := &http.Client{
+		Timeout: 5 * time.Second, //nolint:mnd
+	}
+
+	healthCheckURL := fmt.Sprintf("%s/health", host)
+	maxRetries := 30
+	retryDelay := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthCheckURL, nil)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to create health check request")
+		}
+
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+
+			break
+		}
+
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		if i == maxRetries-1 {
+			return state, errors.New("GameAP panel failed to become ready in time")
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	// Make HTTP GET request to retrieve createToken
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("%s/gdaemon/setup/%s", host, token),
+		nil,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to create HTTP request for daemon setup")
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to get daemon setup token")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return state, errors.New("failed to get daemon setup: non-200 status code")
+	}
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to read daemon setup response")
+	}
+
+	// Parse createToken from response
+	createToken := ""
+	split := strings.Split(string(body), ";")
+	for _, s := range split {
+		switch {
+		case strings.HasPrefix(s, "export createToken="):
+			createToken = strings.TrimPrefix(s, "export createToken=")
+		case strings.HasPrefix(s, "export CREATE_TOKEN="):
+			createToken = strings.TrimPrefix(s, "export CREATE_TOKEN=")
+		}
+	}
+
+	if createToken == "" {
+		return state, errors.New("failed to extract create token from daemon setup response")
+	}
+
+	err = daemoninstall.Install(
+		ctx,
+		host,
+		createToken,
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install daemon")
+	}
+
 	return state, nil
+}
+
+func updateAdminPasswordv4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	var err error
+	if state.AdminPassword == "" {
+		fmt.Println("Generating admin password ...")
+
+		state.AdminPassword, err = password.Generate(
+			defaultPasswordLen, defaultPasswordNumDigits, 0, false, false,
+		)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to generate password")
+		}
+	}
+
+	err = changepassword.ChangePassword(ctx, "admin", state.AdminPassword)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to change admin password")
+	}
+
+	return state, nil
+}
+
+func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
+	sb := strings.Builder{}
+	sb.Grow(128) //nolint:mnd
+
+	if state.OSInfo.IsWindows() {
+		sb.WriteString("gameapctl.exe ")
+	} else {
+		sb.WriteString("gameapctl ")
+	}
+
+	sb.WriteString("panel install --version=4 --host=")
+	sb.WriteString(state.Host)
+	sb.WriteString(" --port=")
+	sb.WriteString(state.Port)
+	sb.WriteString(" --database=")
+	sb.WriteString(state.Database)
+
+	if state.WithDaemon {
+		sb.WriteString(" --with-daemon")
+	}
+
+	return sb.String()
 }

@@ -526,13 +526,22 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.WithMessage(err, "failed to create daemon create url")
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u, &b)
+	// Read the buffer into a byte slice so we can create multiple readers
+	bodyBytes := b.Bytes()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create daemon create request")
 	}
 	request.Header.Set("Content-Type", w.FormDataContentType())
+	// Set GetBody to allow the body to be read multiple times (for retries and debugging)
+	request.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+	}
 
 	requestClone := request.Clone(ctx)
+	// Explicitly set the clone's body to a fresh reader to ensure it's not consumed
+	requestClone.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	//nolint:bodyclose
 	response, err := client.Do(request)
@@ -620,7 +629,7 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 func dumpRequestAndResponse(req *http.Request, res *http.Response) {
 	dumpRequest, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
-		log.Println(err)
+		log.Println(errors.WithMessage(err, "failed to dump request"))
 	} else {
 		log.Println("Request:\n", string(dumpRequest))
 	}

@@ -124,7 +124,7 @@ func warningAskForActionV4(
 			return true, "", nil
 		}
 
-		return false, "Please answer y or n.", nil
+		return false, "Please answer y or n.", nil //nolint:goconst,nolintlint
 	})
 
 	return err

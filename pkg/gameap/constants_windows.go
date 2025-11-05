@@ -7,7 +7,7 @@ const DefaultWorkPath = "C:\\gameap"
 
 // GameAP v4.
 
-const DefaultConfigPath = "C:\\gameap\\web\\config.env"
+const DefaultConfigFilePath = "C:\\gameap\\web\\config.env"
 const DefaultDataPath = "C:\\gameap\\web"
 const DefaultBinaryPath = "C:\\gameap\\web\\gameap.exe"
 

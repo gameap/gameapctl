@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gameap/gameapctl/internal/actions/daemon/install"
+	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/internal/pkg/panel"
@@ -1299,7 +1299,7 @@ func daemonInstall(ctx context.Context, state panelInstallStateV3) (panelInstall
 
 	host := "http://" + state.Host + ":" + state.Port
 
-	err = install.Install(
+	err = daemoninstall.Install(
 		ctx,
 		host,
 		token,

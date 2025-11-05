@@ -18,6 +18,7 @@ import (
 	daemonstatus "github.com/gameap/gameapctl/internal/actions/daemon/status"
 	daemonstop "github.com/gameap/gameapctl/internal/actions/daemon/stop"
 	daemonupdate "github.com/gameap/gameapctl/internal/actions/daemon/update"
+	panelchangepassword "github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	panelinstall "github.com/gameap/gameapctl/internal/actions/panel/install"
 	panelrestart "github.com/gameap/gameapctl/internal/actions/panel/restart"
 	panelstart "github.com/gameap/gameapctl/internal/actions/panel/start"
@@ -268,6 +269,13 @@ func Run(args []string) {
 							return nil
 						},
 						Action: panelupdate.Handle,
+					},
+					{
+						Name:        "change-password",
+						Usage:       "Change user password",
+						Description: "Change password for a user in GameAP v4 database",
+						Action:      panelchangepassword.Handle,
+						ArgsUsage:   "<username> [password]",
 					},
 				},
 			},

@@ -145,11 +145,21 @@ func Install(ctx context.Context, config InstallConfig) error {
 	fmt.Println("Creating GameAP user and group ...")
 
 	if err := oscore.CreateGroup(ctx, config.Group); err != nil {
-		return errors.WithMessage(err, "failed to create group")
+		var existsErr *oscore.GroupAlreadyExistsError
+		if !errors.As(err, &existsErr) {
+			return errors.WithMessage(err, "failed to create group")
+		}
+
+		fmt.Println("Group already exists")
 	}
 
 	if err := oscore.CreateUser(ctx, config.User, oscore.WithWorkDir(config.DataDirectory)); err != nil {
-		return errors.WithMessage(err, "failed to create user")
+		var existsErr *oscore.UserAlreadyExistsError
+		if !errors.As(err, &existsErr) {
+			return errors.WithMessage(err, "failed to create user")
+		}
+
+		fmt.Println("User already exists")
 	}
 
 	// Create directories
@@ -160,7 +170,7 @@ func Install(ctx context.Context, config InstallConfig) error {
 
 	// Create config.env file
 	fmt.Println("Creating configuration file ...")
-	if err := createConfigEnv(config); err != nil {
+	if err := createConfigEnv(ctx, config); err != nil {
 		return errors.WithMessage(err, "failed to create config.env")
 	}
 
@@ -174,7 +184,7 @@ func Install(ctx context.Context, config InstallConfig) error {
 }
 
 // createConfigEnv creates the config.env file.
-func createConfigEnv(config InstallConfig) error {
+func createConfigEnv(ctx context.Context, config InstallConfig) error {
 	tmpl, err := template.New("config.env").Parse(configEnvTemplate)
 	if err != nil {
 		return errors.WithMessage(err, "failed to parse config.env template")
@@ -205,10 +215,9 @@ func createConfigEnv(config InstallConfig) error {
 		return errors.WithMessage(err, "failed to write config.env file")
 	}
 
-	//// Set ownership
-	// if err := utils.ExecCommand("chown", fmt.Sprintf("%s:%s", config.User, config.Group), configPath); err != nil {
-	//	return errors.WithMessage(err, "failed to set ownership for config.env")
-	//}
+	if err := oscore.ChownRecursive(ctx, configPath, config.User, config.Group); err != nil {
+		return errors.WithMessage(err, "failed to set ownership for config.env")
+	}
 
 	return nil
 }
