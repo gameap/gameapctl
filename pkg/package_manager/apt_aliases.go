@@ -8,7 +8,8 @@ var aptPackageAliases = distVersionPackagesMap{
 	DistributionDefault: {
 		CodeNameDefault: {
 			ArchDefault: {
-				Lib32GCCPackage: {},
+				Lib32GCCPackage:   {},
+				PostgreSQLPackage: {"postgresql", "postgresql-contrib"},
 			},
 		},
 	},

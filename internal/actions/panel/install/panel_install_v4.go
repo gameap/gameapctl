@@ -226,10 +226,10 @@ func HandleV4(cliCtx *cli.Context) error {
 
 	switch state.Database {
 	case postgresDatabase:
-		// state, err = installPostgreSQL(ctx, pm, state)
-		// if err != nil {
-		//     return err
-		// }
+		state, err = installPostgreSQL(ctx, pm, state)
+		if err != nil {
+			return err
+		}
 	case mysqlDatabase:
 		state, err = installMySQLOrMariaDBV4(ctx, pm, state)
 		if err != nil {
@@ -702,6 +702,19 @@ func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstall
 
 	state.DBCreds.DatabaseName = dbPath
 	state.DatabaseWasInstalled = true
+
+	return state, nil
+}
+
+func installPostgreSQL(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallStateV4,
+) (panelInstallStateV4, error) {
+	err := pm.Install(ctx, packagemanager.PostgreSQLPackage)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to install PostgreSQL")
+	}
 
 	return state, nil
 }

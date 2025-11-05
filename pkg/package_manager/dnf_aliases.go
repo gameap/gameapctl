@@ -16,6 +16,7 @@ var dnfPackageAliases = distVersionPackagesMap{
 					"php-readline", "php-session", "php-sockets", "php-tokenizer",
 					"php-xml", "php-zip",
 				},
+				PostgreSQLPackage: {"postgresql-server", "postgresql-contrib"},
 			},
 		},
 	},
