@@ -24,7 +24,7 @@ const (
 	randomAuthKeyLength = 32
 )
 
-// InstallConfig represents the configuration for GameAP v4 installation
+// InstallConfig represents the configuration for GameAP v4 installation.
 type InstallConfig struct {
 	// Config paths
 	ConfigDirectory string
@@ -62,7 +62,7 @@ type InstallConfig struct {
 	GlobalAPIURL string
 }
 
-// ConfigEnvData represents the data for config.env template
+// ConfigEnvData represents the data for config.env template.
 type ConfigEnvData struct {
 	HTTPHost           string
 	HTTPPort           string
@@ -78,7 +78,9 @@ type ConfigEnvData struct {
 	GlobalAPIURL       string
 }
 
-// Install installs GameAP v4
+// Install installs GameAP v4.
+//
+//nolint:funlen
 func Install(ctx context.Context, config InstallConfig) error {
 	// Set defaults if not provided
 	if config.ConfigDirectory == "" {
@@ -173,7 +175,7 @@ func Install(ctx context.Context, config InstallConfig) error {
 	return install(ctx, config)
 }
 
-// createConfigEnv creates the config.env file
+// createConfigEnv creates the config.env file.
 func createConfigEnv(config InstallConfig) error {
 	tmpl, err := template.New("config.env").Parse(configEnvTemplate)
 	if err != nil {
@@ -201,19 +203,19 @@ func createConfigEnv(config InstallConfig) error {
 	}
 
 	configPath := filepath.Join(config.ConfigDirectory, "config.env")
-	if err := os.WriteFile(configPath, buf.Bytes(), 0640); err != nil {
+	if err := os.WriteFile(configPath, buf.Bytes(), 0600); err != nil {
 		return errors.WithMessage(err, "failed to write config.env file")
 	}
 
 	//// Set ownership
-	//if err := utils.ExecCommand("chown", fmt.Sprintf("%s:%s", config.User, config.Group), configPath); err != nil {
+	// if err := utils.ExecCommand("chown", fmt.Sprintf("%s:%s", config.User, config.Group), configPath); err != nil {
 	//	return errors.WithMessage(err, "failed to set ownership for config.env")
 	//}
 
 	return nil
 }
 
-// createDirectories creates all necessary directories for GameAP v4
+// createDirectories creates all necessary directories for GameAP v4.
 func createDirectories(ctx context.Context, config InstallConfig) error {
 	directories := []string{
 		config.ConfigDirectory,

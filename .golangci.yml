@@ -77,6 +77,9 @@ linters:
       - std-error-handling
     rules:
       - linters:
+          - staticcheck
+        text: "SA1019"  # Disable deprecated warnings
+      - linters:
           - dupl
           - funlen
           - gosec

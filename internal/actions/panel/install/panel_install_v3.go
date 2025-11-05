@@ -496,8 +496,7 @@ func installMySQLOrMariaDB(
 			}
 		}
 
-		//nolint:goconst
-		if state.OSInfo.OS == "GNU/Linux" && !state.DatabaseDirExistedBefore && utils.IsFileExists("/var/lib/mysql") {
+		if state.OSInfo.IsLinux() && !state.DatabaseDirExistedBefore && utils.IsFileExists("/var/lib/mysql") {
 			err := os.RemoveAll("/var/lib/mysql")
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to remove MySQL data directory")
@@ -534,7 +533,7 @@ func installMariaDB(
 			}
 
 			state.DatabaseDirExistedBefore = true
-			if state.OSInfo.OS == "GNU/Linux" {
+			if state.OSInfo.IsLinux() {
 				_, err := os.Stat("/var/lib/mysql")
 				if err != nil && os.IsNotExist(err) {
 					state.DatabaseDirExistedBefore = false
@@ -629,7 +628,7 @@ func installMySQL(
 			}
 
 			state.DatabaseDirExistedBefore = true
-			if state.OSInfo.OS == "GNU/Linux" {
+			if state.OSInfo.IsLinux() {
 				_, err := os.Stat("/var/lib/mysql")
 				if err != nil && os.IsNotExist(err) {
 					state.DatabaseDirExistedBefore = false

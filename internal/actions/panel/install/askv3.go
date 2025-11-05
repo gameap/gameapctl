@@ -212,6 +212,7 @@ func warning(ctx context.Context, state panelInstallStateV3, text string) error 
 			return true, "", errors.New("installation aborted by user")
 		}
 
+		//nolint:goconst
 		return false, "Please answer y or n.", nil
 	})
 

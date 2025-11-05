@@ -6,7 +6,7 @@ import (
 	"os/exec"
 )
 
-// Deprecated: use oscore.ExecCommand
+// Deprecated: use oscore.ExecCommand.
 func ExecCommand(command string, args ...string) error {
 	cmd := exec.Command(command, args...)
 	cmd.Stdout = log.Writer()
@@ -16,7 +16,7 @@ func ExecCommand(command string, args ...string) error {
 	return cmd.Run()
 }
 
-// Deprecated: use oscore.ExecCommandWithOutput
+// Deprecated: use oscore.ExecCommandWithOutput.
 func ExecCommandWithOutput(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	buf := &bytes.Buffer{}

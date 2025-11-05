@@ -109,7 +109,7 @@ func (info Info) IsWindows() bool {
 }
 
 func (info Info) IsLinux() bool {
-	return runtime.GOOS == "linux"
+	return runtime.GOOS == "linux" || info.OS == "GNU/Linux"
 }
 
 func GetOSInfo() (Info, error) {

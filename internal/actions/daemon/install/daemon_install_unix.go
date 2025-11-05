@@ -1,5 +1,4 @@
 //go:build linux || darwin
-// +build linux darwin
 
 package install
 
@@ -11,7 +10,6 @@ import (
 
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -47,7 +45,7 @@ func createUser(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 	return state, nil
 }
 
-func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	gameapUser, err := user.Lookup("gameap")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to lookup user")
@@ -63,7 +61,7 @@ func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsIns
 		return state, errors.WithMessage(err, "failed to convert gid to int")
 	}
 
-	err = utils.ChownR(state.WorkPath, uid, gid)
+	err = oscore.ChownR(ctx, state.WorkPath, uid, gid)
 	if err != nil {
 		return daemonsInstallState{}, err
 	}

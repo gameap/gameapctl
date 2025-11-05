@@ -69,6 +69,7 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	return state, nil
 }
 
+//nolint:funlen,gocognit,gocyclo
 func HandleV4(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
@@ -86,6 +87,7 @@ func HandleV4(cliCtx *cli.Context) error {
 
 	log.Println(state.OSInfo.String())
 
+	//nolint:nestif
 	if !state.NonInteractive {
 		needToAsk := make(map[string]struct{}, 4) //nolint:mnd
 		if state.Host == "" {
@@ -158,6 +160,7 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check for updates")
 	}
 
+	//nolint:nestif
 	if state.OSInfo.IsLinux() {
 		fmt.Println("Checking for ca-certificates ...")
 		if !utils.IsCommandAvailable("update-ca-certificates") {
@@ -226,10 +229,10 @@ func HandleV4(cliCtx *cli.Context) error {
 
 	switch state.Database {
 	case postgresDatabase:
-		//state, err = installPostgreSQL(ctx, pm, state)
-		//if err != nil {
-		//	return err
-		//}
+		// state, err = installPostgreSQL(ctx, pm, state)
+		// if err != nil {
+		//     return err
+		// }
 	case mysqlDatabase:
 		state, err = installMySQLOrMariaDBV4(ctx, pm, state)
 		if err != nil {
@@ -389,8 +392,7 @@ func installMySQLOrMariaDBV4(
 			}
 		}
 
-		//nolint:goconst
-		if state.OSInfo.OS == "GNU/Linux" && !state.DatabaseDirExistedBefore && utils.IsFileExists("/var/lib/mysql") {
+		if state.OSInfo.IsLinux() && !state.DatabaseDirExistedBefore && utils.IsFileExists("/var/lib/mysql") {
 			err := os.RemoveAll("/var/lib/mysql")
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to remove MySQL data directory")
@@ -427,7 +429,7 @@ func installMariaDBV4(
 			}
 
 			state.DatabaseDirExistedBefore = true
-			if state.OSInfo.OS == "GNU/Linux" {
+			if state.OSInfo.IsLinux() {
 				_, err := os.Stat("/var/lib/mysql")
 				if err != nil && os.IsNotExist(err) {
 					state.DatabaseDirExistedBefore = false
@@ -522,7 +524,7 @@ func installMySQLV4(
 			}
 
 			state.DatabaseDirExistedBefore = true
-			if state.OSInfo.OS == "GNU/Linux" {
+			if state.OSInfo.IsLinux() {
 				_, err := os.Stat("/var/lib/mysql")
 				if err != nil && os.IsNotExist(err) {
 					state.DatabaseDirExistedBefore = false
@@ -681,27 +683,4 @@ func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstall
 
 func daemonInstallV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	return state, nil
-	//fmt.Println("Installing daemon ...")
-
-	//token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
-
-	//err := panel.SetDaemonCreateToken(
-	//	ctx,
-	//	state.Path,
-	//	token,
-	//)
-	//if err != nil {
-	//	return state, errors.WithMessage(err, "failed to set daemon create token")
-	//}
-
-	//host := "http://" + state.Host + ":" + state.Port
-
-	//err = daemoninstall.Install(
-	//	ctx,
-	//	host,
-	//	token,
-	//)
-	//if err != nil {
-	//	return state, errors.WithMessage(err, "failed to install daemon")
-	//}
 }

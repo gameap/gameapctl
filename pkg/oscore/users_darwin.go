@@ -17,9 +17,10 @@ func CreateGroup(ctx context.Context, groupname string, opts ...CreateGroupOptio
 	options := applyCreateGroupOptions(opts...)
 
 	// Check if group already exists using dscl
+	//nolint:gosec
 	cmd := exec.CommandContext(ctx, "dscl", ".", "-read", fmt.Sprintf("/Groups/%s", groupname))
 	if err := cmd.Run(); err == nil {
-		return fmt.Errorf("group %s already exists", groupname)
+		return fmt.Errorf("group %s already exists", groupname) //nolint:err113
 	}
 
 	// Find the next available GID if not provided
@@ -83,6 +84,7 @@ func findNextAvailableGID(ctx context.Context) (string, error) {
 	return strconv.Itoa(maxGID + 1), nil
 }
 
+//nolint:funlen
 func CreateUser(
 	ctx context.Context, username string, opts ...CreateUserOption,
 ) error {
@@ -91,7 +93,7 @@ func CreateUser(
 	// Check if user already exists
 	_, err := user.Lookup(username)
 	if err == nil {
-		return fmt.Errorf("user %s already exists", username)
+		return fmt.Errorf("user %s already exists", username) //nolint:err113
 	}
 
 	// Find the next available UID
@@ -153,6 +155,7 @@ func CreateUser(
 
 	// Set password if provided
 	if options.password != "" {
+		//nolint:gosec
 		passwdCmd := exec.CommandContext(ctx, "dscl", ".", "-passwd", fmt.Sprintf("/Users/%s", username), options.password)
 		if err := passwdCmd.Run(); err != nil {
 			return errors.WithMessage(err, "failed to set password")

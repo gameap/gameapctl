@@ -16,7 +16,7 @@ type askedParamsV4 struct {
 	database string
 }
 
-//nolint:funlen,gocognit,gocyclo
+//nolint:funlen
 func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV4, error) {
 	var err error
 	result := askedParamsV4{}
