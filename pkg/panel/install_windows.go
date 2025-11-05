@@ -1,7 +1,22 @@
 package panel
 
-import "context"
+import (
+	"context"
 
-func install(_ context.Context, _ InstallConfig) error {
-	return NewNotImplementedError("installation", "Windows")
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/pkg/errors"
+)
+
+func install(ctx context.Context, _ InstallConfig) error {
+	pm, err := packagemanager.Load(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to load package manager")
+	}
+
+	err = pm.Install(ctx, packagemanager.GameAPDaemon)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install gameap")
+	}
+
+	return nil
 }

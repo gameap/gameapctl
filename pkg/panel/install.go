@@ -283,7 +283,7 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 		tmpDir,
 	)
 	if err != nil {
-		return errors.WithMessage(err, "failed to download gameap-daemon binaries")
+		return errors.WithMessage(err, "failed to download gameap binaries")
 	}
 
 	var binariesInstalled bool
@@ -298,7 +298,7 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 
 		err = utils.Move(fp, gameap.DefaultBinaryPath)
 		if err != nil {
-			return errors.WithMessage(err, "failed to move gameap-daemon binaries")
+			return errors.WithMessage(err, "failed to move gameap binaries")
 		}
 
 		binariesInstalled = true

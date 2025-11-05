@@ -5,12 +5,12 @@ package daemon
 import (
 	"context"
 
-	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/pkg/errors"
 )
 
-func Start(_ context.Context) error {
-	err := utils.ExecCommand("winsw", "start", defaultDaemonConfigPath)
+func Start(ctx context.Context) error {
+	err := oscore.ExecCommand(ctx, "winsw", "start", defaultDaemonConfigPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute start gameap-daemon command")
 	}

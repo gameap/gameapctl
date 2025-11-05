@@ -41,6 +41,7 @@ const (
 	VCRedist16Package = "vc_redist_16"     //nolint:gosec
 	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
 	GameAPDaemon      = "gameap-daemon"
+	GameAP            = "gameap"
 )
 
 const servicesConfigPath = "C:\\gameap\\services"
@@ -180,6 +181,23 @@ var repository = map[string]pack{
 				{Action: "restart", Delay: "2 sec"},
 				{Action: "restart", Delay: "5 sec"},
 				{Action: "restart", Delay: "5 sec"},
+			},
+			ResetFailure: "1 hour",
+		},
+	},
+	GameAP: {
+		ServiceConfig: &WinSWServiceConfig{
+			ID:               "GameAP",
+			Name:             "GameAP",
+			Executable:       "gameap",
+			WorkingDirectory: "C:\\gameap\\web",
+			OnFailure: []onFailure{
+				{Action: "restart", Delay: "1 sec"},
+				{Action: "restart", Delay: "2 sec"},
+				{Action: "restart", Delay: "5 sec"},
+				{Action: "restart", Delay: "10 sec"},
+				{Action: "restart", Delay: "20 sec"},
+				{Action: "restart", Delay: "60 sec"},
 			},
 			ResetFailure: "1 hour",
 		},
