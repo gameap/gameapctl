@@ -15,6 +15,7 @@ import (
 	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
 	"github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/daemon"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -258,6 +259,11 @@ func HandleV4(cliCtx *cli.Context) error {
 		} else {
 			daemonInstalled = true
 		}
+	}
+
+	if err = savePanelInstallationDetailsV4(cliCtx.Context, state); err != nil {
+		fmt.Println("Failed to save installation details: ", err.Error())
+		log.Println("Failed to save installation details: ", err)
 	}
 
 	fmt.Println("Starting GameAP ...")
@@ -931,4 +937,17 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 	}
 
 	return sb.String()
+}
+
+func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallStateV4) error {
+	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version:              "4",
+		Host:                 state.Host,
+		HostIP:               state.HostIP,
+		Port:                 state.Port,
+		ConfigDirectory:      state.ConfigDirectory,
+		DataDirectory:        state.DataDirectory,
+		Database:             state.Database,
+		DatabaseWasInstalled: state.DatabaseWasInstalled,
+	})
 }

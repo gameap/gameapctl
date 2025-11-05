@@ -14,11 +14,14 @@ const (
 )
 
 type PanelInstallState struct {
+	Version              string `json:"version"`
 	Host                 string `json:"host"`
 	HostIP               string `json:"hostIp"`
 	Port                 string `json:"port"`
-	Path                 string `json:"path"`
-	WebServer            string `json:"webServer"`
+	Path                 string `json:"path,omitempty"`
+	ConfigDirectory      string `json:"configDirectory,omitempty"`
+	DataDirectory        string `json:"dataDirectory,omitempty"`
+	WebServer            string `json:"webServer,omitempty"`
 	Database             string `json:"database"`
 	DatabaseWasInstalled bool   `json:"databaseWasInstalled"`
 	Develop              bool   `json:"develop"`

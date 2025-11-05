@@ -1363,6 +1363,7 @@ func checkInstallation(ctx context.Context, state panelInstallStateV3) (panelIns
 
 func savePanelInstallationDetails(ctx context.Context, state panelInstallStateV3) error {
 	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version:              "v3",
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 state.Port,

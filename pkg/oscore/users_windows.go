@@ -11,16 +11,22 @@ import (
 )
 
 func CreateGroup(ctx context.Context, groupname string, opts ...CreateGroupOption) error {
-	// Check if group already exists
-	cmd := exec.CommandContext(ctx, "net", "localgroup", groupname)
-	if err := cmd.Run(); err == nil {
-		return NewGroupAlreadyExistsError(groupname)
-	}
-
 	// Create group with net localgroup command
-	err := ExecCommand(ctx, "net", "localgroup", groupname, "/add")
+	// Note: We attempt to create the group directly because checking for existence
+	// with "net localgroup <name>" is unreliable on Windows (it may fail to find
+	// existing groups due to domain/local conflicts or permission issues)
+	cmd := exec.CommandContext(ctx, "net", "localgroup", groupname, "/add")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.WithMessage(err, "failed to create group")
+		// Check if the error is because the group already exists
+		// Error code 2224: "The account already exists"
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
+			// Group already exists, which is fine
+			return NewGroupAlreadyExistsError(groupname)
+		}
+
+		return errors.WithMessagef(err, "failed to create group: %s", string(output))
 	}
 
 	return nil

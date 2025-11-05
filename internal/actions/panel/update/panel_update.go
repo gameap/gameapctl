@@ -3,198 +3,78 @@ package update
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
-	"github.com/gameap/gameapctl/internal/pkg/panel"
-	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:gocognit,funlen
-func Handle(cliCtx *cli.Context) error {
-	ctx := cliCtx.Context
+type version string
 
+const (
+	versionV3 version = "v3"
+	versionV4 version = "v4"
+)
+
+func Handle(cliCtx *cli.Context) error {
 	fmt.Println("GameAP update")
 
-	pm, err := packagemanager.Load(ctx)
+	v, err := detectMajorVersion(cliCtx.Context)
 	if err != nil {
-		return errors.WithMessage(err, "failed to load package manager")
+		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
 
-	state, err := gameapctl.LoadPanelInstallState(ctx)
-	if err != nil {
-		return errors.WithMessage(err, "failed to load panel install state")
+	if v == versionV4 {
+		return handleV4(cliCtx)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "gameapctl-update-panel")
-	if err != nil {
-		return errors.WithMessage(err, "failed to create temp file")
-	}
-	defer func() {
-		err := os.RemoveAll(tmpDir)
-		if err != nil {
-			log.Println(errors.WithMessagef(err, "failed to remove temporary directory"))
-		}
-	}()
-
-	tmpPanelDir := filepath.Join(tmpDir, "gameap")
-
-	if state.FromGithub {
-		fmt.Println("Setup GameAP from github ...")
-		err = panel.SetupGameAPFromGithub(ctx, pm, tmpPanelDir, state.Branch)
-	} else {
-		fmt.Println("Setup GameAP ...")
-		err = panel.SetupGameAPFromRepo(ctx, tmpPanelDir)
-	}
-	if err != nil {
-		return errors.WithMessage(err, "failed to download gameap")
-	}
-
-	backupDir, err := os.MkdirTemp("", "gameapctl-update-panel-backup")
-	if err != nil {
-		return errors.WithMessage(err, "failed to create temp file")
-	}
-
-	backupPanelDir := filepath.Join(backupDir, "gameap")
-
-	fmt.Println("Backup GameAP ...")
-	err = utils.Move(state.Path, backupPanelDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to backup")
-	}
-
-	fmt.Println("Upgrading GameAP ...")
-	err = utils.Move(tmpPanelDir, state.Path)
-	if err != nil {
-		fmt.Println("Failed to upgrade GameAP: ", err)
-		fmt.Println("Restoring backup ...")
-
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to upgrade")
-	}
-
-	err = utils.Copy(filepath.Join(backupPanelDir, ".env"), filepath.Join(state.Path, ".env"))
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to upgrade")
-	}
-
-	err = utils.Copy(filepath.Join(backupPanelDir, ".env"), filepath.Join(state.Path, ".env"))
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to upgrade")
-	}
-
-	err = utils.Copy(filepath.Join(backupPanelDir, "storage", "app"), filepath.Join(state.Path, "storage", "app"))
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to upgrade")
-	}
-
-	fmt.Println("Updating privileges ...")
-	err = panel.SetPrivileges(ctx, state.Path)
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to set privileges")
-	}
-
-	fmt.Println("Clearing cache ...")
-	err = panel.ClearCache(ctx, state.Path)
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to set privileges")
-	}
-
-	fmt.Println("Upgrading games ...")
-	err = panel.UpgradeGames(ctx, state.Path)
-	if err != nil {
-		// Don't return error here
-		log.Println("Failed to upgrade games: ", err)
-	}
-
-	err = panel.CheckInstallation(ctx, state.Host, state.Port, false)
-	if err != nil {
-		err = panel.CheckInstallation(ctx, state.Host, state.Port, true)
-		if err != nil {
-			backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-			if backupErr != nil {
-				fmt.Println("Failed to restore backup: ", backupErr)
-				log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-			}
-
-			return errors.WithMessage(err, "failed to check installation")
-		}
-	}
-
-	defer func() {
-		err := os.RemoveAll(backupDir)
-		if err != nil {
-			log.Println(errors.WithMessagef(err, "failed to remove backup directory"))
-		}
-	}()
-
-	fmt.Println("GameAP updated")
-
-	return nil
+	return handleV3(cliCtx)
 }
 
-func restoreBackup(_ context.Context, backupDir, path string) error {
-	if utils.IsFileExists(path) {
-		fmt.Println("Removing GameAP ...")
-		err := os.RemoveAll(path)
-		if err != nil {
-			fmt.Println()
-			fmt.Println("Backup directory: ", backupDir)
-			fmt.Println()
-
-			return errors.WithMessage(err, "failed to remove current gameap dir before backup restore")
+// detectMajorVersion detects the major version of the installed panel.
+// It checks multiple markers in the following priority order:
+// 1. Installation state file (fastest, most reliable if exists)
+// 2. v4-specific file system markers (config.env, gameap binary, data directory)
+// 3. v3-specific file system markers (artisan, .env files)
+// Returns the detected version or an error if version cannot be determined.
+func detectMajorVersion(ctx context.Context) (version, error) {
+	// Priority 1: Check installation state file first
+	state, err := gameapctl.LoadPanelInstallState(ctx)
+	if err == nil && state.Version != "" {
+		// Version field is set in installation state
+		if state.Version == "3" || state.Version == string(versionV3) {
+			return versionV3, nil
+		}
+		if state.Version == "4" || state.Version == string(versionV4) {
+			return versionV4, nil
 		}
 	}
 
-	fmt.Println("Restoring backup ...")
-	err := utils.Move(backupDir, path)
-	if err != nil {
-		fmt.Println()
-		fmt.Println("Backup directory: ", backupDir)
-		fmt.Println()
-
-		return errors.WithMessage(err, "failed to restore backup")
+	// Priority 2: Check v4-specific markers (using constants from pkg/gameap)
+	// These paths are platform-specific via build tags
+	if utils.IsFileExists(gameap.DefaultConfigFilePath) ||
+		utils.IsFileExists(gameap.DefaultBinaryPath) ||
+		utils.IsFileExists(gameap.DefaultDataPath) {
+		return versionV4, nil
 	}
 
-	return nil
+	// Priority 3: Check v3-specific markers using installation state
+	if err == nil && state.Path != "" {
+		// Check if artisan file exists (Laravel indicator)
+		artisanPath := filepath.Join(state.Path, "artisan")
+		if utils.IsFileExists(artisanPath) {
+			return versionV3, nil
+		}
+
+		// Check if .env file exists (Laravel config)
+		envPath := filepath.Join(state.Path, ".env")
+		if utils.IsFileExists(envPath) {
+			return versionV3, nil
+		}
+	}
+
+	return "", errors.New("unable to detect GameAP version: no installation markers found")
 }
