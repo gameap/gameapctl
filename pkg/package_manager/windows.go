@@ -182,6 +182,9 @@ var repository = map[string]pack{
 				{Action: "restart", Delay: "5 sec"},
 				{Action: "restart", Delay: "5 sec"},
 			},
+			ServiceAccount: &WinSWServiceConfigServiceAccount{
+				Username: "NT AUTHORITY\\NETWORK SERVICE",
+			},
 			ResetFailure: "1 hour",
 		},
 	},
