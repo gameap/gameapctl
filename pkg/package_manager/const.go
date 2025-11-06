@@ -42,3 +42,12 @@ const ArchARM64 = "arm64"
 const Default = "default"
 
 const packageMarkFile = ".gameap-package"
+
+// Windows specific constants.
+const (
+	WinSWPackage      = "winsw"
+	VCRedist16Package = "vc_redist_16"     //nolint:gosec
+	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
+	GameAPDaemon      = "gameap-daemon"
+	GameAP            = "gameap"
+)

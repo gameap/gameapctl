@@ -1,3 +1,5 @@
+//go:build windows
+
 package packagemanager
 
 import (
@@ -16,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
@@ -36,15 +39,9 @@ type pack struct {
 	PreInstallFunc func(ctx context.Context, p pack, resolvedPackagePath string) (pack, error)
 }
 
-const (
-	WinSWPackage      = "winsw"
-	VCRedist16Package = "vc_redist_16"     //nolint:gosec
-	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
-	GameAPDaemon      = "gameap-daemon"
-	GameAP            = "gameap"
-)
-
 const servicesConfigPath = "C:\\gameap\\services"
+
+const defaultServiceUser = "NT AUTHORITY\\NETWORK SERVICE"
 
 // https://curl.se/docs/caextract.html
 const caCertURL = "https://curl.se/ca/cacert.pem"
@@ -70,6 +67,9 @@ var repository = map[string]pack{
 				{Action: "restart", Delay: "5 sec"},
 			},
 			ResetFailure: "1 hour",
+			ServiceAccount: &WinSWServiceConfigServiceAccount{
+				Username: "NT AUTHORITY\\NETWORK SERVICE",
+			},
 		},
 	},
 	MySQLServerPackage: {
@@ -111,6 +111,9 @@ var repository = map[string]pack{
 			Env: []env{
 				{Name: "PHP_FCGI_MAX_REQUESTS", Value: "0"},
 				{Name: "PHP_FCGI_CHILDREN", Value: strconv.Itoa(runtime.NumCPU() * 2)},
+			},
+			ServiceAccount: &WinSWServiceConfigServiceAccount{
+				Username: "NT AUTHORITY\\NETWORK SERVICE",
 			},
 		},
 		Dependencies: []string{VCRedist16Package},
@@ -412,6 +415,7 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
 }
 
+//nolint:funlen
 func (pm *WindowsPackageManager) installService(ctx context.Context, packName string, p pack) error {
 	_, err := exec.LookPath(repository[WinSWPackage].LookupPath[0])
 	if err != nil {
@@ -457,9 +461,17 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 	}
 
 	if !utils.IsFileExists(servicesConfigPath) {
+		log.Println("Creating services config directory at", servicesConfigPath)
+
 		err = os.MkdirAll(servicesConfigPath, 0755)
 		if err != nil {
 			return errors.WithMessage(err, "failed to create services config directory")
+		}
+
+		log.Println("Granting full control to ", defaultServiceUser, " for services config directory")
+		err = oscore.GrantFullControl(ctx, servicesConfigPath, defaultServiceUser)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set permissions for services config directory")
 		}
 	}
 
