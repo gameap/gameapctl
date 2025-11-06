@@ -117,12 +117,23 @@ var repository = map[string]pack{
 			},
 		},
 		Dependencies: []string{VCRedist16Package},
-		PreInstallFunc: func(_ context.Context, p pack, path string) (pack, error) {
+		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
 			if path != "" {
 				p.ServiceConfig.Arguments = fmt.Sprintf(
 					"-b 127.0.0.1:9934 -c %s",
 					filepath.Join(filepath.Dir(path), "php.ini"),
 				)
+
+				err := oscore.GrantFullControl(ctx, p.DefaultInstallPath, defaultServiceUser)
+				if err != nil {
+					return p, errors.WithMessage(err, "failed to set permissions for php directory")
+				}
+
+				err = oscore.GrantFullControl(ctx, filepath.Dir(path), defaultServiceUser)
+				if err != nil {
+					return p, errors.WithMessage(err, "failed to set permissions for php executable directory")
+				}
+
 			}
 
 			return p, nil
