@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
-	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/pkg/errors"
 )
 
@@ -161,6 +161,13 @@ func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string)
 			}
 
 			updatedPacks = append(updatedPacks, pack)
+		case RedisServerPackage:
+			err := d.addRedisRepository(ctx)
+			if err != nil {
+				return nil, errors.WithMessage(err, "failed to add Redis repository")
+			}
+
+			updatedPacks = append(updatedPacks, pack)
 		default:
 			updatedPacks = append(updatedPacks, pack)
 		}
@@ -174,17 +181,21 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 
 	switch {
 	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "8":
-		err := utils.ExecCommand("dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm")
+		err := oscore.ExecCommand(
+			ctx, "dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm",
+		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install remirepo")
 		}
 
-		err = utils.ExecCommand("dnf", "-y", "module", "switch-to", "php:remi-8.2")
+		err = oscore.ExecCommand(
+			ctx, "dnf", "-y", "module", "switch-to", "php:remi-8.2",
+		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to switch to remirepo")
 		}
 	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "7":
-		repolistOut, err := utils.ExecCommandWithOutput("yum", "repolist")
+		repolistOut, err := oscore.ExecCommandWithOutput(ctx, "yum", "repolist")
 		if err != nil {
 			return errors.WithMessage(err, "failed to get repolist")
 		}
@@ -193,19 +204,59 @@ func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
 			return nil
 		}
 
-		err = utils.ExecCommand("yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm")
+		err = oscore.ExecCommand(
+			ctx, "yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm",
+		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install remirepo")
 		}
 
-		err = utils.ExecCommand("yum", "-y", "install", "yum-utils")
+		err = oscore.ExecCommand(
+			ctx, "yum", "-y", "install", "yum-utils",
+		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install yum-utils")
 		}
 
-		err = utils.ExecCommand("yum-config-manager", "--enable", "remi-php82")
+		err = oscore.ExecCommand(
+			ctx, "yum-config-manager", "--enable", "remi-php82",
+		)
 		if err != nil {
 			return errors.WithMessage(err, "failed to enable remi-php82 repository")
+		}
+	}
+
+	return nil
+}
+
+func (d *extendedDNF) addRedisRepository(ctx context.Context) error {
+	osInfo := contextInternal.OSInfoFromContext(ctx)
+
+	if (osInfo.Distribution == DistributionCentOS ||
+		osInfo.Distribution == DistributionAlmaLinux ||
+		osInfo.Distribution == DistributionRocky) &&
+		osInfo.DistributionCodename == "10" {
+		repolistOut, err := oscore.ExecCommandWithOutput(ctx, "dnf", "repolist")
+		if err != nil {
+			return errors.WithMessage(err, "failed to get repolist")
+		}
+
+		if strings.Contains(repolistOut, "remi") {
+			return nil
+		}
+
+		err = oscore.ExecCommand(
+			ctx, "dnf", "install", "-y", "https://rpms.remirepo.net/enterprise/remi-release-10.rpm",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install remirepo")
+		}
+
+		err = oscore.ExecCommand(
+			ctx, "dnf", "module", "enable", "redis:remi-7.2", "-y",
+		)
+		if err != nil {
+			return errors.WithMessage(err, "failed to enable redis module")
 		}
 	}
 
