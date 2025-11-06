@@ -4,65 +4,36 @@ package install
 
 import (
 	"context"
-	"os/user"
-	"strings"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 const (
-	defaultUserName = "gameap"
+	defaultUserName = "NT AUTHORITY\\NETWORK SERVICE"
 )
 
-const passwordLength = 24
-
 func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
-	userName := defaultUserName
-	var errUnknownUser user.UnknownUserError
-	systemUser, err := user.Lookup(userName)
-	if err != nil &&
-		!errors.As(err, &errUnknownUser) &&
-		!strings.Contains(err.Error(), "No mapping between account") {
-		return state, errors.WithMessage(err, "failed to lookup user")
+	return state, nil
+}
+
+func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	if err := oscore.GrantFullControl(
+		ctx,
+		gameap.DefaultWorkPath,
+		defaultUserName,
+	); err != nil {
+		return state, errors.WithMessage(err, "failed to set permissions for working directory")
 	}
-
-	password, err := utils.CryptoRandomString(passwordLength)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to generate password")
-	}
-
-	if systemUser != nil {
-		// Change password
-		err = utils.ExecCommand("net", "user", userName, password)
-		if err != nil {
-			return state, errors.WithMessagef(err, "failed to change password for user %s", userName)
-		}
-
-		state.User = userName
-		state.Password = password
-
-		return state, nil
-	}
-
-	err = utils.ExecCommand("net", "user", userName, password, "/HOMEDIR:C:\\gameap", "/ADD", "/Y")
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to add user")
-	}
-
-	state.User = userName
-	state.Password = password
 
 	return state, nil
 }
 
-func setUserPrivileges(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
-	return state, nil
-}
-
-func setFirewallRules(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
-	err := utils.ExecCommand(
+func setFirewallRules(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	err := oscore.ExecCommand(
+		ctx,
 		"netsh",
 		"advfirewall",
 		"firewall",

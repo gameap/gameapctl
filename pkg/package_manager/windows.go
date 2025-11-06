@@ -200,6 +200,9 @@ var repository = map[string]pack{
 				{Action: "restart", Delay: "20 sec"},
 				{Action: "restart", Delay: "60 sec"},
 			},
+			ServiceAccount: &WinSWServiceConfigServiceAccount{
+				Username: "NT AUTHORITY\\NETWORK SERVICE",
+			},
 			ResetFailure: "1 hour",
 		},
 	},
@@ -728,12 +731,14 @@ type WinSWServiceConfig struct {
 	OnFailure    []onFailure `xml:"onfailure,omitempty"`
 	ResetFailure string      `xml:"resetfailure,omitempty"`
 
-	ServiceAccount struct {
-		Username string `xml:"username,omitempty"`
-		Password string `xml:"password,omitempty"`
-	} `xml:"serviceaccount,omitempty"`
+	ServiceAccount *WinSWServiceConfigServiceAccount `xml:"serviceaccount,omitempty"`
 
 	Env []env `xml:"env,omitempty"`
+}
+
+type WinSWServiceConfigServiceAccount struct {
+	Username string `xml:"username,omitempty"`
+	Password string `xml:"password,omitempty"`
 }
 
 type onFailure struct {

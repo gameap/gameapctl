@@ -79,6 +79,8 @@ type ConfigEnvData struct {
 }
 
 // Install installs GameAP v4.
+//
+//nolint:gocognit,funlen
 func Install(ctx context.Context, config InstallConfig) error {
 	// Set defaults if not provided
 	if config.ConfigDirectory == "" {
@@ -142,24 +144,27 @@ func Install(ctx context.Context, config InstallConfig) error {
 	}
 
 	// Create user and group
-	fmt.Println("Creating GameAP user and group ...")
+	//nolint:nestif
+	if runtime.GOOS != "windows" {
+		fmt.Println("Creating GameAP user and group ...")
 
-	if err := oscore.CreateGroup(ctx, config.Group); err != nil {
-		var existsErr *oscore.GroupAlreadyExistsError
-		if !errors.As(err, &existsErr) {
-			return errors.WithMessage(err, "failed to create group")
+		if err := oscore.CreateGroup(ctx, config.Group); err != nil {
+			var existsErr *oscore.GroupAlreadyExistsError
+			if !errors.As(err, &existsErr) {
+				return errors.WithMessage(err, "failed to create group")
+			}
+
+			fmt.Println("Group already exists")
 		}
 
-		fmt.Println("Group already exists")
-	}
+		if err := oscore.CreateUser(ctx, config.User, oscore.WithWorkDir(config.DataDirectory)); err != nil {
+			var existsErr *oscore.UserAlreadyExistsError
+			if !errors.As(err, &existsErr) {
+				return errors.WithMessage(err, "failed to create user")
+			}
 
-	if err := oscore.CreateUser(ctx, config.User, oscore.WithWorkDir(config.DataDirectory)); err != nil {
-		var existsErr *oscore.UserAlreadyExistsError
-		if !errors.As(err, &existsErr) {
-			return errors.WithMessage(err, "failed to create user")
+			fmt.Println("User already exists")
 		}
-
-		fmt.Println("User already exists")
 	}
 
 	// Create directories
