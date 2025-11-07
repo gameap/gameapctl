@@ -1,0 +1,9 @@
+packages:
+  - name: mysql-server
+    replace-with: [default-mysql-server]
+
+  - name: lib32gcc
+    replace-with: [lib32gcc-s1]
+
+  - name: nodejs
+    replace-with: [nodejs, npm]

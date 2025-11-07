@@ -1,0 +1,15 @@
+packages:
+  - name: lib32gcc
+    replace-with: []
+
+  - name: php
+    pre-install:
+      - echo "deb https://packages.sury.org/php/ {codename} main" > /etc/apt/sources.list.d/php.list
+      - wget -qO - https://packages.sury.org/php/apt.gpg | apt-key add -
+      - apt-get update
+
+  - name: nginx
+    pre-install:
+      - mkdir -p /usr/share/keyrings/
+      - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+      - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{distname}/ {codename} nginx > /etc/apt/sources.list.d/nginx.list

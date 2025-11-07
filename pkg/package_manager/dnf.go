@@ -8,8 +8,9 @@ import (
 	"os/exec"
 	"strings"
 
-	contextInternal "github.com/gameap/gameapctl/internal/context"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/oscore"
+	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
 	"github.com/pkg/errors"
 )
 
@@ -79,11 +80,20 @@ func (d *dnf) Purge(ctx context.Context, packs ...string) error {
 }
 
 type extendedDNF struct {
+	packages   map[string]pmdnf.PackageConfig
 	underlined PackageManager
 }
 
-func newExtendedDNF(underlined PackageManager) *extendedDNF {
-	return &extendedDNF{underlined: underlined}
+func newExtendedDNF(osinfo osinfo.Info, underlined PackageManager) (*extendedDNF, error) {
+	packages, err := pmdnf.LoadPackages(osinfo)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to load dnf packages configuration")
+	}
+
+	return &extendedDNF{
+		packages:   packages,
+		underlined: underlined,
+	}, nil
 }
 
 func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
@@ -96,7 +106,17 @@ func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
 
 	packs = d.replaceAliases(ctx, packs)
 
-	return d.underlined.Install(ctx, packs...)
+	err = d.underlined.Install(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install packages")
+	}
+
+	err = d.postInstallationSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run post-installation steps")
+	}
+
+	return nil
 }
 
 func (d *extendedDNF) CheckForUpdates(ctx context.Context) error {
@@ -119,146 +139,96 @@ func (d *extendedDNF) Search(ctx context.Context, name string) ([]PackageInfo, e
 	return d.underlined.Search(ctx, name)
 }
 
-func (d *extendedDNF) replaceAliases(ctx context.Context, packs []string) []string {
-	return replaceAliases(ctx, dnfPackageAliases, packs)
-}
+func (d *extendedDNF) replaceAliases(_ context.Context, packs []string) []string {
+	updatedPacks := make([]string, 0, len(packs))
 
-func replaceAliases(ctx context.Context, aliasesMap distVersionPackagesMap, packs []string) []string {
-	replacedPacks := make([]string, 0, len(packs))
-
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	for _, pack := range packs {
-		if aliases, exists :=
-			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][osInfo.Platform][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][CodeNameDefault][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[DistributionDefault][CodeNameDefault][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
+	for _, packName := range packs {
+		if config, exists := d.packages[packName]; exists {
+			updatedPacks = append(updatedPacks, config.ReplaceWith...)
 		} else {
-			replacedPacks = append(replacedPacks, pack)
+			updatedPacks = append(updatedPacks, packName)
 		}
 	}
 
-	return replacedPacks
+	return updatedPacks
+}
+
+func (d *extendedDNF) executeInstallationSteps(
+	ctx context.Context,
+	packs []string,
+	getCommands func(pmdnf.PackageConfig) []string,
+) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists {
+			continue
+		}
+
+		commands := getCommands(config)
+		if len(commands) == 0 {
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		for _, cmd := range commands {
+			if err := d.executeCommand(ctx, cmd); err != nil {
+				return errors.WithMessagef(
+					err,
+					"failed to execute command for %s: %s", packName, cmd,
+				)
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return nil
 }
 
 func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
-	updatedPacks := make([]string, 0, len(packs))
-
-	for _, pack := range packs {
-		switch pack {
-		case PHPPackage:
-			err := d.addPHPRepository(ctx)
-			if err != nil {
-				return nil, errors.WithMessage(err, "failed to add PHP repository")
-			}
-
-			updatedPacks = append(updatedPacks, pack)
-		case RedisServerPackage:
-			err := d.addRedisRepository(ctx)
-			if err != nil {
-				return nil, errors.WithMessage(err, "failed to add Redis repository")
-			}
-
-			updatedPacks = append(updatedPacks, pack)
-		default:
-			updatedPacks = append(updatedPacks, pack)
-		}
+	err := d.executeInstallationSteps(
+		ctx,
+		packs,
+		func(config pmdnf.PackageConfig) []string { return config.PreInstall },
+	)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
 	}
 
-	return updatedPacks, nil
+	return packs, nil
 }
 
-func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	switch {
-	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "8":
-		err := oscore.ExecCommand(
-			ctx, "dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install remirepo")
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "dnf", "-y", "module", "switch-to", "php:remi-8.2",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to switch to remirepo")
-		}
-	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "7":
-		repolistOut, err := oscore.ExecCommandWithOutput(ctx, "yum", "repolist")
-		if err != nil {
-			return errors.WithMessage(err, "failed to get repolist")
-		}
-
-		if strings.Contains(repolistOut, "remi-php82") {
-			return nil
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install remirepo")
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "yum", "-y", "install", "yum-utils",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install yum-utils")
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "yum-config-manager", "--enable", "remi-php82",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to enable remi-php82 repository")
-		}
+func (d *extendedDNF) postInstallationSteps(ctx context.Context, packs ...string) error {
+	err := d.executeInstallationSteps(
+		ctx,
+		packs,
+		func(config pmdnf.PackageConfig) []string { return config.PostInstall },
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run post-installation steps")
 	}
 
 	return nil
 }
 
-func (d *extendedDNF) addRedisRepository(ctx context.Context) error {
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	if (osInfo.Distribution == DistributionCentOS ||
-		osInfo.Distribution == DistributionAlmaLinux ||
-		osInfo.Distribution == DistributionRocky) &&
-		osInfo.DistributionCodename == "10" {
-		repolistOut, err := oscore.ExecCommandWithOutput(ctx, "dnf", "repolist")
-		if err != nil {
-			return errors.WithMessage(err, "failed to get repolist")
-		}
-
-		if strings.Contains(repolistOut, "remi") {
-			return nil
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "dnf", "install", "-y", "https://rpms.remirepo.net/enterprise/remi-release-10.rpm",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install remirepo")
-		}
-
-		err = oscore.ExecCommand(
-			ctx, "dnf", "module", "enable", "redis:remi-7.2", "-y",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to enable redis module")
-		}
+func (d *extendedDNF) executeCommand(ctx context.Context, cmdStr string) error {
+	cmdStr = strings.TrimSpace(cmdStr)
+	if cmdStr == "" {
+		return nil
 	}
 
-	return nil
+	command := "bash"
+
+	if _, err := exec.LookPath(command); err != nil {
+		command = "sh"
+	}
+
+	args := []string{"-c", cmdStr}
+
+	return oscore.ExecCommand(ctx, command, args...)
 }

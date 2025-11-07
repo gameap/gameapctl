@@ -1,0 +1,33 @@
+packages:
+  - name: lib32gcc
+    replace-with: [libgcc.i686]
+
+  - name: lib32stdc6
+    replace-with: [libstdc++.i686]
+
+  - name: lib32z1
+    replace-with: [zlib.i686]
+
+  - name: xz-utils
+    replace-with: [xz]
+
+  - name: php-extensions
+    virtual: true
+    replace-with: [php-bcmath, php-gd, php-gmp, php-intl,
+      php-json, php-mbstring, php-mysqlnd, php-opcache,
+      php-openssl, php-pdo, php-pecl-zip,
+      php-readline, php-session, php-sockets, php-tokenizer,
+      php-xml, php-zip]
+
+  - name: postgresql
+    replace-with: [postgresql-server, postgresql-contrib]
+    post-install:
+      - postgresql-setup --initdb
+      - systemctl enable postgresql
+      - systemctl start postgresql
+
+  - name: redis-server
+    replace-with: [redis]
+    post-install:
+      - systemctl enable redis
+      - systemctl start redis

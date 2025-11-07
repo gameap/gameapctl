@@ -1,0 +1,16 @@
+packages:
+  - name: redis-server
+    replace-with: [redis]
+    pre-install:
+      - dnf install -y epel-release
+      - dnf module enable redis:remi-7.2 -y
+    post-install:
+      - systemctl enable redis
+      - systemctl start redis
+
+  - name: postgresql
+    replace-with: [postgresql-server, postgresql-contrib]
+    post-install:
+      - postgresql-setup --initdb
+      - systemctl enable postgresql
+      - systemctl start postgresql

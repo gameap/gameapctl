@@ -1,0 +1,3 @@
+packages:
+  - name: nodejs
+    replace-with: [nodejs, npm]

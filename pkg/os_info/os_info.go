@@ -33,6 +33,10 @@ const (
 	DistributionWindows Distribution = "windows"
 )
 
+func (d Distribution) String() string {
+	return string(d)
+}
+
 func (d Distribution) IsDebianLike() bool {
 	return d == DistributionDebian || d == DistributionUbuntu || d == DistributionRaspbian
 }

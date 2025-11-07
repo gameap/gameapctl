@@ -6,6 +6,7 @@ import (
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	"github.com/pkg/errors"
 )
 
 type PackageInfo struct {
@@ -47,11 +48,16 @@ func Load(ctx context.Context) (PackageManager, error) {
 func loadDebianPackageManager(_ context.Context, osInfo osinfo.Info) (PackageManager, error) {
 	switch osInfo.DistributionCodename {
 	case "buster", "bullseye", "bookworm":
-		return newExtendedAPT(&apt{}), nil
+		return newExtendedAPT(osInfo, &apt{})
 	default:
+		pm, err := newExtendedAPT(osInfo, &apt{})
+		if err != nil {
+			return nil, err
+		}
+
 		// other distributions with fallback
 		return newFallbackPackageManager(
-			newExtendedAPT(&apt{}),
+			pm,
 			newChRoot(),
 		), nil
 	}
@@ -61,11 +67,16 @@ func loadDebianPackageManager(_ context.Context, osInfo osinfo.Info) (PackageMan
 func loadUbuntuPackageManager(_ context.Context, osInfo osinfo.Info) (PackageManager, error) {
 	switch osInfo.DistributionCodename {
 	case "focal", "jammy":
-		return newExtendedAPT(&apt{}), nil
+		return newExtendedAPT(osInfo, &apt{})
 	default:
+		pm, err := newExtendedAPT(osInfo, &apt{})
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed to load ubuntu package")
+		}
+
 		// other distributions with fallback
 		return newFallbackPackageManager(
-			newExtendedAPT(&apt{}),
+			pm,
 			newChRoot(),
 		), nil
 	}
@@ -74,30 +85,30 @@ func loadUbuntuPackageManager(_ context.Context, osInfo osinfo.Info) (PackageMan
 //nolint:ireturn,nolintlint
 func loadCentOSPackageManager(
 	_ context.Context,
-	_ osinfo.Info,
+	osinfo osinfo.Info,
 ) (PackageManager, error) {
 	if _, err := exec.LookPath("dnf"); err == nil {
-		return newExtendedDNF(&dnf{}), nil
+		return newExtendedDNF(osinfo, &dnf{})
 	}
 
-	return newExtendedDNF(&yum{}), nil
+	return newExtendedDNF(osinfo, &yum{})
 }
 
 //nolint:ireturn,nolintlint
 func detectAndLoadPackageManager(
-	_ context.Context, osInfo osinfo.Info,
+	_ context.Context, osinfo osinfo.Info,
 ) (PackageManager, error) {
 	if _, err := exec.LookPath("apt"); err == nil {
-		return newExtendedAPT(&apt{}), nil
+		return newExtendedAPT(osinfo, &apt{})
 	}
 
 	if _, err := exec.LookPath("dnf"); err == nil {
-		return newExtendedDNF(&dnf{}), nil
+		return newExtendedDNF(osinfo, &dnf{})
 	}
 
 	if _, err := exec.LookPath("yum"); err == nil {
-		return newExtendedDNF(&yum{}), nil
+		return newExtendedDNF(osinfo, &yum{})
 	}
 
-	return nil, NewErrUnsupportedDistribution(string(osInfo.Distribution))
+	return nil, NewErrUnsupportedDistribution(string(osinfo.Distribution))
 }

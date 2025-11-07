@@ -10,13 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
-	aptPkg "github.com/gameap/gameapctl/pkg/package_manager/apt"
+	"github.com/gameap/gameapctl/pkg/oscore"
+	pmapt "github.com/gameap/gameapctl/pkg/package_manager/apt"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -32,7 +32,7 @@ type apt struct{}
 // Search list packages available in the system that match the search
 // pattern.
 func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error) {
-	search, err := aptPkg.Search(packName)
+	search, err := pmapt.Search(packName)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to search package")
 	}
@@ -210,13 +210,20 @@ func (apt *apt) Purge(_ context.Context, packs ...string) error {
 }
 
 type extendedAPT struct {
-	apt *apt
+	packages map[string]pmapt.PackageConfig
+	apt      *apt
 }
 
-func newExtendedAPT(apt *apt) *extendedAPT {
-	return &extendedAPT{
-		apt: apt,
+func newExtendedAPT(osinfo osinfo.Info, apt *apt) (*extendedAPT, error) {
+	packages, err := pmapt.LoadPackages(osinfo)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to load package configurations")
 	}
+
+	return &extendedAPT{
+		packages: packages,
+		apt:      apt,
+	}, nil
 }
 
 func (e *extendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, error) {
@@ -225,19 +232,25 @@ func (e *extendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, e
 
 func (e *extendedAPT) Install(ctx context.Context, packs ...string) error {
 	var err error
-	packs = e.replaceAliases(ctx, packs)
-
-	packs, err = e.findAndRunViaFuncs(ctx, packs...)
-	if err != nil {
-		return err
-	}
 
 	packs, err = e.preInstallationSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre installation steps")
 	}
 
-	return e.apt.Install(ctx, packs...)
+	packs = e.replaceAliases(ctx, packs)
+
+	err = e.apt.Install(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install packages")
+	}
+
+	err = e.postInstallationSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run post-installation steps")
+	}
+
+	return nil
 }
 
 func (e *extendedAPT) CheckForUpdates(ctx context.Context) error {
@@ -264,53 +277,18 @@ func (e *extendedAPT) Purge(ctx context.Context, packs ...string) error {
 	return e.apt.Purge(ctx, packs...)
 }
 
-func (e *extendedAPT) replaceAliases(ctx context.Context, packs []string) []string {
-	return replaceAliases(ctx, aptPackageAliases, packs)
-}
+func (e *extendedAPT) replaceAliases(_ context.Context, packs []string) []string {
+	replacedPacks := make([]string, 0, len(packs))
 
-func (e *extendedAPT) findAndRunViaFuncs(ctx context.Context, packs ...string) ([]string, error) {
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	var funcsByDistroAndArch map[osinfo.Distribution]map[osinfo.Platform]installationFunc
-	var funcsByArch map[osinfo.Platform]installationFunc
-
-	updatedPacks := make([]string, 0, len(packs))
-
-	for _, p := range packs {
-		funcsByDistroAndArch = installationFuncs[p]
-		if funcsByDistroAndArch == nil {
-			updatedPacks = append(updatedPacks, p)
-
-			continue
-		}
-
-		funcsByArch = funcsByDistroAndArch[osInfo.Distribution]
-		if funcsByArch == nil {
-			funcsByArch = funcsByDistroAndArch[Default]
-			if funcsByArch == nil {
-				updatedPacks = append(updatedPacks, p)
-
-				continue
-			}
-		}
-
-		f := funcsByArch[osInfo.Platform]
-		if f == nil {
-			f = funcsByArch[ArchDefault]
-			if f == nil {
-				updatedPacks = append(updatedPacks, p)
-
-				continue
-			}
-		}
-
-		err := f(ctx)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to run installation func for package %s", p)
+	for _, packName := range packs {
+		if pkgConfig, exists := e.packages[packName]; exists {
+			replacedPacks = append(replacedPacks, pkgConfig.ReplaceWith...)
+		} else {
+			replacedPacks = append(replacedPacks, packName)
 		}
 	}
 
-	return updatedPacks, nil
+	return replacedPacks
 }
 
 func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
@@ -365,6 +343,73 @@ func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 	}
 
 	return updatedPacks, nil
+}
+
+func (e *extendedAPT) postInstallationSteps(ctx context.Context, packs ...string) error {
+	err := e.executeInstallationSteps(
+		ctx,
+		packs,
+		func(config pmapt.PackageConfig) []string { return config.PostInstall },
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run post-installation steps")
+	}
+
+	return nil
+}
+
+func (e *extendedAPT) executeInstallationSteps(
+	ctx context.Context,
+	packs []string,
+	getCommands func(pmapt.PackageConfig) []string,
+) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := e.packages[packName]
+		if !exists {
+			continue
+		}
+
+		commands := getCommands(config)
+		if len(commands) == 0 {
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		for _, cmd := range commands {
+			if err := e.executeCommand(ctx, cmd); err != nil {
+				return errors.WithMessagef(
+					err,
+					"failed to execute command for %s: %s", packName, cmd,
+				)
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return nil
+}
+
+func (e *extendedAPT) executeCommand(ctx context.Context, cmdStr string) error {
+	cmdStr = strings.TrimSpace(cmdStr)
+	if cmdStr == "" {
+		return nil
+	}
+
+	command := "bash"
+
+	if _, err := exec.LookPath(command); err != nil {
+		command = "sh"
+	}
+
+	args := []string{"-c", cmdStr}
+
+	return oscore.ExecCommand(ctx, command, args...)
 }
 
 func (e *extendedAPT) preRemovingSteps(ctx context.Context, packs ...string) error {
@@ -698,28 +743,4 @@ func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-type installationFunc func(ctx context.Context) error
-
-var installationFuncs = map[string]map[osinfo.Distribution]map[osinfo.Platform]installationFunc{
-	ComposerPackage: {
-		Default: {
-			ArchDefault: func(_ context.Context) error {
-				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
-					return nil
-				}
-
-				err := utils.ExecCommand(
-					"bash", "-c",
-					"curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
-				)
-				if err != nil {
-					return errors.WithMessage(err, "failed to install composer")
-				}
-
-				return nil
-			},
-		},
-	},
 }
