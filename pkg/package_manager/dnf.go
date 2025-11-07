@@ -143,7 +143,7 @@ func (d *extendedDNF) replaceAliases(_ context.Context, packs []string) []string
 	updatedPacks := make([]string, 0, len(packs))
 
 	for _, packName := range packs {
-		if config, exists := d.packages[packName]; exists {
+		if config, exists := d.packages[packName]; exists && config.ReplaceWith != nil {
 			updatedPacks = append(updatedPacks, config.ReplaceWith...)
 		} else {
 			updatedPacks = append(updatedPacks, packName)
