@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -233,6 +231,11 @@ func (e *extendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, e
 func (e *extendedAPT) Install(ctx context.Context, packs ...string) error {
 	var err error
 
+	err = e.installDependencies(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install dependencies")
+	}
+
 	packs, err = e.preInstallationSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre installation steps")
@@ -281,7 +284,7 @@ func (e *extendedAPT) replaceAliases(_ context.Context, packs []string) []string
 	replacedPacks := make([]string, 0, len(packs))
 
 	for _, packName := range packs {
-		if pkgConfig, exists := e.packages[packName]; exists {
+		if pkgConfig, exists := e.packages[packName]; exists && pkgConfig.ReplaceWith != nil {
 			replacedPacks = append(replacedPacks, pkgConfig.ReplaceWith...)
 		} else {
 			replacedPacks = append(replacedPacks, packName)
@@ -291,7 +294,40 @@ func (e *extendedAPT) replaceAliases(_ context.Context, packs []string) []string
 	return replacedPacks
 }
 
+func (e *extendedAPT) installDependencies(ctx context.Context, packs ...string) error {
+	dependencies := make([]string, 0)
+
+	for _, packName := range packs {
+		config, exists := e.packages[packName]
+		if !exists {
+			continue
+		}
+
+		dependencies = append(dependencies, config.Dependencies...)
+	}
+
+	if len(dependencies) == 0 {
+		return nil
+	}
+
+	err := e.apt.Install(ctx, dependencies...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install dependencies")
+	}
+
+	return nil
+}
+
 func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
+	err := e.executeInstallationSteps(
+		ctx,
+		packs,
+		func(config pmapt.PackageConfig) []string { return config.PreInstall },
+	)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to run post-installation steps")
+	}
+
 	updatedPacks := make([]string, 0, len(packs))
 
 	for _, pack := range packs {
@@ -308,35 +344,11 @@ func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string)
 			}
 
 			updatedPacks = append(updatedPacks, packages...)
-		case NginxPackage:
-			err := e.addNginxRepositories(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			err = e.apt.CheckForUpdates(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			updatedPacks = append(updatedPacks, pack)
 		case ApachePackage:
 			err := e.apachePackageProcess(ctx)
 			if err != nil {
 				return nil, errors.WithMessage(err, "failed to process apache packages")
 			}
-		case NodeJSPackage:
-			err := e.addNodeJSRepositories(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			err = e.apt.CheckForUpdates(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			updatedPacks = append(updatedPacks, pack)
 		default:
 			updatedPacks = append(updatedPacks, pack)
 		}
@@ -625,110 +637,6 @@ func (e *extendedAPT) addPHPRepositories(ctx context.Context) (bool, error) {
 	}
 
 	return false, nil
-}
-
-func (e *extendedAPT) addNginxRepositories(ctx context.Context) error {
-	if utils.IsFileExists(sourcesListNginx) {
-		return nil
-	}
-
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		fmt.Sprintf("https://nginx.org/packages/%s/dists/%s/",
-			strings.ToLower(string(osInfo.Distribution)),
-			strings.ToLower(osInfo.DistributionCodename),
-		),
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	//nolint:bodyclose
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println(errors.WithMessage(err, "failed to get nginx repository"))
-
-		return nil
-	}
-	defer func(body io.ReadCloser) {
-		err := body.Close()
-		if err != nil {
-			log.Println(errors.WithMessage(err, "failed to close response body"))
-		}
-	}(response.Body)
-
-	if response.StatusCode != http.StatusOK {
-		return nil
-	}
-
-	if !utils.IsFileExists("/usr/share/keyrings/") {
-		err = os.Mkdir("/usr/share/keyrings/", 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create /usr/share/keyrings/ directory")
-		}
-	}
-
-	if !utils.IsFileExists("/usr/share/keyrings/nginx-archive-keyring.gpg") {
-		err = utils.ExecCommand(
-			"bash", "-c",
-			"curl -fsSL https://nginx.org/keys/nginx_signing.key | "+
-				"gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to receive nodejs gpg key")
-		}
-	}
-
-	err = utils.WriteContentsToFile(
-		[]byte(
-			fmt.Sprintf(
-				"deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/%s/ %s nginx",
-				osInfo.Distribution,
-				osInfo.DistributionCodename,
-			),
-		),
-		sourcesListNginx,
-	)
-	if err != nil {
-		return errors.WithMessagef(err, "failed to write nginx source list to %s", sourcesListNginx)
-	}
-
-	return nil
-}
-
-func (e *extendedAPT) addNodeJSRepositories(_ context.Context) error {
-	var err error
-	if !utils.IsFileExists("/usr/share/keyrings/") {
-		err = os.Mkdir("/usr/share/keyrings/", 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create /usr/share/keyrings/ directory")
-		}
-	}
-
-	if !utils.IsFileExists("/usr/share/keyrings/nodesource.gpg") {
-		err = utils.ExecCommand(
-			"bash", "-c",
-			"curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |"+
-				" gpg --dearmor -o /usr/share/keyrings/nodesource.gpg",
-		)
-		if err != nil {
-			return errors.WithMessage(err, "failed to receive nodejs gpg key")
-		}
-	}
-
-	err = utils.WriteContentsToFile(
-		[]byte("deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"),
-		sourcesListNode,
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (e *extendedAPT) apachePackageProcess(ctx context.Context) error {

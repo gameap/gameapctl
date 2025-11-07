@@ -18,12 +18,13 @@ type packagesConfig struct {
 
 //nolint:tagliatelle
 type PackageConfig struct {
-	Name        string   `yaml:"name"`
-	ReplaceWith []string `yaml:"replace-with"`
-	Virtual     bool     `yaml:"virtual"`
-	PreInstall  []string `yaml:"pre-install"`
-	Install     []string `yaml:"install"`
-	PostInstall []string `yaml:"post-install"`
+	Name         string   `yaml:"name"`
+	Dependencies []string `yaml:"dependencies"`
+	ReplaceWith  []string `yaml:"replace-with"`
+	Virtual      bool     `yaml:"virtual"`
+	PreInstall   []string `yaml:"pre-install"`
+	Install      []string `yaml:"install"`
+	PostInstall  []string `yaml:"post-install"`
 }
 
 func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
