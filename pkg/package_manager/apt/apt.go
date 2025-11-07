@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 //go:embed *.yaml

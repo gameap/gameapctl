@@ -47,6 +47,7 @@ For example:
 - `debian_bullseye.yaml` for Debian Bullseye
 - `ubuntu_jammy.yaml` for Ubuntu 22.04 (Jammy Jellyfish)
 - `ubuntu_focal.yaml` for Ubuntu 20.04 (Focal Fossa)
+- `ubuntu_20.04.yaml` for Ubuntu 20.04 (Focal Fossa)
 
 ### `{distname}_{codename}_{architecture}.yaml`
 

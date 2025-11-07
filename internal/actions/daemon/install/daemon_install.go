@@ -32,9 +32,9 @@ import (
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v3"
 )
 
 const (
