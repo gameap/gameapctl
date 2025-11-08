@@ -614,7 +614,9 @@ type runtimeTemplateVariables struct {
 	installPath string
 }
 
-func (pm *WindowsPackageManager) replaceRuntimeVariables(ctx context.Context, p windows.Package, vars runtimeTemplateVariables) (windows.Package, error) {
+func (pm *WindowsPackageManager) replaceRuntimeVariables(
+	ctx context.Context, p windows.Package, vars runtimeTemplateVariables,
+) (windows.Package, error) {
 	var err error
 
 	p.Service.Executable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Executable, vars)
@@ -661,7 +663,9 @@ var runtimeTemplateFuncMap = template.FuncMap{
 	},
 }
 
-func (pm *WindowsPackageManager) replaceRuntimeVariablesString(_ context.Context, v string, vars runtimeTemplateVariables) (string, error) {
+func (pm *WindowsPackageManager) replaceRuntimeVariablesString(
+	_ context.Context, v string, vars runtimeTemplateVariables,
+) (string, error) {
 	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Parse(v)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse template")
