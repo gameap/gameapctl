@@ -1,3 +1,0 @@
-packages:
-  - name: lib32gcc
-    replace-with: [lib32gcc-s1]

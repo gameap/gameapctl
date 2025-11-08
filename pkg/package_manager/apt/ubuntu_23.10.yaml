@@ -1,6 +1,0 @@
-packages:
-  - name: lib32gcc
-    replace-with: [lib32gcc-s1]
-
-  - name: php-extensions
-    replace-with: []
