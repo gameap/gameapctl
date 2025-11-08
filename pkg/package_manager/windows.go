@@ -171,10 +171,10 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 	var err error
 
 	runtimeVars := runtimeTemplateVariables{
-		lookupPaths: make(map[string]string, len(p.LookupPaths)),
+		LookupPaths: make(map[string]string, len(p.LookupPaths)),
 
 		// default values
-		installPath: p.InstallPath,
+		InstallPath: p.InstallPath,
 	}
 
 	resolvedPackagePath := ""
@@ -189,7 +189,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 
 		log.Printf("Path for package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
 
-		runtimeVars.lookupPaths[c] = filepath.Dir(resolvedPackagePath)
+		runtimeVars.LookupPaths[c] = filepath.Dir(resolvedPackagePath)
 
 		break
 	}
@@ -608,10 +608,10 @@ func (pm *WindowsPackageManager) installServyService(ctx context.Context, p wind
 
 type runtimeTemplateVariables struct {
 	// runtime
-	lookupPaths map[string]string
+	LookupPaths map[string]string
 
 	// some default values for package
-	installPath string
+	InstallPath string
 }
 
 func (pm *WindowsPackageManager) replaceRuntimeVariables(

@@ -56,7 +56,7 @@ packages:
       id: php-fpm
       name: php-fpm
       executable: php-cgi.exe
-      arguments: -b 127.0.0.1:9934 -c {{index .lookupPaths "php-cgi" | default .installPath }}\php.ini
+      arguments: -b 127.0.0.1:9934 -c {{index .LookupPaths "php-cgi" | default .InstallPath }}\php.ini
       env:
         - name: PHP_FCGI_MAX_REQUESTS
           value: "0"
