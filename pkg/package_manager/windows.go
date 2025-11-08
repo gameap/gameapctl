@@ -214,6 +214,18 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		}(dir)
 	}
 
+	if !utils.IsFileExists(dir) {
+		err = os.MkdirAll(dir, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to make directory")
+		}
+	}
+
+	err = pm.preInstallationSteps(ctx, p)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run pre installation steps")
+	}
+
 	for _, path := range p.DownloadURLs {
 		log.Println("Downloading file from", path, "to", dir)
 
@@ -247,18 +259,6 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to download file")
-	}
-
-	if !utils.IsFileExists(dir) {
-		err = os.MkdirAll(dir, 0755)
-		if err != nil {
-			return errors.WithMessage(err, "failed to make directory")
-		}
-	}
-
-	err = pm.preInstallationSteps(ctx, p)
-	if err != nil {
-		return errors.WithMessage(err, "failed to run pre installation steps")
 	}
 
 	if len(p.InstallCommands) > 0 {

@@ -26,7 +26,7 @@ func install(ctx context.Context, cfg InstallConfig) error {
 			gameap.DefaultWorkPath,
 			windowUsername,
 		); err != nil {
-			return errors.WithMessage(err, "failed to set permissions for working directory")
+			return errors.WithMessage(err, "failed to grant read execute permissions for working directory")
 		}
 	}
 
