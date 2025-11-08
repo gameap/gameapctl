@@ -64,7 +64,9 @@ packages:
           value: "4"
       service-account:
         username: NT AUTHORITY\NETWORK SERVICE
-    dependencies: [ vcredist16 ]
+    dependencies:
+      - vcredist16
+      - winsw
 
   - name: php-extensions
     dependencies:
