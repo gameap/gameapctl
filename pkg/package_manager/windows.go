@@ -60,11 +60,6 @@ func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) e
 		return errors.WithMessage(err, "failed to install dependencies")
 	}
 
-	err = pm.preInstallationSteps(ctx, packs...)
-	if err != nil {
-		return errors.WithMessage(err, "failed to run pre installation steps")
-	}
-
 	for _, packName := range packs {
 		p, exists := pm.packages[packName]
 		if !exists {
@@ -132,42 +127,35 @@ func convertAccessToOSCoreFlag(access string) oscore.GrantFlag {
 	}
 }
 
-func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, packs ...string) error {
-	for _, packName := range packs {
-		config, exists := pm.packages[packName]
-		if !exists {
-			continue
-		}
+func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, p windows.Package) error {
+	for _, pre := range p.PreInstall {
+		if len(pre.GrantPermissions) > 0 {
+			for _, p := range pre.GrantPermissions {
+				log.Printf("Granting %s to %s for %s\n", p.Access, p.User, p.Path)
 
-		for _, pre := range config.PreInstall {
-			if len(pre.GrantPermissions) > 0 {
-				for _, p := range pre.GrantPermissions {
-					log.Printf("Granting %s to %s for %s\n", p.Access, p.User, p.Path)
-
-					err := oscore.Grant(ctx, p.Path, p.User, convertAccessToOSCoreFlag(p.Access))
-					if err != nil {
-						return errors.WithMessagef(
-							err,
-							"failed to grant %s to %s for %s",
-							p.Access,
-							p.User,
-							p.Path,
-						)
-					}
+				err := oscore.Grant(ctx, p.Path, p.User, convertAccessToOSCoreFlag(p.Access))
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to grant %s to %s for %s",
+						p.Access,
+						p.User,
+						p.Path,
+					)
 				}
 			}
+		}
 
-			if len(pre.Commands) > 0 {
-				for _, cmdStr := range pre.Commands {
-					err := oscore.ExecCommand(ctx, "cmd", "/C", cmdStr)
-					if err != nil {
-						return errors.WithMessagef(
-							err,
-							"failed to execute pre install command for package '%s': %s",
-							packName,
-							cmdStr,
-						)
-					}
+		if len(pre.Commands) > 0 {
+			for _, cmdStr := range pre.Commands {
+				err := oscore.ExecCommand(ctx, "cmd", "/C", cmdStr)
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute pre install command for package '%s': %s",
+						p.Name,
+						cmdStr,
+					)
 				}
 			}
 		}
@@ -221,7 +209,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		defer func(path string) {
 			err := os.RemoveAll(path)
 			if err != nil {
-				log.Println(err)
+				log.Println(errors.WithMessage(err, "failed to remove temp directory"))
 			}
 		}(dir)
 	}
@@ -259,6 +247,18 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to download file")
+	}
+
+	if !utils.IsFileExists(dir) {
+		err = os.MkdirAll(dir, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to make directory")
+		}
+	}
+
+	err = pm.preInstallationSteps(ctx, p)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run pre installation steps")
 	}
 
 	if len(p.InstallCommands) > 0 {
