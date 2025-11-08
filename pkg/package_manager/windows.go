@@ -265,23 +265,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		log.Println("Running install commands for package ", p.Name)
 
 		for _, cmd := range p.InstallCommands {
-			log.Println("Running install commands for package ", p.Name)
-
 			err = pm.executeCommand(ctx, cmd)
-			if err != nil {
-				return errors.WithMessagef(err, "failed to execute install command: %s", cmd)
-			}
-		}
-	}
-
-	if len(p.InstallCommands) > 0 {
-		log.Println("Running install commands for package ", p.Name)
-
-		for _, cmd := range p.InstallCommands {
-			log.Println("Running install commands for package ", p.Name)
-
-			err = pm.executeCommand(ctx, cmd)
-
 			if err != nil {
 				return errors.WithMessagef(err, "failed to execute install command: %s", cmd)
 			}
