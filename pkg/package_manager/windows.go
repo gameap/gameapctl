@@ -617,6 +617,8 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 			return errors.WithMessage(err, "failed to get scanned files")
 		}
 
+		log.Println("Scanned files:", buf.String())
+
 		scannedFiles := strings.Split(buf.String(), "\n")
 
 		if len(scannedFiles) > 0 {
