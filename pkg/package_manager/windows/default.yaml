@@ -143,7 +143,7 @@ packages:
       - https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
     install-path: ${SystemRoot}\System32
     install-commands:
-      - move WinSW-x64.exe winsw.exe
+      - move {{package_install_path}}\WinSW-x64.exe {{package_install_path}}\winsw.exe
     uninstall-commands:
       - del ${SystemRoot}\System32\winsw.exe
 

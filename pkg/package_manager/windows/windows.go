@@ -149,6 +149,7 @@ func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	pkg.InstallCommands = expandEnvSlice(replaceValuesSlice(pkg.InstallCommands, osinf, pkg))
 	pkg.UninstallCommands = expandEnvSlice(replaceValuesSlice(pkg.UninstallCommands, osinf, pkg))
 	pkg.PathEnv = expandEnvSlice(replaceValuesSlice(pkg.PathEnv, osinf, pkg))
+	pkg.InstallPath = os.ExpandEnv(replaceValues(pkg.InstallPath, osinf, pkg))
 
 	for i := range pkg.PreInstall {
 		pkg.PreInstall[i].Commands = expandEnvSlice(replaceValuesSlice(pkg.PreInstall[i].Commands, osinf, pkg))
