@@ -4,3 +4,10 @@ packages:
 
   - name: lib32gcc
     replace-with: [lib32gcc1]
+
+  - name: nginx
+    pre-install:
+      - mkdir -p /usr/share/keyrings/
+      - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+      - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{distname}/ {codename} nginx" > /etc/apt/sources.list.d/nginx.list
+      - apt-get update
