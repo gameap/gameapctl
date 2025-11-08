@@ -16,7 +16,6 @@ type packagesConfig struct {
 	Packages []PackageConfig `yaml:"packages"`
 }
 
-//nolint:tagliatelle
 type PackageConfig struct {
 	Name         string   `yaml:"name"`
 	Dependencies []string `yaml:"dependencies"`
@@ -107,10 +106,10 @@ func replaceDistributionVariablesSlice(inputs []string, osinf osinfo.Info) []str
 }
 
 func replaceDistributionVariables(input string, osinf osinfo.Info) string {
-	result := strings.ReplaceAll(input, "{distname}", osinf.Distribution.String())
-	result = strings.ReplaceAll(result, "{distversion}", osinf.DistributionVersion)
-	result = strings.ReplaceAll(result, "{codename}", osinf.DistributionCodename)
-	result = strings.ReplaceAll(result, "{architecture}", osinf.Platform.String())
+	result := strings.ReplaceAll(input, "{{distname}}", osinf.Distribution.String())
+	result = strings.ReplaceAll(result, "{{distversion}}", osinf.DistributionVersion)
+	result = strings.ReplaceAll(result, "{{codename}}", osinf.DistributionCodename)
+	result = strings.ReplaceAll(result, "{{architecture}}", osinf.Platform.String())
 
 	return result
 }

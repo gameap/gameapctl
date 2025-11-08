@@ -182,7 +182,7 @@ func daemonStatus(ctx context.Context, w io.Writer, _ []string) error {
 	return nil
 }
 
-func gameapInstall(_ context.Context, w io.Writer, args []string) error {
+func gameapInstall(ctx context.Context, w io.Writer, args []string) error {
 	// Testing
 	if len(args) == 0 {
 		return errors.New("no args")
@@ -207,7 +207,7 @@ func gameapInstall(_ context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to execute command")
 	}
 
-	packagemanager.UpdateEnvPath()
+	packagemanager.UpdateEnvPath(ctx)
 
 	return nil
 }
@@ -405,7 +405,7 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to execute command")
 	}
 
-	packagemanager.UpdateEnvPath()
+	packagemanager.UpdateEnvPath(ctx)
 
 	return nil
 }

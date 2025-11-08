@@ -38,7 +38,7 @@ func Load(ctx context.Context) (PackageManager, error) {
 	case DistributionCentOS:
 		return loadCentOSPackageManager(ctx, osInfo)
 	case DistributionWindows:
-		return NewWindowsPackageManager(), nil
+		return NewWindowsPackageManager(ctx, osInfo)
 	}
 
 	return detectAndLoadPackageManager(ctx, osInfo)

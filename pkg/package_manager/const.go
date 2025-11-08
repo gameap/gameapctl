@@ -51,4 +51,5 @@ const (
 	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
 	GameAPDaemon      = "gameap-daemon"
 	GameAP            = "gameap"
+	Servy             = "servy"
 )

@@ -1,0 +1,162 @@
+packages:
+  - name: nginx
+    lookup-paths: [ nginx ]
+    download-urls:
+      - http://nginx.org/download/nginx-1.29.3.zip
+    install-path: C:\gameap\tools\nginx
+    pre-install:
+      - grant-permissions:
+          - path: C:\gameap\tools\nginx
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+    service:
+      id: nginx
+      name: nginx
+      executable: nginx.exe
+      working-directory: C:\gameap\tools\nginx
+      stop-executable: nginx
+      stop-arguments: -s stop
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+        password: ""
+    dependencies:
+      - winsw
+
+  - name: mysql-server
+    lookup-paths: [mysql, mysqld]
+    download-urls:
+        - https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi
+    install:
+      - run-commands:
+          - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
+        wait-for-service: MariaDB
+
+  - name: mariadb-server
+    lookup-paths: [ mariadb, mariadbd ]
+    download-urls:
+      - https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi
+    install:
+      - run-commands:
+        - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
+      - wait-for-service: MariaDB
+
+  - name: php
+    lookup-paths: [ php ]
+    download-urls:
+      - https://packages.gameap.com/deps/php-8.3.7-Win32-vs16-x64.zip
+    install-path: C:\php
+    pre-install:
+      - grant-permissions:
+          - path: C:\php
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+    path-env:
+      - C:\php
+    service:
+      id: php-fpm
+      name: php-fpm
+      executable: php-cgi.exe
+      arguments: -b 127.0.0.1:9934 -c {{package_install_path}}\php.ini
+      env:
+        - name: PHP_FCGI_MAX_REQUESTS
+          value: "0"
+        - name: PHP_FCGI_CHILDREN
+          value: "4"
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+    dependencies: [ vcredist16 ]
+
+  - name: php-extensions
+    lookup-paths: [ php ]
+
+  - name: vcredist16
+    download-urls:
+      - https://aka.ms/vs/16/release/VC_redist.x64.exe
+    install:
+      - run-commands:
+          - VC_redist.x64.exe /install /quiet /norestart
+        allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
+
+  - name: vcredist17-x86
+    download-urls:
+      - https://aka.ms/vs/17/release/vc_redist.x86.exe
+    install:
+      - run-commands:
+        - VC_redist.x86.exe /install /quiet /norestart
+        allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
+
+  - name: git
+    lookup-paths: [git]
+    download-urls:
+      - https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe
+    install-commands:
+      - Git-2.43.0-64-bit.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=icons,ext\reg\shellhere,assoc,assoc_sh
+
+  - name: nodejs
+    lookup-paths: [node]
+    download-urls:
+      - https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi
+    install-commands:
+      - start /wait msiexec /i node-v20.11.1-x64.msi /qb
+    path-env:
+      - ${ProgramFiles}\nodejs
+
+  - name: composer
+    lookup-paths: [composer]
+    dependencies: [php]
+    download-urls:
+      - https://getcomposer.org/Composer-Setup.exe
+    install:
+      - run-commands:
+        - Composer-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS
+        wait-for-files:
+          - ${ProgramData}\ComposerSetup\bin\composer
+    path-env:
+      - ${ProgramData}\ComposerSetup\bin
+
+  - name: gameap-daemon
+    service:
+      id: GameAP Daemon
+      name: GameAP Daemon
+      executable: gameap-daemon
+      working-directory: C:\gameap\daemon
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+    dependencies:
+      - winsw
+
+  - name: gameap
+    service:
+      id: GameAP
+      name: GameAP
+      executable: gameap
+      arguments: --env C:\gameap\web\config.env
+      working-directory: C:\gameap\web
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+    dependencies:
+      - winsw
+
+  - name: winsw
+    lookup-paths: [ winsw ]
+    download-urls:
+      - https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
+    install-path: ${SystemRoot}\System32
+    install-commands:
+      - move WinSW-x64.exe winsw.exe
+    uninstall-commands:
+      - del ${SystemRoot}\System32\winsw.exe
+
+  - name: servy
+    lookup-paths: [ servy ]
+    download-urls:
+      - https://github.com/aelassas/servy/releases/download/v2.9/servy-2.9-net48-x64-installer.exe
+    install:
+      - run-commands:
+          - start /wait servy-2.9-net48-x64-installer.exe /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP- /CLOSEAPPLICATIONS /NOCANCEL
+        wait-for-files:
+          - ${ProgramFiles}\Servy\servy-cli.exe
+    path-env:
+      - ${ProgramFiles}\Servy
+    uninstall-commands:
+      - \"${ProgramFiles}\Servy\unins000.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES

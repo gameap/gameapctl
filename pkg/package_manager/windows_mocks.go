@@ -5,14 +5,16 @@ package packagemanager
 import (
 	"context"
 	"errors"
+
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 )
 
 var errNotAvailableForNonWindows = errors.New("package manager is not available for non-Windows OS")
 
 type WindowsPackageManager struct{}
 
-func NewWindowsPackageManager() *WindowsPackageManager {
-	return &WindowsPackageManager{}
+func NewWindowsPackageManager(_ context.Context, _ osinfo.Info) (*WindowsPackageManager, error) {
+	return &WindowsPackageManager{}, nil
 }
 
 func (pm *WindowsPackageManager) Search(_ context.Context, _ string) ([]PackageInfo, error) {

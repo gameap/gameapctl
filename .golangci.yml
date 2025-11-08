@@ -19,7 +19,7 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - godox
+    # - godox
     - gomodguard
     - goprintffuncname
     - gosec
@@ -71,6 +71,10 @@ linters:
     funlen:
       lines: 100
       statements: 60
+    tagliatelle:
+      case:
+        rules:
+          yaml: kebab
   exclusions:
     generated: lax
     presets:

@@ -182,7 +182,7 @@ func TestReplaceDistributionVariables(t *testing.T) {
 	}
 
 	t.Run("replace all variables", func(t *testing.T) {
-		input := "deb {distname} {distversion} {codename} {architecture}"
+		input := "deb {{distname}} {{distversion}} {{codename}} {{architecture}}"
 		expected := "deb debian 12 bookworm amd64"
 		assert.Equal(t, expected, replaceDistributionVariables(input, osinf))
 	})
@@ -194,13 +194,13 @@ func TestReplaceDistributionVariables(t *testing.T) {
 	})
 
 	t.Run("replace single variable", func(t *testing.T) {
-		input := "Distribution: {distname}"
+		input := "Distribution: {{distname}}"
 		expected := "Distribution: debian"
 		assert.Equal(t, expected, replaceDistributionVariables(input, osinf))
 	})
 
 	t.Run("replace multiple occurrences", func(t *testing.T) {
-		input := "{distname} {distname} {distname}"
+		input := "{{distname}} {{distname}} {{distname}}"
 		expected := "debian debian debian" //nolint:dupword
 		assert.Equal(t, expected, replaceDistributionVariables(input, osinf))
 	})
@@ -216,10 +216,10 @@ func TestReplaceDistributionVariablesSlice(t *testing.T) {
 
 	t.Run("replace variables in slice", func(t *testing.T) {
 		inputs := []string{
-			"deb {distname}",
-			"version {distversion}",
-			"codename {codename}",
-			"arch {architecture}",
+			"deb {{distname}}",
+			"version {{distversion}}",
+			"codename {{codename}}",
+			"arch {{architecture}}",
 		}
 		expected := []string{
 			"deb debian",

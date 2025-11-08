@@ -101,10 +101,10 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install daemon",
 						Usage:       "Install daemon",
-						Before: func(_ *cli.Context) error {
+						Before: func(cliCtx *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
 
-							packagemanager.UpdateEnvPath()
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -128,8 +128,8 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Update daemon to a new version",
 						Usage:       "Update daemon to a new version",
-						Before: func(_ *cli.Context) error {
-							packagemanager.UpdateEnvPath()
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -174,10 +174,10 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install panel",
 						Usage:       "Install panel",
-						Before: func(_ *cli.Context) error {
+						Before: func(cliCtx *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
 
-							packagemanager.UpdateEnvPath()
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -263,8 +263,8 @@ func Run(args []string) {
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
-						Before: func(_ *cli.Context) error {
-							packagemanager.UpdateEnvPath()
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -283,8 +283,8 @@ func Run(args []string) {
 				Name:        "ui",
 				Description: "Web interface in default browser. ",
 				Usage:       "Web interface in default browser. ",
-				Before: func(_ *cli.Context) error {
-					packagemanager.UpdateEnvPath()
+				Before: func(cliCtx *cli.Context) error {
+					packagemanager.UpdateEnvPath(cliCtx.Context)
 
 					return nil
 				},

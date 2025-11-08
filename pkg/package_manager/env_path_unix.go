@@ -2,4 +2,8 @@
 
 package packagemanager
 
-func UpdateEnvPath() {}
+import (
+	"context"
+)
+
+func UpdateEnvPath(ctx context.Context) {}

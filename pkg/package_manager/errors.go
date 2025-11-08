@@ -1,6 +1,11 @@
 package packagemanager
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var ErrCannotDependOnSelf = errors.New("package cannot depend on itself")
 
 type UnsupportedDistributionError string
 

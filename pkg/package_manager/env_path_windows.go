@@ -3,39 +3,47 @@
 package packagemanager
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	internalcontext "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 //nolint:gocognit
-func UpdateEnvPath() {
+func UpdateEnvPath(ctx context.Context) {
+	packages, err := windows.LoadPackages(internalcontext.OSInfoFromContext(ctx))
+	if err != nil {
+		panic(errors.WithMessage(err, "failed to load packages"))
+	}
+
 	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
-	appendPath := make([]string, 0, len(repository)*2)
+	appendPath := make([]string, 0, len(packages)*2)
 
-	for _, p := range repository {
-		if p.DefaultInstallPath == "" {
+	for _, p := range packages {
+		if p.InstallPath == "" {
 			continue
 		}
 
-		if !utils.IsFileExists(p.DefaultInstallPath) {
+		if !utils.IsFileExists(p.InstallPath) {
 			continue
 		}
 
-		if utils.Contains(currentPath, p.DefaultInstallPath) {
+		if utils.Contains(currentPath, p.InstallPath) {
 			continue
 		}
 
-		if utils.Contains(appendPath, p.DefaultInstallPath) {
+		if utils.Contains(appendPath, p.InstallPath) {
 			continue
 		}
 
-		appendPath = append(appendPath, p.DefaultInstallPath)
+		appendPath = append(appendPath, p.InstallPath)
 	}
 
 	//nolint:nestif
@@ -86,10 +94,7 @@ func UpdateEnvPath() {
 		strings.Join(appendPath, string(filepath.ListSeparator))
 
 	log.Println("New PATH:", newPath)
-	err := os.Setenv(
-		"PATH",
-		newPath,
-	)
+	err = os.Setenv("PATH", newPath)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to set PATH"))
 	}

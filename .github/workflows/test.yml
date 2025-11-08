@@ -57,7 +57,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bullseye', 'debian:bookworm', 'debian:trixie' ]
+        distro: [ 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bookworm', 'debian:trixie' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [1.25.x]

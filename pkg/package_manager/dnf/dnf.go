@@ -16,7 +16,6 @@ type packagesConfig struct {
 	Packages []PackageConfig `yaml:"packages"`
 }
 
-//nolint:tagliatelle
 type PackageConfig struct {
 	Name        string   `yaml:"name"`
 	ReplaceWith []string `yaml:"replace-with"`
@@ -65,9 +64,30 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 		}
 
 		for _, pkg := range config.Packages {
+			pkg.PreInstall = replaceDistributionVariablesSlice(pkg.PreInstall, osinf)
+			pkg.PostInstall = replaceDistributionVariablesSlice(pkg.PostInstall, osinf)
+
 			packages[pkg.Name] = pkg
 		}
 	}
 
 	return packages, nil
+}
+
+func replaceDistributionVariablesSlice(inputs []string, osinf osinfo.Info) []string {
+	results := make([]string, len(inputs))
+	for i, input := range inputs {
+		results[i] = replaceDistributionVariables(input, osinf)
+	}
+
+	return results
+}
+
+func replaceDistributionVariables(input string, osinf osinfo.Info) string {
+	result := strings.ReplaceAll(input, "{{distname}}", osinf.Distribution.String())
+	result = strings.ReplaceAll(result, "{{distversion}}", osinf.DistributionVersion)
+	result = strings.ReplaceAll(result, "{{codename}}", osinf.DistributionCodename)
+	result = strings.ReplaceAll(result, "{{architecture}}", osinf.Platform.String())
+
+	return result
 }

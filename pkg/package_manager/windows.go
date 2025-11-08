@@ -5,6 +5,7 @@ package packagemanager
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"log"
@@ -13,31 +14,17 @@ import (
 	"os/exec"
 	pathPkg "path"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/oscore"
+	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
-	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
-
-type pack struct {
-	DownloadURLs                 []string
-	LookupPath                   []string
-	InstallCommand               string
-	WaitAfterInstallCommandUntil func(ctx context.Context) (stop bool, err error)
-	AllowedInstallExitCodes      []int
-	DefaultInstallPath           string
-	ServiceConfig                *WinSWServiceConfig
-	Dependencies                 []string
-
-	PreInstallFunc func(ctx context.Context, p pack, resolvedPackagePath string) (pack, error)
-}
 
 const servicesConfigPath = "C:\\gameap\\services"
 
@@ -46,197 +33,19 @@ const defaultServiceUser = "NT AUTHORITY\\NETWORK SERVICE"
 // https://curl.se/docs/caextract.html
 const caCertURL = "https://curl.se/ca/cacert.pem"
 
-var repository = map[string]pack{
-	NginxPackage: {
-		LookupPath: []string{"nginx"},
-		DownloadURLs: []string{
-			"http://nginx.org/download/nginx-1.22.1.zip",
-		},
-		DefaultInstallPath: "C:\\gameap\\tools\\nginx",
-		ServiceConfig: &WinSWServiceConfig{
-			ID:               "nginx",
-			Name:             "nginx",
-			Executable:       "nginx",
-			WorkingDirectory: "C:\\gameap\\tools\\nginx",
-			StopExecutable:   "nginx",
-			StopArguments:    "-s stop",
-			OnFailure: []onFailure{
-				{Action: "restart", Delay: "1 sec"},
-				{Action: "restart", Delay: "2 sec"},
-				{Action: "restart", Delay: "5 sec"},
-				{Action: "restart", Delay: "5 sec"},
-			},
-			ResetFailure: "1 hour",
-			ServiceAccount: &WinSWServiceConfigServiceAccount{
-				Username: "NT AUTHORITY\\NETWORK SERVICE",
-			},
-		},
-	},
-	MySQLServerPackage: {
-		LookupPath: []string{"mysql", "mysqld"},
-		DownloadURLs: []string{
-			"https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi",
-		},
-		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
-		WaitAfterInstallCommandUntil: func(ctx context.Context) (stop bool, err error) {
-			if service.IsExists(ctx, "MariaDB") {
-				return true, nil
-			}
-
-			return false, nil
-		},
-	},
-	MariaDBServerPackage: {
-		LookupPath: []string{"mariadb", "mariadbd"},
-		DownloadURLs: []string{
-			"https://packages.gameap.com/deps/mariadb-10.6.17-winx64.msi",
-			"https://archive.mariadb.org/mariadb-10.6.17/winx64-packages/mariadb-10.6.17-winx64.msi",
-		},
-		InstallCommand: "cmd /c \"start /wait msiexec /i mariadb-10.6.17-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb\"",
-	},
-	PHPPackage: {
-		LookupPath: []string{"php"},
-		DownloadURLs: []string{
-			"https://packages.gameap.com/deps/php-8.3.7-Win32-vs16-x64.zip",
-		},
-		DefaultInstallPath: "C:\\php",
-		ServiceConfig: &WinSWServiceConfig{
-			ID:         "php-fpm",
-			Name:       "php-fpm",
-			Executable: "php-cgi",
-			Arguments:  "-b 127.0.0.1:9934 -c C:\\php\\php.ini",
-			OnFailure: []onFailure{
-				{Action: "restart"},
-			},
-			Env: []env{
-				{Name: "PHP_FCGI_MAX_REQUESTS", Value: "0"},
-				{Name: "PHP_FCGI_CHILDREN", Value: strconv.Itoa(runtime.NumCPU() * 2)},
-			},
-			ServiceAccount: &WinSWServiceConfigServiceAccount{
-				Username: "NT AUTHORITY\\NETWORK SERVICE",
-			},
-		},
-		Dependencies: []string{VCRedist16Package},
-		PreInstallFunc: func(ctx context.Context, p pack, path string) (pack, error) {
-			if path != "" {
-				p.ServiceConfig.Arguments = fmt.Sprintf(
-					"-b 127.0.0.1:9934 -c %s",
-					filepath.Join(filepath.Dir(path), "php.ini"),
-				)
-
-				err := oscore.GrantFullControl(ctx, p.DefaultInstallPath, defaultServiceUser)
-				if err != nil {
-					return p, errors.WithMessage(err, "failed to set permissions for php directory")
-				}
-
-				err = oscore.GrantFullControl(ctx, filepath.Dir(path), defaultServiceUser)
-				if err != nil {
-					return p, errors.WithMessage(err, "failed to set permissions for php executable directory")
-				}
-
-			}
-
-			return p, nil
-		},
-	},
-	PHPExtensionsPackage: {
-		LookupPath: []string{"php"},
-	},
-	VCRedist16Package: {
-		DownloadURLs: []string{
-			"https://aka.ms/vs/16/release/VC_redist.x64.exe",
-		},
-		InstallCommand: "cmd /c \"VC_redist.x64.exe /install /quiet /norestart\"",
-		AllowedInstallExitCodes: []int{
-			1638, // A newer version is already installed or already installed
-		},
-	},
-	VCRedist17X86: {
-		DownloadURLs: []string{
-			"https://aka.ms/vs/17/release/vc_redist.x86.exe",
-		},
-		InstallCommand: "cmd /c \"VC_redist.x86.exe /install /quiet /norestart\"",
-		AllowedInstallExitCodes: []int{
-			1638, // A newer version is already installed or already installed
-		},
-	},
-	GitPackage: {
-		LookupPath: []string{"git"},
-		DownloadURLs: []string{
-			"https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe",
-		},
-		InstallCommand: "cmd /c Git-2.43.0-64-bit.exe " +
-			"/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS " +
-			"/RESTARTAPPLICATIONS /COMPONENTS=icons,ext\\reg\\shellhere,assoc,assoc_sh",
-	},
-	NodeJSPackage: {
-		LookupPath: []string{"node"},
-		DownloadURLs: []string{
-			"https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi",
-		},
-		InstallCommand: "cmd /c start /wait msiexec /i node-v20.11.1-x64.msi /qb",
-	},
-	ComposerPackage: {
-		LookupPath:   []string{"composer"},
-		Dependencies: []string{PHPPackage},
-		DownloadURLs: []string{
-			"https://getcomposer.org/Composer-Setup.exe",
-		},
-		InstallCommand: "cmd /c Composer-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS",
-	},
-	GameAPDaemon: {
-		ServiceConfig: &WinSWServiceConfig{
-			ID:               "GameAP Daemon",
-			Name:             "GameAP Daemon",
-			Executable:       "gameap-daemon",
-			WorkingDirectory: "C:\\gameap\\daemon",
-			OnFailure: []onFailure{
-				{Action: "restart", Delay: "1 sec"},
-				{Action: "restart", Delay: "2 sec"},
-				{Action: "restart", Delay: "5 sec"},
-				{Action: "restart", Delay: "5 sec"},
-			},
-			ServiceAccount: &WinSWServiceConfigServiceAccount{
-				Username: "NT AUTHORITY\\NETWORK SERVICE",
-			},
-			ResetFailure: "1 hour",
-		},
-	},
-	GameAP: {
-		ServiceConfig: &WinSWServiceConfig{
-			ID:               "GameAP",
-			Name:             "GameAP",
-			Executable:       "gameap",
-			Arguments:        "--env C:\\gameap\\web\\config.env",
-			WorkingDirectory: "C:\\gameap\\web",
-			OnFailure: []onFailure{
-				{Action: "restart", Delay: "1 sec"},
-				{Action: "restart", Delay: "2 sec"},
-				{Action: "restart", Delay: "5 sec"},
-				{Action: "restart", Delay: "10 sec"},
-				{Action: "restart", Delay: "20 sec"},
-				{Action: "restart", Delay: "60 sec"},
-			},
-			ServiceAccount: &WinSWServiceConfigServiceAccount{
-				Username: "NT AUTHORITY\\NETWORK SERVICE",
-			},
-			ResetFailure: "1 hour",
-		},
-	},
-	WinSWPackage: {
-		LookupPath: []string{"winsw"},
-		DownloadURLs: []string{
-			"https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe",
-		},
-		DefaultInstallPath: "C:\\Windows\\System32",
-		InstallCommand:     "cmd /c \"move WinSW-x64.exe winsw.exe\"",
-	},
+type WindowsPackageManager struct {
+	packages map[string]windows.Package
 }
 
-type WindowsPackageManager struct{}
+func NewWindowsPackageManager(_ context.Context, info osinfo.Info) (*WindowsPackageManager, error) {
+	packages, err := windows.LoadPackages(info)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to load windows packages")
+	}
 
-func NewWindowsPackageManager() *WindowsPackageManager {
-	return &WindowsPackageManager{}
+	return &WindowsPackageManager{
+		packages: packages,
+	}, nil
 }
 
 func (pm *WindowsPackageManager) Search(_ context.Context, _ string) ([]PackageInfo, error) {
@@ -245,54 +54,148 @@ func (pm *WindowsPackageManager) Search(_ context.Context, _ string) ([]PackageI
 
 func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) error {
 	var err error
-	for _, p := range packs {
-		repoPack, exists := repository[p]
+
+	err = pm.installDependencies(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install dependencies")
+	}
+
+	err = pm.preInstallationSteps(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run pre installation steps")
+	}
+
+	for _, packName := range packs {
+		p, exists := pm.packages[packName]
 		if !exists {
 			continue
 		}
 
-		err = pm.installPackage(ctx, p, repoPack)
+		err = pm.installPackage(ctx, p)
 		if err != nil {
 			return err
+		}
+
+		UpdateEnvPath(ctx)
+	}
+
+	return nil
+}
+
+func (pm *WindowsPackageManager) installDependencies(ctx context.Context, packs ...string) error {
+	dependencies := make([]string, 0)
+
+	for _, packName := range packs {
+		config, exists := pm.packages[packName]
+		if !exists {
+			continue
+		}
+
+		for _, d := range config.Dependencies {
+			if d == packName {
+				return errors.WithMessagef(
+					ErrCannotDependOnSelf,
+					"failed to resolve dependencies for package '%s'", packName,
+				)
+			}
+		}
+
+		dependencies = append(dependencies, config.Dependencies...)
+	}
+
+	if len(dependencies) == 0 {
+		return nil
+	}
+
+	err := pm.Install(ctx, dependencies...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to install dependencies")
+	}
+
+	return nil
+}
+
+func convertAccessToOSCoreFlag(access string) oscore.GrantFlag {
+	switch strings.ToLower(access) {
+	case "r", "read":
+		return oscore.GrantFlagRead
+	case "rx", "read-execute", "readexecute":
+		return oscore.GrantFlagReadExecute
+	case "w", "write":
+		return oscore.GrantFlagWrite
+	case "m", "modify":
+		return oscore.GrantFlagModify
+	case "f", "full-control", "fullcontrol":
+		return oscore.GrantFlagFullControl
+	default:
+		return oscore.GrantFlagRead
+	}
+}
+
+func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, packs ...string) error {
+	for _, packName := range packs {
+		config, exists := pm.packages[packName]
+		if !exists {
+			continue
+		}
+
+		for _, pre := range config.PreInstall {
+			if len(pre.GrantPermissions) > 0 {
+				for _, p := range pre.GrantPermissions {
+					log.Printf("Granting %s to %s for %s\n", p.Access, p.User, p.Path)
+
+					err := oscore.Grant(ctx, p.Path, p.User, convertAccessToOSCoreFlag(p.Access))
+					if err != nil {
+						return errors.WithMessagef(
+							err,
+							"failed to grant %s to %s for %s",
+							p.Access,
+							p.User,
+							p.Path,
+						)
+					}
+				}
+			}
+
+			if len(pre.Commands) > 0 {
+				for _, cmdStr := range pre.Commands {
+					err := oscore.ExecCommand(ctx, "cmd", "/C", cmdStr)
+					if err != nil {
+						return errors.WithMessagef(
+							err,
+							"failed to execute pre install command for package '%s': %s",
+							packName,
+							cmdStr,
+						)
+					}
+				}
+			}
 		}
 	}
 
 	return nil
 }
 
-//nolint:gocognit,funlen
-func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName string, p pack) error {
-	log.Println("Installing", packName, "package")
+//nolint:gocognit,funlen,gocyclo
+func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.Package) error {
+	log.Println("Installing", p.Name, "package")
 	var err error
 
 	resolvedPackagePath := ""
-	for _, c := range p.LookupPath {
+	for _, c := range p.LookupPaths {
 		resolvedPackagePath, err = exec.LookPath(c)
 		if err != nil {
 			continue
 		}
 
-		log.Printf("Package %s is found in path '%s'\n", packName, filepath.Dir(resolvedPackagePath))
+		log.Printf("Package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
 
 		break
 	}
 
-	if p.PreInstallFunc != nil {
-		p, err = p.PreInstallFunc(ctx, p, resolvedPackagePath)
-	}
-
-	if len(p.Dependencies) > 0 {
-		for _, d := range p.Dependencies {
-			err = pm.Install(ctx, d)
-			if err != nil {
-				return errors.WithMessagef(err, "failed to install dependency '%s'", d)
-			}
-		}
-	}
-
-	preProcessor, ok := packagePreProcessors[packName]
+	preProcessor, ok := packagePreProcessors[p.Name]
 	if ok {
-		log.Println("Execute pre processor for ", packName)
+		log.Println("Execute pre processor for ", p.Name)
 		err = preProcessor(ctx, resolvedPackagePath)
 		if err != nil {
 			return err
@@ -300,19 +203,19 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 	}
 
 	if resolvedPackagePath != "" {
-		if p.ServiceConfig != nil {
-			err = pm.installService(ctx, packName, p)
+		if p.Service != nil {
+			err = pm.installService(ctx, p)
 			if err != nil {
 				return errors.WithMessage(err, "failed to install service")
 			}
 		}
 
-		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", resolvedPackagePath, packName)
+		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", resolvedPackagePath, p.Name)
 
 		return nil
 	}
 
-	dir := p.DefaultInstallPath
+	dir := p.InstallPath
 
 	if dir == "" {
 		dir, err = os.MkdirTemp("", "install")
@@ -362,52 +265,113 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, packName st
 		return errors.WithMessage(err, "failed to download file")
 	}
 
-	//nolint:nestif
-	if p.InstallCommand != "" {
-		log.Println("Running install command for package ", packName)
-		splitted, err := shellquote.Split(p.InstallCommand)
-		if err != nil {
-			return errors.WithMessage(err, "failed to split command")
+	if len(p.InstallCommands) > 0 {
+		log.Println("Running install commands for package ", p.Name)
+
+		for _, cmd := range p.InstallCommands {
+			log.Println("Running install commands for package ", p.Name)
+
+			err = pm.executeCommand(ctx, cmd)
+			if err != nil {
+				return errors.WithMessagef(err, "failed to execute install command: %s", cmd)
+			}
 		}
+	}
 
-		//nolint:gosec
-		cmd := exec.Command(splitted[0], splitted[1:]...)
-		cmd.Stdout = log.Writer()
-		cmd.Stderr = log.Writer()
-		cmd.Dir = dir
-		log.Println('\n', cmd.String())
-		err = cmd.Run()
-		if err != nil {
-			if len(p.AllowedInstallExitCodes) > 0 && lo.Contains(p.AllowedInstallExitCodes, cmd.ProcessState.ExitCode()) {
-				log.Println(errors.WithMessage(err, "failed to execute install command"))
-				log.Println("Exit code is allowed")
+	if len(p.InstallCommands) > 0 {
+		log.Println("Running install commands for package ", p.Name)
 
-				return nil
+		for _, cmd := range p.InstallCommands {
+			log.Println("Running install commands for package ", p.Name)
+
+			err = pm.executeCommand(ctx, cmd)
+
+			if err != nil {
+				return errors.WithMessagef(err, "failed to execute install command: %s", cmd)
+			}
+		}
+	}
+
+	//nolint:nestif
+	if len(p.Install) > 0 {
+		log.Println("Running install steps for package ", p.Name)
+
+		for _, step := range p.Install {
+			if len(step.RunCommands) > 0 {
+				log.Println("Running install commands for package ", p.Name)
+
+				for _, cmd := range step.RunCommands {
+					log.Println("Running install command:", cmd)
+
+					execCmd := exec.Command("cmd", "/C", cmd)
+					execCmd.Stdout = log.Writer()
+					execCmd.Stderr = log.Writer()
+					execCmd.Dir = dir
+
+					log.Println('\n', execCmd.String())
+
+					err = execCmd.Run()
+					if err != nil {
+						if len(step.AllowedInstallExitCodes) > 0 &&
+							lo.Contains(step.AllowedInstallExitCodes, execCmd.ProcessState.ExitCode()) {
+							log.Println(errors.WithMessage(err, "failed to execute install command"))
+							log.Println("Exit code is allowed")
+
+							return nil
+						}
+
+						return errors.WithMessage(err, "failed to execute install command")
+					}
+				}
 			}
 
-			return errors.WithMessage(err, "failed to execute install command")
-		}
+			if step.WaitForService != "" {
+				err = waitUntil(ctx, func(ctx context.Context) (stop bool, err error) {
+					if service.IsExists(ctx, step.WaitForService) {
+						return true, nil
+					}
 
-		err = waitUntil(ctx, p.WaitAfterInstallCommandUntil)
-		if err != nil {
-			return errors.WithMessage(err, "failed to execute install command wait after")
+					return false, nil
+				})
+
+				if err != nil {
+					return errors.WithMessagef(err, "failed to wait for service '%s'", step.WaitForService)
+				}
+			}
+
+			if len(step.WaitForFiles) > 0 {
+				err = waitUntil(ctx, func(ctx context.Context) (stop bool, err error) {
+					allExists := true
+
+					for _, f := range step.WaitForFiles {
+						if !utils.IsFileExists(f) {
+							allExists = false
+
+							break
+						}
+					}
+
+					return allExists, nil
+				})
+
+				if err != nil {
+					return errors.WithMessagef(err, "failed to wait for files '%v'", step.WaitForFiles)
+				}
+			}
 		}
 	}
 
-	resolvedPackagePath = p.DefaultInstallPath
-
-	postProcessor, ok := packagePostProcessors[packName]
-	if ok {
-		err = postProcessor(ctx, resolvedPackagePath)
-		if err != nil {
-			return err
-		}
-	}
-
-	if p.ServiceConfig != nil {
-		err = pm.installService(ctx, packName, p)
+	if p.Service != nil {
+		err = pm.installService(ctx, p)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install service")
+		}
+	}
+
+	if len(p.PathEnv) > 0 {
+		err = appendPathEnvVariable(p.PathEnv)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -426,37 +390,29 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 	return errors.New("removing packages is not supported on Windows")
 }
 
-//nolint:funlen
-func (pm *WindowsPackageManager) installService(ctx context.Context, packName string, p pack) error {
-	_, err := exec.LookPath(repository[WinSWPackage].LookupPath[0])
-	if err != nil {
-		err = pm.Install(ctx, WinSWPackage)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install winsw")
-		}
-	}
+func (pm *WindowsPackageManager) installService(ctx context.Context, p windows.Package) error {
+	return pm.installWinSWService(ctx, p)
+}
 
-	log.Println("Installing service for package", packName)
+// installWinSWService installs a service using WinSW (https://github.com/winsw/winsw)
+func (pm *WindowsPackageManager) installWinSWService(ctx context.Context, p windows.Package) error {
+	var err error
 
-	if service.IsExists(ctx, packName) {
-		log.Printf("Service '%s' is already exists", packName)
+	log.Println("Installing service for package", p.Name)
+
+	if service.IsExists(ctx, p.Service.ID) {
+		log.Printf("Service '%s' is already exists", p.Service.ID)
 
 		return nil
 	}
 
-	if service.IsExists(ctx, p.ServiceConfig.ID) {
-		log.Printf("Service '%s' is already exists", p.ServiceConfig.ID)
+	if service.IsExists(ctx, p.Service.Name) {
+		log.Printf("Service '%s' is already exists", p.Service.Name)
 
 		return nil
 	}
 
-	if service.IsExists(ctx, p.ServiceConfig.Name) {
-		log.Printf("Service '%s' is already exists", p.ServiceConfig.Name)
-
-		return nil
-	}
-
-	serviceConfig := *p.ServiceConfig
+	serviceConfig := newWinSWServiceConfig(p)
 
 	if serviceConfig.WorkingDirectory == "" {
 		path, err := exec.LookPath(serviceConfig.Executable)
@@ -486,12 +442,12 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	configPath := filepath.Join(servicesConfigPath, packName+".xml")
+	configPath := filepath.Join(servicesConfigPath, p.Service.Name+".xml")
 
 	configOverride := false
 
 	if utils.IsFileExists(configPath) {
-		log.Printf("Service config for '%s' is already exists", packName)
+		log.Printf("Service config for '%s' is already exists", p.Service.Name)
 		// Config already exists, we will override it and try to refresh before installation
 		configOverride = true
 	}
@@ -512,11 +468,11 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 
 	err = utils.WriteContentsToFile(out, configPath)
 	if err != nil {
-		return errors.WithMessagef(err, "failed to save config for service '%s' ", packName)
+		return errors.WithMessagef(err, "failed to save config for service '%s' ", p.Service.Name)
 	}
 
 	if configOverride {
-		err = utils.ExecCommand("winsw", "refresh", configPath)
+		err = oscore.ExecCommand(ctx, "winsw", "refresh", configPath)
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to refresh service"))
 			// There is no need to return error here, because it seems that service
@@ -528,18 +484,148 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, packName st
 		}
 	}
 
-	err = utils.ExecCommand("winsw", "install", configPath)
+	err = oscore.ExecCommand(ctx, "winsw", "install", configPath)
 	if err != nil {
-		return errors.WithMessagef(err, "failed to install service '%s'", packName)
+		return errors.WithMessagef(err, "failed to install service '%s'", p.Service.Name)
 	}
 
 	return nil
 }
 
+// installServyService installs a service using Servy (https://github.com/aelassas/servy)
+//
+//nolint:funlen,unused
+func (pm *WindowsPackageManager) installServyService(ctx context.Context, p windows.Package) error {
+	if p.Service == nil {
+		return nil
+	}
+
+	log.Println("Installing service for package", p.Name)
+
+	if service.IsExists(ctx, p.Service.ID) {
+		log.Printf("Service '%s' is already exists", p.Service.ID)
+
+		return nil
+	}
+
+	if service.IsExists(ctx, p.Service.Name) {
+		log.Printf("Service '%s' is already exists", p.Service.Name)
+
+		return nil
+	}
+
+	if !utils.IsFileExists(servicesConfigPath) {
+		log.Println("Creating services config directory at", servicesConfigPath)
+
+		err := os.MkdirAll(servicesConfigPath, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create services config directory")
+		}
+
+		log.Println("Granting full control to", defaultServiceUser, "for services config directory")
+		err = oscore.GrantFullControl(ctx, servicesConfigPath, defaultServiceUser)
+		if err != nil {
+			return errors.WithMessage(err, "failed to set permissions for services config directory")
+		}
+	}
+
+	executablePath := p.Service.Executable
+	if executablePath == "" {
+		return errors.New("service executable path is required")
+	}
+
+	workingDirectory := p.Service.WorkingDirectory
+	if workingDirectory == "" {
+		path, err := exec.LookPath(executablePath)
+		if err == nil && path != "" {
+			workingDirectory = filepath.Dir(path)
+		} else {
+			workingDirectory = filepath.Dir(executablePath)
+		}
+	}
+
+	serviceName := p.Service.Name
+	if serviceName == "" {
+		serviceName = p.Name
+	}
+
+	logsDir := filepath.Join(servicesConfigPath, "logs", serviceName)
+
+	config := servyConfig{
+		Name:             serviceName,
+		Description:      serviceName,
+		ExecutablePath:   executablePath,
+		StartupDirectory: workingDirectory,
+		Parameters:       p.Service.Arguments,
+		StartupType:      2,
+		EnableRotation:   true,
+		RotationSize:     10, //nolint:mnd // 10 MB
+		StdoutPath:       filepath.Join(logsDir, "stdout.log"),
+		StderrPath:       filepath.Join(logsDir, "stderr.log"),
+	}
+
+	if p.Service.ServiceAccount != nil && p.Service.ServiceAccount.Username != "" {
+		config.RunAsLocalSystem = false
+		config.UserAccount = p.Service.ServiceAccount.Username
+		config.Password = p.Service.ServiceAccount.Password
+	} else {
+		config.RunAsLocalSystem = true
+	}
+
+	if len(p.Service.Env) > 0 {
+		envVars := make([]string, 0, len(p.Service.Env))
+		for _, e := range p.Service.Env {
+			envVars = append(envVars, fmt.Sprintf("%s=%s", e.Name, e.Value))
+		}
+		config.EnvironmentVariables = strings.Join(envVars, ";")
+	}
+
+	jsonData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return errors.WithMessage(err, "failed to marshal service config to JSON")
+	}
+
+	log.Println("Marshalled service config:")
+	log.Println(string(jsonData))
+
+	configFileName := serviceName + ".json"
+	configPath := filepath.Join(servicesConfigPath, configFileName)
+
+	log.Println("Creating service config at", configPath)
+
+	err = utils.WriteContentsToFile(jsonData, configPath)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to save config for service '%s'", serviceName)
+	}
+
+	log.Println("Importing service using servy-cli.exe")
+
+	err = oscore.ExecCommand(ctx, "servy-cli.exe", "import", "-c", "json", "-p", configPath)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to import service '%s' using servy", serviceName)
+	}
+
+	log.Printf("Service '%s' successfully installed", serviceName)
+
+	return nil
+}
+
+func (pm *WindowsPackageManager) executeCommand(ctx context.Context, cmdStr string) error {
+	cmdStr = strings.TrimSpace(cmdStr)
+	if cmdStr == "" {
+		return nil
+	}
+
+	args := []string{
+		"/C", cmdStr,
+	}
+
+	return oscore.ExecCommand(ctx, "cmd", args...)
+}
+
+// TODO: Remove this hardcoded pre processors and move them to package definitions.
 var packagePreProcessors = map[string]func(ctx context.Context, packagePath string) error{
 	PHPExtensionsPackage: func(ctx context.Context, packagePath string) error {
-		p := repository[PHPExtensionsPackage]
-
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
 		buf.Grow(100) //nolint:mnd
@@ -587,7 +673,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 		}
 		if iniFilePath == "" {
 			if packagePath == "" {
-				iniFilePath = filepath.Join(p.DefaultInstallPath, "php.ini")
+				iniFilePath = filepath.Join("C:\\php", "php.ini")
 			} else {
 				iniFilePath = filepath.Join(filepath.Dir(packagePath), "php.ini")
 			}
@@ -646,104 +732,6 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 	},
 }
 
-var packagePostProcessors = map[string]func(ctx context.Context, packagePath string) error{
-	PHPPackage: func(_ context.Context, packagePath string) error {
-		log.Printf("Adding %s to PATH", packagePath)
-
-		path, _ := os.LookupEnv("PATH")
-
-		currentPath := strings.Split(path, string(filepath.ListSeparator))
-		if utils.Contains(currentPath, packagePath) {
-			log.Println("Path already contains ", packagePath)
-			log.Println("PATH: ", strings.Join(currentPath, string(filepath.ListSeparator)))
-
-			return nil
-		}
-
-		newPath := append(currentPath, packagePath)
-
-		log.Println("New PATH: ", strings.Join(newPath, string(filepath.ListSeparator)))
-
-		err := os.Setenv("PATH", path+string(os.PathListSeparator)+packagePath)
-		if err != nil {
-			return errors.WithMessage(err, "failed to set PATH")
-		}
-
-		return nil
-	},
-	NginxPackage: func(_ context.Context, packagePath string) error {
-		entries, err := os.ReadDir(packagePath)
-		if err != nil {
-			return err
-		}
-
-		if len(entries) != 1 {
-			return NewErrInvalidDirContents(packagePath)
-		}
-
-		d := filepath.Join(packagePath, entries[0].Name())
-
-		entries, err = os.ReadDir(d)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			err = utils.Move(filepath.Join(d, entry.Name()), filepath.Join(packagePath, entry.Name()))
-			if err != nil {
-				return errors.WithMessage(err, "failed to move file")
-			}
-		}
-
-		log.Println("Removing", d)
-
-		return os.RemoveAll(d)
-	},
-	ComposerPackage: func(_ context.Context, _ string) error {
-		// Wait composer installation
-
-		defaultPath := "C:\\ProgramData\\ComposerSetup\\bin\\composer"
-
-		tries := 8
-		sleepTime := 1 * time.Second
-		for tries > 0 {
-			for _, p := range repository[ComposerPackage].LookupPath {
-				if _, err := exec.LookPath(p); err == nil {
-					return nil
-				}
-			}
-
-			if utils.IsFileExists(defaultPath) {
-				p := filepath.Dir(defaultPath)
-				log.Printf("Adding %s to PATH", p)
-
-				err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
-				if err != nil {
-					return errors.WithMessage(err, "failed to set PATH")
-				}
-
-				return nil
-			}
-
-			time.Sleep(sleepTime)
-			sleepTime *= 2
-			tries--
-		}
-
-		return errors.New("failed to install composer, failed to lookup composer executable")
-	},
-	NodeJSPackage: func(_ context.Context, _ string) error {
-		defaultPath := "C:\\Program Files\\nodejs\\node"
-		p := filepath.Dir(defaultPath)
-		log.Printf("Adding %s to PATH", p)
-		err := os.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+p)
-		if err != nil {
-			return errors.WithMessage(err, "failed to set PATH")
-		}
-
-		return nil
-	},
-}
-
 type WinSWServiceConfig struct {
 	ID               string `xml:"id"`
 	Name             string `xml:"name"`
@@ -754,27 +742,109 @@ type WinSWServiceConfig struct {
 	StopExecutable string `xml:"stopexecutable,omitempty"`
 	StopArguments  string `xml:"stoparguments,omitempty"`
 
-	OnFailure    []onFailure `xml:"onfailure,omitempty"`
-	ResetFailure string      `xml:"resetfailure,omitempty"`
+	OnFailure    []WinSWServiceConfigOnFailure `xml:"onfailure,omitempty"`
+	ResetFailure string                        `xml:"resetfailure,omitempty"`
 
 	ServiceAccount *WinSWServiceConfigServiceAccount `xml:"serviceaccount,omitempty"`
 
-	Env []env `xml:"env,omitempty"`
+	Env []WinSWServiceConfigEnv `xml:"env,omitempty"`
 }
 
 type WinSWServiceConfigServiceAccount struct {
-	Username string `xml:"username,omitempty"`
-	Password string `xml:"password,omitempty"`
+	Username string `xml:"username"`
+	Password string `xml:"password"`
 }
 
-type onFailure struct {
+type WinSWServiceConfigOnFailure struct {
 	Action string `xml:"action,attr"`
 	Delay  string `xml:"delay,attr,omitempty"`
 }
 
-type env struct {
+type WinSWServiceConfigEnv struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+func newWinSWServiceConfig(p windows.Package) WinSWServiceConfig {
+	config := WinSWServiceConfig{
+		ID:               p.Service.ID,
+		Name:             p.Service.Name,
+		Executable:       p.Service.Executable,
+		WorkingDirectory: p.Service.WorkingDirectory,
+		Arguments:        p.Service.Arguments,
+	}
+
+	if len(p.Service.OnFailure) > 0 {
+		onFailures := make([]WinSWServiceConfigOnFailure, 0, len(p.Service.OnFailure))
+		for _, of := range p.Service.OnFailure {
+			onFailures = append(onFailures, WinSWServiceConfigOnFailure{
+				Action: of.Action,
+				Delay:  of.Delay,
+			})
+		}
+
+		config.OnFailure = onFailures
+	}
+
+	if p.Service.ServiceAccount != nil {
+		config.ServiceAccount = &WinSWServiceConfigServiceAccount{
+			Username: p.Service.ServiceAccount.Username,
+			Password: p.Service.ServiceAccount.Password,
+		}
+	}
+
+	if len(p.Service.Env) > 0 {
+		envVars := make([]WinSWServiceConfigEnv, 0, len(p.Service.Env))
+		for _, e := range p.Service.Env {
+			envVars = append(envVars, WinSWServiceConfigEnv{
+				Name:  e.Name,
+				Value: e.Value,
+			})
+		}
+		config.Env = envVars
+	}
+
+	return config
+}
+
+//nolint:unused,tagliatelle
+type servyConfig struct {
+	Name                           string `json:"Name"`
+	Description                    string `json:"Description,omitempty"`
+	ExecutablePath                 string `json:"ExecutablePath"`
+	StartupDirectory               string `json:"StartupDirectory,omitempty"`
+	Parameters                     string `json:"Parameters,omitempty"`
+	StartupType                    int    `json:"StartupType,omitempty"`
+	Priority                       int    `json:"Priority,omitempty"`
+	StdoutPath                     string `json:"StdoutPath,omitempty"`
+	StderrPath                     string `json:"StderrPath,omitempty"`
+	EnableRotation                 bool   `json:"EnableRotation,omitempty"`
+	RotationSize                   int    `json:"RotationSize,omitempty"`
+	EnableHealthMonitoring         bool   `json:"EnableHealthMonitoring,omitempty"`
+	HeartbeatInterval              int    `json:"HeartbeatInterval,omitempty"`
+	MaxFailedChecks                int    `json:"MaxFailedChecks,omitempty"`
+	RecoveryAction                 int    `json:"RecoveryAction,omitempty"`
+	MaxRestartAttempts             int    `json:"MaxRestartAttempts,omitempty"`
+	FailureProgramPath             string `json:"FailureProgramPath,omitempty"`
+	FailureProgramStartupDirectory string `json:"FailureProgramStartupDirectory,omitempty"`
+	FailureProgramParameters       string `json:"FailureProgramParameters,omitempty"`
+	EnvironmentVariables           string `json:"EnvironmentVariables,omitempty"`
+	ServiceDependencies            string `json:"ServiceDependencies,omitempty"`
+	RunAsLocalSystem               bool   `json:"RunAsLocalSystem,omitempty"`
+	UserAccount                    string `json:"UserAccount,omitempty"`
+	Password                       string `json:"Password,omitempty"`
+	PreLaunchExecutablePath        string `json:"PreLaunchExecutablePath,omitempty"`
+	PreLaunchStartupDirectory      string `json:"PreLaunchStartupDirectory,omitempty"`
+	PreLaunchParameters            string `json:"PreLaunchParameters,omitempty"`
+	PreLaunchEnvironmentVariables  string `json:"PreLaunchEnvironmentVariables,omitempty"`
+	PreLaunchStdoutPath            string `json:"PreLaunchStdoutPath,omitempty"`
+	PreLaunchStderrPath            string `json:"PreLaunchStderrPath,omitempty"`
+	PreLaunchTimeoutSeconds        int    `json:"PreLaunchTimeoutSeconds,omitempty"`
+	PreLaunchRetryAttempts         int    `json:"PreLaunchRetryAttempts,omitempty"`
+	PreLaunchIgnoreFailure         bool   `json:"PreLaunchIgnoreFailure,omitempty"`
+	PostLaunchExecutablePath       string `json:"PostLaunchExecutablePath,omitempty"`
+	PostLaunchStartupDirectory     string `json:"PostLaunchStartupDirectory,omitempty"`
+	PostLaunchParameters           string `json:"PostLaunchParameters,omitempty"`
 }
 
 const (
@@ -789,6 +859,8 @@ func waitUntil(ctx context.Context, f func(ctx context.Context) (stop bool, err 
 
 	waitTries := waitTriesMax
 	ticker := time.NewTicker(waitTime)
+	defer ticker.Stop()
+
 	for waitTries > 0 {
 		waitTries--
 
@@ -807,7 +879,40 @@ func waitUntil(ctx context.Context, f func(ctx context.Context) (stop bool, err 
 			waitTries = 0
 		}
 	}
-	ticker.Stop()
 
 	return errors.New("timeout waiting for install command to finish")
+}
+
+func appendPathEnvVariable(newPaths []string) error {
+	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
+	pathsToAdd := make([]string, 0, len(newPaths))
+
+	for _, p := range newPaths {
+		if !utils.IsFileExists(p) {
+			continue
+		}
+
+		if utils.Contains(currentPath, p) {
+			continue
+		}
+
+		if utils.Contains(pathsToAdd, p) {
+			continue
+		}
+
+		pathsToAdd = append(pathsToAdd, p)
+	}
+
+	if len(pathsToAdd) == 0 {
+		return nil
+	}
+
+	newPathValue := strings.Join(append(currentPath, pathsToAdd...), string(filepath.ListSeparator))
+
+	err := os.Setenv("PATH", newPathValue)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set PATH env variable")
+	}
+
+	return nil
 }
