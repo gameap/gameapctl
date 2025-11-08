@@ -182,15 +182,24 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 	var err error
 
 	resolvedPackagePath := ""
+	foundCount := 0
 	for _, c := range p.LookupPaths {
 		resolvedPackagePath, err = exec.LookPath(c)
 		if err != nil {
 			continue
 		}
 
-		log.Printf("Package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
+		foundCount++
+
+		log.Printf("Path for package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
 
 		break
+	}
+
+	if foundCount >= len(p.LookupPaths) {
+		log.Printf("Package %s is already installed, skipping installation\n", p.Name)
+
+		return nil
 	}
 
 	preProcessor, ok := packagePreProcessors[p.Name]
@@ -200,19 +209,6 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		if err != nil {
 			return err
 		}
-	}
-
-	if resolvedPackagePath != "" {
-		if p.Service != nil {
-			err = pm.installService(ctx, p)
-			if err != nil {
-				return errors.WithMessage(err, "failed to install service")
-			}
-		}
-
-		log.Printf("Package path is not empty (%s), skipping for '%s' package \n", resolvedPackagePath, p.Name)
-
-		return nil
 	}
 
 	dir := p.InstallPath
