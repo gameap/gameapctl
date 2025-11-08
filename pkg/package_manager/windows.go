@@ -194,7 +194,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		break
 	}
 
-	if (service.IsExists(ctx, p.Service.ID) || service.IsExists(ctx, p.Service.Name)) &&
+	if (p.Service != nil && (service.IsExists(ctx, p.Service.ID) || service.IsExists(ctx, p.Service.Name))) &&
 		len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
 		log.Printf("Package %s is already installed, skipping installation\n", p.Name)
 
@@ -619,34 +619,37 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 ) (windows.Package, error) {
 	var err error
 
-	p.Service.Executable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Executable, vars)
-	if err != nil {
-		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service executable")
-	}
-
-	p.Service.Arguments, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Arguments, vars)
-	if err != nil {
-		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service arguments")
-	}
-
-	p.Service.WorkingDirectory, err = pm.replaceRuntimeVariablesString(ctx, p.Service.WorkingDirectory, vars)
-	if err != nil {
-		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service working directory")
-	}
-
-	p.Service.StopExecutable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.StopExecutable, vars)
-	if err != nil {
-		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service stop executable")
-	}
-
-	for i := range p.Service.Env {
-		p.Service.Env[i].Value, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Env[i].Value, vars)
+	//nolint:nestif
+	if p.Service != nil {
+		p.Service.Executable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Executable, vars)
 		if err != nil {
-			return p, errors.WithMessagef(
-				err,
-				"failed to replace runtimeTemplateVariables in service env variable '%s'",
-				p.Service.Env[i].Name,
-			)
+			return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service executable")
+		}
+
+		p.Service.Arguments, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Arguments, vars)
+		if err != nil {
+			return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service arguments")
+		}
+
+		p.Service.WorkingDirectory, err = pm.replaceRuntimeVariablesString(ctx, p.Service.WorkingDirectory, vars)
+		if err != nil {
+			return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service working directory")
+		}
+
+		p.Service.StopExecutable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.StopExecutable, vars)
+		if err != nil {
+			return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service stop executable")
+		}
+
+		for i := range p.Service.Env {
+			p.Service.Env[i].Value, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Env[i].Value, vars)
+			if err != nil {
+				return p, errors.WithMessagef(
+					err,
+					"failed to replace runtimeTemplateVariables in service env variable '%s'",
+					p.Service.Env[i].Name,
+				)
+			}
 		}
 	}
 
