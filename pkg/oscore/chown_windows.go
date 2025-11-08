@@ -43,7 +43,7 @@ func ChownR(_ context.Context, _ string, _, _ int) error {
 //   - (OI) - Object Inherit: files inherit permissions
 //   - (CI) - Container Inherit: subdirectories inherit permissions
 func Grant(ctx context.Context, path string, userName string, permission GrantFlag) error {
-	grantParam := fmt.Sprintf("%s:(OI)(CI)%s", userName, string(permission))
+	grantParam := fmt.Sprintf("\"%s\":(OI)(CI)%s", userName, string(permission))
 
 	// Execute icacls command
 	// /grant - grants specified permissions
