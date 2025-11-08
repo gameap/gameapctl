@@ -1,14 +1,17 @@
 packages:
   - name: nginx
     lookup-paths: [ nginx ]
-    download-urls:
-      - http://nginx.org/download/nginx-1.29.3.zip
-    install-path: C:\gameap\tools\nginx
     pre-install:
       - grant-permissions:
           - path: C:\gameap\tools\nginx
             user: NT AUTHORITY\NETWORK SERVICE
             access: full-control
+    download-urls:
+      - http://nginx.org/download/nginx-1.29.3.zip
+    install-path: C:\gameap\tools\nginx
+    install:
+      - run-commands:
+        - robocopy {{package_install_path}}\conf\nginx-1.29.3 {{package_install_path}} /E /MOVE
     service:
       id: nginx
       name: nginx

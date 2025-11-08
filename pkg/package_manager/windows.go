@@ -369,17 +369,17 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		}
 	}
 
-	if p.Service != nil {
-		err = pm.installService(ctx, p)
-		if err != nil {
-			return errors.WithMessage(err, "failed to install service")
-		}
-	}
-
 	if len(p.PathEnv) > 0 {
 		err = appendPathEnvVariable(p.PathEnv)
 		if err != nil {
 			return err
+		}
+	}
+
+	if p.Service != nil {
+		err = pm.installService(ctx, p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install service")
 		}
 	}
 
