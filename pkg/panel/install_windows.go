@@ -30,28 +30,34 @@ func install(ctx context.Context, cfg InstallConfig) error {
 		}
 	}
 
-	if err = oscore.GrantReadExecute(
-		ctx,
-		cfg.ConfigDirectory,
-		windowUsername,
-	); err != nil {
-		return errors.WithMessage(err, "failed to set permissions for config directory")
+	if utils.IsFileExists(cfg.ConfigDirectory) {
+		if err = oscore.GrantReadExecute(
+			ctx,
+			cfg.ConfigDirectory,
+			windowUsername,
+		); err != nil {
+			return errors.WithMessage(err, "failed to grant read-execute permissions for config directory")
+		}
 	}
 
-	if err = oscore.GrantFullControl(
-		ctx,
-		cfg.DataDirectory,
-		windowUsername,
-	); err != nil {
-		return errors.WithMessage(err, "failed to set permissions for config directory")
+	if utils.IsFileExists(cfg.DataDirectory) {
+		if err = oscore.GrantFullControl(
+			ctx,
+			cfg.DataDirectory,
+			windowUsername,
+		); err != nil {
+			return errors.WithMessage(err, "failed to set permissions for config directory")
+		}
 	}
 
-	if err = oscore.GrantReadExecute(
-		ctx,
-		cfg.BinaryPath,
-		windowUsername,
-	); err != nil {
-		return errors.WithMessage(err, "failed to set permissions for config directory")
+	if utils.IsFileExists(cfg.BinaryPath) {
+		if err = oscore.GrantReadExecute(
+			ctx,
+			cfg.BinaryPath,
+			windowUsername,
+		); err != nil {
+			return errors.WithMessage(err, "failed to set permissions for config directory")
+		}
 	}
 
 	err = pm.Install(ctx, packagemanager.GameAP)

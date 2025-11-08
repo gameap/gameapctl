@@ -67,7 +67,8 @@ packages:
     dependencies: [ vcredist16 ]
 
   - name: php-extensions
-    lookup-paths: [ php ]
+    dependencies:
+      - php
 
   - name: vcredist16
     download-urls:
