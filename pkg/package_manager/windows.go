@@ -467,6 +467,16 @@ func (pm *WindowsPackageManager) installWinSWService(ctx context.Context, p wind
 		return errors.WithMessagef(err, "failed to save config for service '%s' ", p.Service.Name)
 	}
 
+	if p.Service.ServiceAccount != nil && p.Service.ServiceAccount.Username != "" {
+		err = oscore.Grant(ctx, configPath, p.Service.ServiceAccount.Username, oscore.GrantFlagFullControl)
+		if err != nil {
+			return errors.WithMessagef(
+				err,
+				"failed to grant full control to user '%s' for service config '%s'",
+			)
+		}
+	}
+
 	if configOverride {
 		err = oscore.ExecCommand(ctx, "winsw", "refresh", configPath)
 		if err != nil {
