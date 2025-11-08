@@ -184,7 +184,7 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		break
 	}
 
-	if foundCount >= len(p.LookupPaths) {
+	if len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
 		log.Printf("Package %s is already installed, skipping installation\n", p.Name)
 
 		return nil
@@ -608,7 +608,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 	PHPExtensionsPackage: func(ctx context.Context, packagePath string) error {
 		cmd := exec.Command("php", "-r", "echo php_ini_scanned_files();")
 		buf := &bytes.Buffer{}
-		buf.Grow(100) //nolint:mnd
+		buf.Grow(1000) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -640,7 +640,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		cmd = exec.Command("php", "-r", "echo php_ini_loaded_file();")
 		buf = &bytes.Buffer{}
-		buf.Grow(100) //nolint:mnd
+		buf.Grow(1000) //nolint:mnd
 		cmd.Stdout = buf
 		cmd.Stderr = log.Writer()
 		log.Println("\n", cmd.String())
@@ -648,6 +648,9 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 		if err != nil {
 			return errors.WithMessage(err, "failed to get ini loaded file from php")
 		}
+
+		log.Println("Loaded ini file:", buf.String())
+
 		loadedFiles := strings.Split(buf.String(), "\n")
 		iniFilePath := ""
 		if len(loadedFiles) > 0 {
@@ -663,6 +666,7 @@ var packagePreProcessors = map[string]func(ctx context.Context, packagePath stri
 
 		if !utils.IsFileExists(iniFilePath) {
 			log.Println("Creating php.ini file on", iniFilePath)
+
 			f, err := os.Create(iniFilePath)
 			if err != nil {
 				return err
