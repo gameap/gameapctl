@@ -194,11 +194,23 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		break
 	}
 
-	if (p.Service != nil && (service.IsExists(ctx, p.Service.ID) || service.IsExists(ctx, p.Service.Name))) &&
-		len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
-		log.Printf("Package %s is already installed, skipping installation\n", p.Name)
+	if len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
+		if p.Service == nil {
+			log.Printf(
+				"Package %s is already installed, skipping installation (lookup path found, service is nil)\n",
+				p.Name,
+			)
 
-		return nil
+			return nil
+		}
+
+		if service.IsExists(ctx, p.Service.ID) || service.IsExists(ctx, p.Service.Name) {
+			log.Printf(
+				"Package %s is already installed, skipping installation (lookup path found, service %s exists)\n",
+				p.Name,
+				p.Service.ID,
+			)
+		}
 	}
 
 	p, err = pm.replaceRuntimeVariables(ctx, p, runtimeVars)
@@ -391,6 +403,8 @@ func (pm *WindowsPackageManager) installService(ctx context.Context, p windows.P
 }
 
 // installWinSWService installs a service using WinSW (https://github.com/winsw/winsw)
+//
+//nolint:funlen
 func (pm *WindowsPackageManager) installWinSWService(ctx context.Context, p windows.Package) error {
 	var err error
 
@@ -473,6 +487,8 @@ func (pm *WindowsPackageManager) installWinSWService(ctx context.Context, p wind
 			return errors.WithMessagef(
 				err,
 				"failed to grant full control to user '%s' for service config '%s'",
+				p.Service.ServiceAccount.Username,
+				configPath,
 			)
 		}
 	}
