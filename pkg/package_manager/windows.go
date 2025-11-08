@@ -15,6 +15,7 @@ import (
 	pathPkg "path"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -169,6 +170,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 	log.Println("Installing", p.Name, "package")
 	var err error
 
+	runtimeVars := runtimeTemplateVariables{
+		lookupPaths: make(map[string]string, len(p.LookupPaths)),
+
+		// default values
+		installPath: p.InstallPath,
+	}
+
 	resolvedPackagePath := ""
 	foundCount := 0
 	for _, c := range p.LookupPaths {
@@ -181,13 +189,21 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 
 		log.Printf("Path for package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
 
+		runtimeVars.lookupPaths[c] = filepath.Dir(resolvedPackagePath)
+
 		break
 	}
 
-	if len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
+	if (service.IsExists(ctx, p.Service.ID) || service.IsExists(ctx, p.Service.Name)) &&
+		len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
 		log.Printf("Package %s is already installed, skipping installation\n", p.Name)
 
 		return nil
+	}
+
+	p, err = pm.replaceRuntimeVariables(ctx, p, runtimeVars)
+	if err != nil {
+		return errors.WithMessage(err, "failed to replace runtimeTemplateVariables variables in package")
 	}
 
 	preProcessor, ok := packagePreProcessors[p.Name]
@@ -588,6 +604,78 @@ func (pm *WindowsPackageManager) installServyService(ctx context.Context, p wind
 	log.Printf("Service '%s' successfully installed", serviceName)
 
 	return nil
+}
+
+type runtimeTemplateVariables struct {
+	// runtime
+	lookupPaths map[string]string
+
+	// some default values for package
+	installPath string
+}
+
+func (pm *WindowsPackageManager) replaceRuntimeVariables(ctx context.Context, p windows.Package, vars runtimeTemplateVariables) (windows.Package, error) {
+	var err error
+
+	p.Service.Executable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Executable, vars)
+	if err != nil {
+		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service executable")
+	}
+
+	p.Service.Arguments, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Arguments, vars)
+	if err != nil {
+		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service arguments")
+	}
+
+	p.Service.WorkingDirectory, err = pm.replaceRuntimeVariablesString(ctx, p.Service.WorkingDirectory, vars)
+	if err != nil {
+		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service working directory")
+	}
+
+	p.Service.StopExecutable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.StopExecutable, vars)
+	if err != nil {
+		return p, errors.WithMessage(err, "failed to replace runtimeTemplateVariables in service stop executable")
+	}
+
+	for i := range p.Service.Env {
+		p.Service.Env[i].Value, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Env[i].Value, vars)
+		if err != nil {
+			return p, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in service env variable '%s'",
+				p.Service.Env[i].Name,
+			)
+		}
+	}
+
+	return p, nil
+}
+
+var runtimeTemplateFuncMap = template.FuncMap{
+	"default": func(defaultVal interface{}, value interface{}) interface{} {
+		if value == nil || value == "" {
+			return defaultVal
+		}
+
+		return value
+	},
+}
+
+func (pm *WindowsPackageManager) replaceRuntimeVariablesString(_ context.Context, v string, vars runtimeTemplateVariables) (string, error) {
+	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Parse(v)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse template")
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(len(v) + 100) //nolint:mnd
+
+	err = tmpl.Execute(&buf, vars)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to execute template")
+	}
+
+	return buf.String(), nil
 }
 
 func (pm *WindowsPackageManager) executeCommand(ctx context.Context, cmdStr string) error {
