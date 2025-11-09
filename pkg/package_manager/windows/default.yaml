@@ -12,6 +12,11 @@ packages:
     install:
       - run-commands:
         - robocopy {{package_install_path}}\nginx-1.29.3 {{package_install_path}} /E /MOVE
+        allowed-install-exit-codes:
+          # https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/return-codes-used-robocopy-utility
+          - 1 # All files were copied successfully.
+          - 3 # Some files were copied. Additional files were present. No failure was met.
+          - 5 # Some files were copied. Some files were mismatched. No failure was met.
     service:
       id: nginx
       name: nginx
@@ -41,8 +46,8 @@ packages:
       - https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi
     install:
       - run-commands:
-        - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
-      - wait-for-service: MariaDB
+          - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
+        wait-for-service: MariaDB
 
   - name: php
     lookup-paths: [ php, php-cgi ]
