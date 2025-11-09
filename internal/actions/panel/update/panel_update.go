@@ -22,12 +22,24 @@ const (
 func Handle(cliCtx *cli.Context) error {
 	fmt.Println("GameAP update")
 
-	v, err := detectMajorVersion(cliCtx.Context)
+	currentMajorVersion, err := detectMajorVersion(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
 
-	if v == versionV4 {
+	toValue := cliCtx.String("to")
+	if toValue != "" {
+		toVersion, err := parseToVersion(toValue)
+		if err != nil {
+			return err
+		}
+
+		if currentMajorVersion == versionV3 && toVersion == versionV4 {
+			return handleV3toV4(cliCtx)
+		}
+	}
+
+	if currentMajorVersion == versionV4 {
 		return handleV4(cliCtx)
 	}
 
@@ -77,4 +89,17 @@ func detectMajorVersion(ctx context.Context) (version, error) {
 	}
 
 	return "", errors.New("unable to detect GameAP version: no installation markers found")
+}
+
+var errInvalidToVersion = errors.New("invalid --to version specified, must be '4' or 'v4'")
+
+func parseToVersion(to string) (version, error) {
+	switch to {
+	case "3", "v3":
+		return versionV3, errInvalidToVersion
+	case "4", "v4":
+		return versionV4, nil
+	default:
+		return "", errInvalidToVersion
+	}
 }

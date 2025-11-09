@@ -263,6 +263,14 @@ func Run(args []string) {
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name: "to",
+								Usage: "Update to specific version. " +
+									"The version must be greater than the current one, " +
+									"for example: --to=v4, --to=4",
+							},
+						},
 						Before: func(cliCtx *cli.Context) error {
 							packagemanager.UpdateEnvPath(cliCtx.Context)
 
