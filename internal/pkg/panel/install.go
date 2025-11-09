@@ -103,11 +103,11 @@ func SetupGameAPFromRepo(ctx context.Context, path string) error {
 }
 
 func CheckInstallation(ctx context.Context, host, port string, https bool) error {
-	return checkInstallation(ctx, createHealthURL(host, port, https, "/healthz"))
+	return checkInstallation(ctx, createHealthURL(host, port, https, "/api/healthz"))
 }
 
 func CheckInstallationV4(ctx context.Context, host, port string, https bool) error {
-	return checkInstallation(ctx, createHealthURL(host, port, https, "/health"))
+	return checkInstallation(ctx, createHealthURL(host, port, https, "/api/health"))
 }
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
