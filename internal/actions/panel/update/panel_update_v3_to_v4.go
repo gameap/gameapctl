@@ -15,6 +15,7 @@ import (
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -24,11 +25,10 @@ import (
 
 const (
 	dbDriverMySQL             = "mysql"
+	dbDriverSQLite            = "sqlite"
 	webServerNginx            = "nginx"
 	webServerApache           = "apache"
 	webServerApache2          = "apache2"
-	nginxConfigPath           = "/etc/nginx/sites-available/gameap.conf"
-	apacheConfigPath          = "/etc/apache2/sites-available/gameap.conf"
 	encryptionKeySize         = 32
 	healthCheckTimeout        = 5
 	defaultHTTPHost           = "0.0.0.0"
@@ -79,7 +79,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	var webServerBackup string
 	if state.WebServer != "" {
 		log.Printf("Backing up %s configuration...\n", state.WebServer)
-		webServerBackup, err = backupWebServerConfig(state.WebServer)
+		webServerBackup, err = backupWebServerConfig(ctx, state.WebServer)
 		if err != nil {
 			log.Printf("Warning: failed to backup web server config: %v\n", err)
 		} else {
@@ -94,6 +94,13 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	}
 
 	installConfig.LegacyPath = v3Path
+
+	if installConfig.DatabaseDriver == dbDriverSQLite {
+		log.Println("Handling SQLite database migration...")
+		if err := handleSQLiteMigration(v3Path, v3Config, &installConfig); err != nil {
+			return errors.WithMessage(err, "failed to handle SQLite database migration")
+		}
+	}
 
 	log.Println("Installing GameAP v4...")
 	if err := panel.Install(ctx, installConfig); err != nil {
@@ -139,7 +146,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	if state.WebServer != "" {
 		log.Printf("Updating %s configuration to proxy to v4...\n", state.WebServer)
 
-		if err := updateWebServerConfigForV4(state.WebServer, installConfig.HTTPPort); err != nil {
+		if err := updateWebServerConfigForV4(ctx, state.WebServer, installConfig.HTTPPort); err != nil {
 			log.Printf("Failed to update web server config: %v\n", err)
 			log.Println("Rolling back...")
 
@@ -318,13 +325,13 @@ func buildDatabaseURL(v3Config map[string]string) (string, string, error) {
 			username, password, host, port, database,
 		), nil
 
-	case "sqlite":
+	case dbDriverSQLite:
 		dbPath := v3Config["DB_DATABASE"]
 		if dbPath == "" {
 			return "", "", errors.New("sqlite database path not specified")
 		}
 
-		return "sqlite", dbPath, nil
+		return dbDriverSQLite, dbPath, nil
 
 	default:
 		return "", "", errors.Errorf("unsupported database connection: %s", dbConnection)
@@ -373,23 +380,35 @@ func buildInstallConfig(v3Config map[string]string, _ gameapctl.PanelInstallStat
 		EncryptionKey:      encryptionKey,
 		AuthSecret:         authSecretB64,
 		AuthService:        "paseto",
-		CacheDriver:        dbDriver,
+		CacheDriver:        "inmemory",
 		FilesDriver:        "local",
 		FilesLocalBasePath: filepath.Join(dataDir, "files"),
 		GlobalAPIURL:       "https://api.gameap.com",
 	}, nil
 }
 
-func backupWebServerConfig(webServer string) (string, error) {
+func backupWebServerConfig(ctx context.Context, webServer string) (string, error) {
 	var configPath string
+	var err error
 
 	switch webServer {
 	case webServerNginx:
-		configPath = nginxConfigPath
+		configPath, err = packagemanager.ConfigForDistro(
+			ctx,
+			packagemanager.NginxPackage,
+			packagemanager.ConfigurationGameAPHostConf,
+		)
 	case webServerApache, webServerApache2:
-		configPath = apacheConfigPath
+		configPath, err = packagemanager.ConfigForDistro(
+			ctx,
+			packagemanager.ApachePackage,
+			packagemanager.ConfigurationGameAPHostConf,
+		)
 	default:
 		return "", errors.Errorf("unsupported web server: %s", webServer)
+	}
+	if err != nil {
+		return "", errors.WithMessage(err, "failed to get web server config path")
 	}
 
 	if !utils.IsFileExists(configPath) {
@@ -404,18 +423,18 @@ func backupWebServerConfig(webServer string) (string, error) {
 	return backupPath, nil
 }
 
-func updateWebServerConfigForV4(webServer, targetPort string) error {
+func updateWebServerConfigForV4(ctx context.Context, webServer, targetPort string) error {
 	switch webServer {
 	case webServerNginx:
-		return updateNginxConfigForV4(targetPort)
+		return updateNginxConfigForV4(ctx, targetPort)
 	case webServerApache, webServerApache2:
-		return updateApacheConfigForV4(targetPort)
+		return updateApacheConfigForV4(ctx, targetPort)
 	default:
 		return errors.Errorf("unsupported web server: %s", webServer)
 	}
 }
 
-func updateNginxConfigForV4(targetPort string) error {
+func updateNginxConfigForV4(ctx context.Context, targetPort string) error {
 	proxyTarget := fmt.Sprintf("http://127.0.0.1:%s", targetPort)
 
 	newConfig := `server {
@@ -438,14 +457,23 @@ func updateNginxConfigForV4(targetPort string) error {
 }
 `
 
-	if err := os.WriteFile(nginxConfigPath, []byte(newConfig), webServerConfigPermission); err != nil {
+	gameapConfPath, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.NginxPackage,
+		packagemanager.ConfigurationGameAPHostConf,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get nginx config path")
+	}
+
+	if err := os.WriteFile(gameapConfPath, []byte(newConfig), webServerConfigPermission); err != nil {
 		return errors.WithMessage(err, "failed to write nginx config")
 	}
 
 	return nil
 }
 
-func updateApacheConfigForV4(targetPort string) error {
+func updateApacheConfigForV4(ctx context.Context, targetPort string) error {
 	proxyTarget := fmt.Sprintf("http://127.0.0.1:%s/", targetPort)
 
 	newConfig := `<VirtualHost *:80>
@@ -461,7 +489,16 @@ func updateApacheConfigForV4(targetPort string) error {
 </VirtualHost>
 `
 
-	if err := os.WriteFile(apacheConfigPath, []byte(newConfig), webServerConfigPermission); err != nil {
+	gameapConfPath, err := packagemanager.ConfigForDistro(
+		ctx,
+		packagemanager.ApachePackage,
+		packagemanager.ConfigurationGameAPHostConf,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to get nginx config path")
+	}
+
+	if err := os.WriteFile(gameapConfPath, []byte(newConfig), webServerConfigPermission); err != nil {
 		return errors.WithMessage(err, "failed to write apache config")
 	}
 
@@ -532,11 +569,26 @@ func restoreWebServerFromBackup(ctx context.Context, webServerBackup, webServer 
 	log.Println("Restoring web server configuration...")
 
 	var configPath string
+	var err error
+
 	switch webServer {
 	case webServerNginx:
-		configPath = nginxConfigPath
+		configPath, err = packagemanager.ConfigForDistro(
+			ctx,
+			packagemanager.NginxPackage,
+			packagemanager.ConfigurationGameAPHostConf,
+		)
 	case webServerApache, webServerApache2:
-		configPath = apacheConfigPath
+		configPath, err = packagemanager.ConfigForDistro(
+			ctx,
+			packagemanager.ApachePackage,
+			packagemanager.ConfigurationGameAPHostConf,
+		)
+	}
+	if err != nil {
+		log.Printf("failed to get web server config path: %v\n", err)
+
+		return
 	}
 
 	if configPath == "" {
@@ -588,4 +640,33 @@ func checkHealthV4(ctx context.Context, host, port string) error {
 	}
 
 	return errors.New("health check failed after multiple retries")
+}
+
+func handleSQLiteMigration(v3Path string, v3Config map[string]string, installConfig *panel.InstallConfig) error {
+	v3DBPath := v3Config["DB_DATABASE"]
+	if v3DBPath == "" {
+		return errors.New("sqlite database path not specified in v3 config")
+	}
+
+	if !filepath.IsAbs(v3DBPath) {
+		v3DBPath = filepath.Join(v3Path, v3DBPath)
+	}
+
+	if !utils.IsFileExists(v3DBPath) {
+		log.Printf("SQLite database file not found at legacy path: %s\n", v3DBPath)
+
+		return errors.Errorf("sqlite database file not found at %s", v3DBPath)
+	}
+
+	v4DBPath := filepath.Join(installConfig.DataDirectory, "gameap.db")
+
+	log.Printf("Copying SQLite database from %s to %s...\n", v3DBPath, v4DBPath)
+	if err := utils.Copy(v3DBPath, v4DBPath); err != nil {
+		return errors.WithMessage(err, "failed to copy SQLite database")
+	}
+
+	installConfig.DatabaseURL = v4DBPath
+	log.Println("SQLite database migrated successfully")
+
+	return nil
 }

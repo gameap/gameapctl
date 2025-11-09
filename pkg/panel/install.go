@@ -80,7 +80,7 @@ type ConfigEnvData struct {
 
 // Install installs GameAP v4.
 //
-//nolint:gocognit,funlen
+//nolint:gocognit
 func Install(ctx context.Context, config InstallConfig) error {
 	// Set defaults if not provided
 	if config.ConfigDirectory == "" {
@@ -108,14 +108,19 @@ func Install(ctx context.Context, config InstallConfig) error {
 		config.AuthService = "paseto"
 	}
 	if config.CacheDriver == "" {
-		switch config.DatabaseDriver {
-		case "sqlite", "sqlite3":
-			config.CacheDriver = "inmemory"
-		case "mysql":
-			config.CacheDriver = "mysql"
-		default:
-			config.CacheDriver = "inmemory"
-		}
+		// Determine cache driver based on database driver
+		// Now we will always use inmemory as default. In most cases of default installation it is the best choice.
+		// Another cache drivers should be used in case of more than one panel instance or more complex setups.
+		//	switch config.DatabaseDriver {
+		//	case "sqlite", "sqlite3":
+		//		config.CacheDriver = "inmemory"
+		//	case "mysql":
+		//		config.CacheDriver = "mysql"
+		//	default:
+		//		config.CacheDriver = "inmemory"
+		//	}
+
+		config.CacheDriver = "inmemory"
 	}
 	if config.FilesDriver == "" {
 		config.FilesDriver = "local"
