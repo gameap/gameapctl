@@ -30,7 +30,7 @@ type PanelInstallState struct {
 }
 
 func SavePanelInstallState(_ context.Context, state PanelInstallState) error {
-	b, err := json.Marshal(state)
+	b, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return errors.WithMessage(err, "failed to marshal json")
 	}

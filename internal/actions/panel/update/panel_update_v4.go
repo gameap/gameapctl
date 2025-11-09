@@ -246,7 +246,7 @@ func checkHealth(ctx context.Context, host, port string, httpsEnabled bool) erro
 			time.Sleep(healthCheckDelay)
 		}
 
-		if err := installpkg.CheckInstallation(ctx, host, port, httpsEnabled); err == nil {
+		if err := installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled); err == nil {
 			log.Println("Health check passed!")
 
 			return nil

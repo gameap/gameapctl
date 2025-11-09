@@ -103,18 +103,31 @@ func SetupGameAPFromRepo(ctx context.Context, path string) error {
 }
 
 func CheckInstallation(ctx context.Context, host, port string, https bool) error {
+	return checkInstallation(ctx, createHealthURL(host, port, https, "/healthz"))
+}
+
+func CheckInstallationV4(ctx context.Context, host, port string, https bool) error {
+	return checkInstallation(ctx, createHealthURL(host, port, https, "/health"))
+}
+
+func createHealthURL(host, port string, https bool, endpoint string) string {
 	hostPort := host
 	if port != "80" && port != "433" {
 		hostPort = host + ":" + port
 	}
 
-	u := "http://" + hostPort + "/api/healthz"
+	u := "http://" + hostPort + endpoint
 	if https {
-		u = "https://" + hostPort + "/api/healthz"
+		u = "https://" + hostPort + endpoint
 	}
 
-	log.Printf("Checking installation at %s\n", u)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	return u
+}
+
+func checkInstallation(ctx context.Context, url string) error {
+	log.Printf("Checking installation at %s\n", url)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -143,8 +156,15 @@ func CheckInstallation(ctx context.Context, host, port string, https bool) error
 		Message string `json:"message"`
 	}{}
 
-	err = json.NewDecoder(response.Body).Decode(&r)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
+		return errors.WithMessage(err, "failed to read response body")
+	}
+
+	err = json.Unmarshal(body, &r)
+	if err != nil {
+		log.Printf("Response body: %s\n", string(body))
+
 		return errors.WithMessage(err, "failed to decode response")
 	}
 
