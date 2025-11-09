@@ -941,7 +941,7 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 
 func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallStateV4) error {
 	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
-		Version:              "4",
+		Version:              "v4",
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 state.Port,

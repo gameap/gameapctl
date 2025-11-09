@@ -16,8 +16,10 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -148,10 +150,61 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 }
 
 func gameapStatus(ctx context.Context, w io.Writer, _ []string) error {
-	_, err := gameapctl.LoadPanelInstallState(ctx)
+	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to get panel install state"))
 		_, _ = w.Write([]byte(serviceStatusNotFound))
+	}
+
+	if state.Version == "" || state.Version == "3" || state.Version == "v4" {
+		return gameapStatusV3(ctx, w, state)
+	}
+
+	if state.Version == "v4" || state.Version == "4" {
+		return gameapStatusV4(ctx, w, state)
+	}
+
+	return nil
+}
+
+func gameapStatusV3(_ context.Context, w io.Writer, state gameapctl.PanelInstallState) error {
+	if utils.IsFileExists(state.Path) {
+		_, _ = w.Write([]byte(serviceStatusActive))
+
+		return nil
+	}
+
+	_, _ = w.Write([]byte(serviceStatusNotFound))
+
+	return nil
+}
+
+func gameapStatusV4(ctx context.Context, w io.Writer, state gameapctl.PanelInstallState) error {
+	if !utils.IsFileExists(state.DataDirectory) {
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		return nil
+	}
+
+	if utils.IsFileExists(state.ConfigDirectory) {
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		return nil
+	}
+
+	pr, err := oscore.FindProcessByName(ctx, "gameap")
+	if err != nil {
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		log.Println(errors.WithMessage(err, "failed to find started gameap process"))
+
+		return nil
+	}
+
+	if pr == nil {
+		_, _ = w.Write([]byte(serviceStatusInactive))
+
+		return nil
 	}
 
 	_, _ = w.Write([]byte(serviceStatusActive))
