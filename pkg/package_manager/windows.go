@@ -188,11 +188,13 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 
 		foundCount++
 
-		log.Printf("Path for package %s is found in path '%s'\n", p.Name, filepath.Dir(resolvedPackagePath))
+		log.Printf("Binary %s for package %s is found in '%s'\n",
+			c,
+			p.Name,
+			resolvedPackagePath,
+		)
 
 		runtimeVars.LookupPaths[c] = filepath.Dir(resolvedPackagePath)
-
-		break
 	}
 
 	if len(p.LookupPaths) > 0 && foundCount >= len(p.LookupPaths) {
