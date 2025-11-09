@@ -24,6 +24,7 @@ import (
 	panelstart "github.com/gameap/gameapctl/internal/actions/panel/start"
 	panelstatus "github.com/gameap/gameapctl/internal/actions/panel/status"
 	panelstop "github.com/gameap/gameapctl/internal/actions/panel/stop"
+	paneluninstall "github.com/gameap/gameapctl/internal/actions/panel/uninstall"
 	panelupdate "github.com/gameap/gameapctl/internal/actions/panel/update"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
@@ -277,6 +278,32 @@ func Run(args []string) {
 							return nil
 						},
 						Action: panelupdate.Handle,
+					},
+					{
+						Name:  "uninstall",
+						Usage: "Uninstall GameAP panel. ",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "with-daemon",
+								Usage: "Uninstall Daemon",
+							},
+							&cli.BoolFlag{
+								Name: "with-data",
+								Usage: "Remove all GameAP data including database and configuration files. " +
+									"Use with caution!",
+							},
+							&cli.BoolFlag{
+								Name: "with-services",
+								Usage: "Remove all services files created by GameAP. " +
+									"Use with caution!",
+							},
+						},
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
+
+							return nil
+						},
+						Action: paneluninstall.Handle,
 					},
 					{
 						Name:        "change-password",

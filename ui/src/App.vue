@@ -47,8 +47,21 @@
 
       <Action />
 
-      <ApiTab />
-      <DaemonTab />
+      <div class="service-panels mt-6">
+        <div class="grid lg:grid-cols-2 gap-y-10 lg:gap-x-12">
+          <ApiTab />
+          <DaemonTab />
+        </div>
+      </div>
+
+      <div class="service-panels mt-6">
+        <div class="grid lg:grid-cols-2 gap-y-10 lg:gap-x-12">
+          <service-panel name="PostgreSQL" service-id="postgresql" />
+          <service-panel name="MySQL/MariaDB" service-id="mysql" />
+          <service-panel name="Nginx" service-id="nginx" />
+          <service-panel name="PHP" service-id="php-fpm"/>
+        </div>
+      </div>
 
     </n-modal-provider>
   </n-dialog-provider>
@@ -66,6 +79,7 @@ import {reloadServices} from "./global.js"
 import {unarySend} from "./websocket.js"
 import {useNodeStore} from "./store/node.js"
 import {runAction} from "./action.js";
+import ServicePanel from "./components/ServicePanel.vue";
 
 const nodeStore = useNodeStore()
 

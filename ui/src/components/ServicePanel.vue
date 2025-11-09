@@ -28,7 +28,7 @@ function serviceStatus() {
 </script>
 
 <template>
-  <n-card :title="name">
+  <n-card :title="name" class="service-panel">
     <n-tag v-if="serviceStatus() === 'inactive'" :bordered="false" type="error">
       Stopped
     </n-tag>
@@ -52,3 +52,12 @@ function serviceStatus() {
     <slot name="extra-buttons"></slot>
   </n-card>
 </template>
+
+<style scoped>
+.card {
+  width: 600px;
+}
+.service-panel {
+  text-align: center;
+}
+</style>

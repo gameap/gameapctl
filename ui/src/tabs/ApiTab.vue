@@ -1,8 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import {storeToRefs} from "pinia"
-import ServicePanel from "../components/ServicePanel.vue";
-import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon} from "@heroicons/vue/24/outline/index.js";
+import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon} from "@heroicons/vue/24/outline/index.js";
 
 import { runAction, runActionWithoutDialog } from "../action.js";
 
@@ -36,6 +35,7 @@ const showInstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
+  version: "v4",
   path: defaultPath,
   host: "127.0.0.1",
   port: 80,
@@ -54,6 +54,7 @@ const webServerOptions = [
   {label: "None", value: "none"},
 ]
 const databaseOptions = [
+  {label: "PostgreSQL", value: "postgres"},
   {label: "MySQL", value: "mysql"},
   {label: "SQLite", value: "sqlite"},
   {label: "None", value: "none"},
@@ -76,21 +77,40 @@ function onClickGameAPUpgradingButton() {
   )
 }
 
+function onClickGameAPUninstallationButton() {
+  runAction(
+      "GameAP Uninstallation",
+      "Are you sure?",
+      "gameap-uninstall",
+      "gameap-uninstall",
+  )
+}
+
 function handleInstallButtonClick(e) {
   showInstallationAskModal.value = false
 
-  let params = "--path=" + installationForm.value.path +
-      " --host=" + installationForm.value.host +
-      " --port=" + installationForm.value.port +
-      " --web-server=" + installationForm.value.webServer +
-      " --database=" + installationForm.value.database
+  let params = ""
 
-  if (installationForm.value.source === "github") {
-    params += " --github"
-    params += " --branch=" + installationForm.value.branch
+  if (installationForm.value.version === "v4") {
+    params = "--version=v4" +
+        " --host=" + installationForm.value.host +
+        " --port=" + installationForm.value.port +
+        " --database=" + installationForm.value.database
   }
 
-  console.log(installationForm.value.withDaemon)
+  if (installationForm.value.version === "v3") {
+    params = "--version=v3" +
+        " --path=" + installationForm.value.path +
+        " --host=" + installationForm.value.host +
+        " --port=" + installationForm.value.port +
+        " --web-server=" + installationForm.value.webServer +
+        " --database=" + installationForm.value.database
+
+    if (installationForm.value.source === "github") {
+      params += " --github"
+      params += " --branch=" + installationForm.value.branch
+    }
+  }
 
   if (installationForm.value.withDaemon) {
     params += " --with-daemon"
@@ -102,6 +122,10 @@ function handleInstallButtonClick(e) {
   )
 }
 
+function handleChangeVersionTab(tabName) {
+  installationForm.value.version = tabName
+}
+
 </script>
 
 <template>
@@ -109,37 +133,44 @@ function handleInstallButtonClick(e) {
     <n-grid x-gap="12" :y-gap="10" :cols="1">
       <n-gi>
         <n-card title="API/Web" class="service-panels">
-          <n-button
-              :disabled="gameapActive"
-              @click="onClickGameAPInstallationButton()"
-          >
-            <template #icon>
-              <ArchiveBoxArrowDownIcon />
-            </template>
-            Install
-          </n-button>
 
-          <n-button
-              :disabled="!gameapActive"
-              @click="onClickGameAPUpgradingButton()"
-          >
-            <template #icon>
-              <ChevronDoubleUpIcon />
-            </template>
-            Upgrade
-          </n-button>
+          <n-button-group>
+            <n-button
+                :disabled="gameapActive"
+                @click="onClickGameAPInstallationButton()"
+            >
+              <template #icon>
+                <ArchiveBoxArrowDownIcon />
+              </template>
+              Install
+            </n-button>
+
+            <n-button
+                :disabled="!gameapActive"
+                @click="onClickGameAPUpgradingButton()"
+            >
+              <template #icon>
+                <ChevronDoubleUpIcon />
+              </template>
+              Upgrade
+            </n-button>
+
+            <n-button
+                :disabled="!gameapActive"
+                type="error"
+                @click="onClickGameAPUninstallationButton()"
+                >
+              <template #icon>
+                <ArchiveBoxXMarkIcon />
+              </template>
+              Remove
+            </n-button>
+
+          </n-button-group>
 
         </n-card>
       </n-gi>
     </n-grid>
-  </div>
-
-  <div class="service-panels mt-6">
-    <div class="grid lg:grid-cols-3 gap-y-10 lg:gap-x-12">
-        <service-panel name="Nginx" service-id="nginx" />
-        <service-panel name="PHP" service-id="php-fpm"/>
-        <service-panel name="MySQL/MariaDB" service-id="mysql" />
-    </div>
   </div>
 
   <n-modal
@@ -154,52 +185,88 @@ function handleInstallButtonClick(e) {
         role="dialog"
         aria-modal="true"
     >
-      <n-form
-          ref="formRef"
-          :model="installationFormRef"
-          size="medium"
-          label-placement="left"
-          label-width="auto"
-          :rules="installationFormRules"
-      >
-        <n-form-item label="Path" path="path">
-          <n-input
-              v-model:value="installationForm.path"
-              :disabled="nodeOS === 'windows'"
-              placeholder="Path"
-          />
-        </n-form-item>
-        <n-form-item label="Source" path="source">
-          <n-radio-group v-model:value="installationForm.source">
-            <n-radio value="repo">
-              Official Release Repo
-            </n-radio>
-            <n-radio value="github">
-              GitHub
-            </n-radio>
-          </n-radio-group>
-        </n-form-item>
-        <n-form-item v-if="installationForm.source === 'github'" label="Branch" path="branch">
-            <n-select v-model:value="installationForm.branch" :options="githubBranchOptions" />
-        </n-form-item>
-        <n-form-item label="Host" path="host">
-          <n-input-group>
-            <n-input v-model:value="installationForm.host" placeholder="Host" />
-            <n-input-number v-model:value="installationForm.port" placeholder="Port" />
-          </n-input-group>
-        </n-form-item>
-        <n-form-item label="Web Server" path="webServer">
-          <n-select v-model:value="installationForm.webServer" :options="webServerOptions" />
-        </n-form-item>
-        <n-form-item label="Database" path="database">
-          <n-select v-model:value="installationForm.database" :options="databaseOptions" />
-        </n-form-item>
-        <n-form-item label="&nbsp;" path="withDaemon">
-          <n-checkbox v-model:checked="installationForm.withDaemon">
-            Install Daemon
-          </n-checkbox>
-        </n-form-item>
-      </n-form>
+      <n-tabs :bar-width="28" size="large" type="line" justify-content="space-evenly" @update:value="handleChangeVersionTab">
+        <n-tab-pane name="v4" tab="version 4 (latest)">
+          <p class="mb-5">GameAP v4 is the latest stable release series. It is recommended for most users.
+            It written in Go and Vue.js and provides better performance and stability.</p>
+
+          <n-form
+              ref="formRef"
+              :model="installationFormRef"
+              size="medium"
+              label-placement="left"
+              label-width="auto"
+              :rules="installationFormRules"
+          >
+            <n-form-item label="Host" path="host">
+              <n-input-group>
+                <n-input v-model:value="installationForm.host" placeholder="Host" />
+                <n-input-number v-model:value="installationForm.port" placeholder="Port" />
+              </n-input-group>
+            </n-form-item>
+            <n-form-item label="Database" path="database">
+              <n-select v-model:value="installationForm.database" :options="databaseOptions" />
+            </n-form-item>
+            <n-form-item label="&nbsp;" path="withDaemon">
+              <n-checkbox v-model:checked="installationForm.withDaemon">
+                Install Daemon
+              </n-checkbox>
+            </n-form-item>
+          </n-form>
+        </n-tab-pane>
+
+        <n-tab-pane name="v3" tab="version 3">
+          <p class="mb-5">GameAP v3 is the legacy release series. It is written in PHP and Vue.js.</p>
+
+          <n-form
+              ref="formRef"
+              :model="installationFormRef"
+              size="medium"
+              label-placement="left"
+              label-width="auto"
+              :rules="installationFormRules"
+          >
+            <n-form-item label="Path" path="path">
+              <n-input
+                  v-model:value="installationForm.path"
+                  :disabled="nodeOS === 'windows'"
+                  placeholder="Path"
+              />
+            </n-form-item>
+            <n-form-item label="Source" path="source">
+              <n-radio-group v-model:value="installationForm.source">
+                <n-radio value="repo">
+                  Official Release Repo
+                </n-radio>
+                <n-radio value="github">
+                  GitHub
+                </n-radio>
+              </n-radio-group>
+            </n-form-item>
+            <n-form-item v-if="installationForm.source === 'github'" label="Branch" path="branch">
+              <n-select v-model:value="installationForm.branch" :options="githubBranchOptions" />
+            </n-form-item>
+            <n-form-item label="Host" path="host">
+              <n-input-group>
+                <n-input v-model:value="installationForm.host" placeholder="Host" />
+                <n-input-number v-model:value="installationForm.port" placeholder="Port" />
+              </n-input-group>
+            </n-form-item>
+            <n-form-item label="Web Server" path="webServer">
+              <n-select v-model:value="installationForm.webServer" :options="webServerOptions" />
+            </n-form-item>
+            <n-form-item label="Database" path="database">
+              <n-select v-model:value="installationForm.database" :options="databaseOptions" />
+            </n-form-item>
+            <n-form-item label="&nbsp;" path="withDaemon">
+              <n-checkbox v-model:checked="installationForm.withDaemon">
+                Install Daemon
+              </n-checkbox>
+            </n-form-item>
+          </n-form>
+        </n-tab-pane>
+      </n-tabs>
+
       <n-button type="primary" @click="handleInstallButtonClick">
         Install
       </n-button>
