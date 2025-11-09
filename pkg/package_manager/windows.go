@@ -325,11 +325,9 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 							lo.Contains(step.AllowedInstallExitCodes, execCmd.ProcessState.ExitCode()) {
 							log.Println(errors.WithMessage(err, "failed to execute install command"))
 							log.Println("Exit code is allowed")
-
-							return nil
+						} else {
+							return errors.WithMessage(err, "failed to execute install command")
 						}
-
-						return errors.WithMessage(err, "failed to execute install command")
 					}
 				}
 			}
