@@ -201,20 +201,21 @@ func checkPortAvailabilityV3(ctx context.Context, state panelInstallStateV3) (pa
 
 	listener, err := net.Listen("tcp", net.JoinHostPort(state.Host, state.Port))
 	if err != nil {
-		err = warning(ctx, state,
+		warningErr := warning(ctx, state,
 			fmt.Sprintf(
 				"Port %s is already in use. "+
 					"You can specify other available port. "+
 					"Further installation may fail.", state.Port,
 			),
 		)
-		if err != nil {
-			return state, err
+		if warningErr != nil {
+			return state, errors.WithMessagef(err, "failed to check port availability")
 		}
-	}
-	err = listener.Close()
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to close listener")
+	} else {
+		err = listener.Close()
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to close listener")
+		}
 	}
 
 	return state, nil
