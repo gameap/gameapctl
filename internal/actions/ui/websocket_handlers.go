@@ -55,6 +55,10 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 		duplicateLogWriter(ctx, w)
 
 		return gameapInstall(ctx, w, args)
+	case "gameap-uninstall":
+		duplicateLogWriter(ctx, w)
+
+		return gameapUninstall(ctx, w, args)
 	case "gameap-upgrade":
 		duplicateLogWriter(ctx, w)
 
@@ -196,6 +200,31 @@ func gameapInstall(ctx context.Context, w io.Writer, args []string) error {
 	exPath := filepath.Dir(ex)
 
 	exArgs := append([]string{"--non-interactive", "panel", "install"}, args...)
+
+	cmd := exec.Command(ex, exArgs...)
+	cmd.Stdout = w
+	cmd.Stderr = w
+	cmd.Dir = exPath
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.Wrap(err, "failed to execute command")
+	}
+
+	packagemanager.UpdateEnvPath(ctx)
+
+	return nil
+}
+
+func gameapUninstall(ctx context.Context, w io.Writer, args []string) error {
+	ex, err := os.Executable()
+	if err != nil {
+		return errors.Wrap(err, "failed to get executable path")
+	}
+
+	exPath := filepath.Dir(ex)
+
+	exArgs := append([]string{"--non-interactive", "panel", "uninstall"}, args...)
 
 	cmd := exec.Command(ex, exArgs...)
 	cmd.Stdout = w

@@ -391,12 +391,139 @@ func (pm *WindowsPackageManager) CheckForUpdates(_ context.Context) error {
 	return nil
 }
 
-func (pm *WindowsPackageManager) Remove(_ context.Context, _ ...string) error {
-	return errors.New("removing packages is not supported on Windows")
+func (pm *WindowsPackageManager) Remove(ctx context.Context, packs ...string) error {
+	for _, packName := range packs {
+		p, exists := pm.packages[packName]
+		if !exists {
+			log.Printf("Package %s not found in configuration, skipping\n", packName)
+
+			continue
+		}
+
+		err := pm.removePackage(ctx, p)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to remove package '%s'", packName)
+		}
+	}
+
+	return nil
 }
 
-func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
-	return errors.New("removing packages is not supported on Windows")
+func (pm *WindowsPackageManager) removePackage(ctx context.Context, p windows.Package) error {
+	log.Println("Removing", p.Name, "package")
+
+	if p.Service != nil {
+		err := pm.removeService(ctx, p)
+		if err != nil {
+			return errors.WithMessage(err, "failed to remove service")
+		}
+	}
+
+	if len(p.UninstallCommands) > 0 {
+		log.Println("Running uninstall commands for package", p.Name)
+
+		for _, cmd := range p.UninstallCommands {
+			log.Println("Running uninstall command:", cmd)
+			err := pm.executeCommand(ctx, cmd)
+			if err != nil {
+				log.Println(errors.WithMessagef(err, "failed to execute uninstall command: %s", cmd))
+			}
+		}
+	}
+
+	if len(p.PathEnv) > 0 {
+		err := removePathEnvVariable(p.PathEnv)
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to remove paths from PATH env variable"))
+		}
+	}
+
+	log.Printf("Package %s successfully removed\n", p.Name)
+
+	return nil
+}
+
+func (pm *WindowsPackageManager) removeService(ctx context.Context, p windows.Package) error {
+	if p.Service == nil {
+		return nil
+	}
+
+	log.Println("Removing service for package", p.Name)
+
+	serviceName := p.Service.Name
+	if serviceName == "" {
+		serviceName = p.Service.ID
+	}
+
+	if !service.IsExists(ctx, serviceName) && !service.IsExists(ctx, p.Service.ID) {
+		log.Printf("Service '%s' does not exist, skipping service removal\n", serviceName)
+
+		return nil
+	}
+
+	svc := service.NewWindows()
+
+	log.Printf("Stopping service '%s'\n", serviceName)
+	err := svc.Stop(ctx, serviceName)
+	if err != nil && !errors.Is(err, service.ErrInactiveService) {
+		log.Println(errors.WithMessagef(err, "failed to stop service '%s'", serviceName))
+	}
+
+	log.Printf("Deleting service '%s'\n", serviceName)
+	err = oscore.ExecCommand(ctx, "sc", "delete", serviceName)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to delete service '%s'", serviceName)
+	}
+
+	configPath := filepath.Join(servicesConfigPath, serviceName+".yaml")
+	if utils.IsFileExists(configPath) {
+		log.Printf("Removing service config file '%s'\n", configPath)
+		err = os.Remove(configPath)
+		if err != nil {
+			log.Println(errors.WithMessagef(err, "failed to remove service config file '%s'", configPath))
+		}
+	}
+
+	log.Printf("Service '%s' successfully removed\n", serviceName)
+
+	return nil
+}
+
+func removePathEnvVariable(pathsToRemove []string) error {
+	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
+	newPath := make([]string, 0, len(currentPath))
+
+	for _, p := range currentPath {
+		shouldRemove := false
+		for _, removeCandidate := range pathsToRemove {
+			if strings.EqualFold(p, removeCandidate) {
+				shouldRemove = true
+
+				break
+			}
+		}
+
+		if !shouldRemove {
+			newPath = append(newPath, p)
+		}
+	}
+
+	if len(newPath) == len(currentPath) {
+		return nil
+	}
+
+	newPathValue := strings.Join(newPath, string(filepath.ListSeparator))
+
+	err := os.Setenv("PATH", newPathValue)
+	if err != nil {
+		return errors.WithMessage(err, "failed to set PATH env variable")
+	}
+
+	return nil
+}
+
+func (pm *WindowsPackageManager) Purge(ctx context.Context, packs ...string) error {
+	return pm.Remove(ctx, packs...)
 }
 
 func (pm *WindowsPackageManager) installService(ctx context.Context, p windows.Package) error {

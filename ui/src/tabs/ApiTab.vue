@@ -32,6 +32,7 @@ const servicePanelsCols = computed(() => {
 })
 
 const showInstallationAskModal = ref(false)
+const showUninstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
@@ -45,6 +46,13 @@ const installationForm = ref({
   database: "mysql",
   withDaemon: false,
 })
+const uninstallationFormRef = ref({})
+const uninstallationForm = ref({
+  withDaemon: false,
+  withData: false,
+  withServices: false,
+})
+
 const githubBranchOptions = [
   {label: "develop", value: "develop"},
   {label: "master", value: "master"},
@@ -64,6 +72,10 @@ const installationFormRules = {
 
 }
 
+const uninstallationFormRules = {
+
+}
+
 function onClickGameAPInstallationButton() {
   showInstallationAskModal.value = true
 }
@@ -78,12 +90,7 @@ function onClickGameAPUpgradingButton() {
 }
 
 function onClickGameAPUninstallationButton() {
-  runAction(
-      "GameAP Uninstallation",
-      "Are you sure?",
-      "gameap-uninstall",
-      "gameap-uninstall",
-  )
+  showUninstallationAskModal.value = true
 }
 
 function handleInstallButtonClick(e) {
@@ -124,6 +131,29 @@ function handleInstallButtonClick(e) {
 
 function handleChangeVersionTab(tabName) {
   installationForm.value.version = tabName
+}
+
+function handleUninstallButtonClick() {
+  showUninstallationAskModal.value = false
+
+  let params = ""
+
+  if (uninstallationForm.value.withDaemon) {
+    params += " --with-daemon"
+  }
+
+  if (uninstallationForm.value.withData) {
+    params += " --with-data"
+  }
+
+  if (uninstallationForm.value.withServices) {
+    params += " --with-services"
+  }
+
+  runActionWithoutDialog(
+      "gameap-uninstall",
+      "gameap-uninstall " + params,
+  )
 }
 
 </script>
@@ -269,6 +299,54 @@ function handleChangeVersionTab(tabName) {
 
       <n-button type="primary" @click="handleInstallButtonClick">
         Install
+      </n-button>
+    </n-card>
+  </n-modal>
+
+  <n-modal
+      v-model:show="showUninstallationAskModal"
+      :mask-closable="true"
+  >
+    <n-card
+        class="card"
+        :bordered="false"
+        title="GameAP Uninstallation"
+        size="small"
+        role="dialog"
+        aria-modal="true"
+    >
+      <n-form
+          ref="formRef"
+          :model="uninstallationFormRef"
+          size="medium"
+          label-placement="left"
+          label-width="auto"
+          :rules="uninstallationFormRules"
+      >
+        <n-form-item label="With daemon (removes daemon service)">
+          <n-input-group>
+            <n-switch v-model:value="installationForm.withDaemon" />
+          </n-input-group>
+        </n-form-item>
+
+        <n-form-item label="With data (removes database and files)">
+          <n-input-group>
+            <n-switch v-model:value="installationForm.withData"/>
+          </n-input-group>
+        </n-form-item>
+
+        <n-form-item label="With services (removes nginx, php, etc.)">
+          <n-input-group>
+            <n-switch v-model:value="installationForm.withServices">
+              Remove Services (nginx, php, etc.)
+            </n-switch>
+          </n-input-group>
+        </n-form-item>
+
+      </n-form>
+
+      <n-button type="primary" @click="handleUninstallButtonClick">
+        Uninstall
       </n-button>
     </n-card>
   </n-modal>
