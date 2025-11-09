@@ -325,19 +325,19 @@ function handleUninstallButtonClick() {
       >
         <n-form-item label="With daemon (removes daemon service)">
           <n-input-group>
-            <n-switch v-model:value="installationForm.withDaemon" />
+            <n-switch v-model:value="uninstallationForm.withDaemon" />
           </n-input-group>
         </n-form-item>
 
         <n-form-item label="With data (removes database and files)">
           <n-input-group>
-            <n-switch v-model:value="installationForm.withData"/>
+            <n-switch v-model:value="uninstallationForm.withData"/>
           </n-input-group>
         </n-form-item>
 
         <n-form-item label="With services (removes nginx, php, etc.)">
           <n-input-group>
-            <n-switch v-model:value="installationForm.withServices">
+            <n-switch v-model:value="uninstallationForm.withServices">
               Remove Services (nginx, php, etc.)
             </n-switch>
           </n-input-group>
