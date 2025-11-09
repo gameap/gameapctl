@@ -17,13 +17,14 @@ packages:
       name: nginx
       executable: nginx.exe
       working-directory: C:\gameap\tools\nginx
+      log-directory: C:\gameap\services\logs\nginx
       stop-executable: nginx
       stop-arguments: -s stop
       service-account:
         username: NT AUTHORITY\NETWORK SERVICE
         password: ""
     dependencies:
-      - winsw
+      - shawl
 
   - name: mysql-server
     lookup-paths: [mysql, mysqld]
@@ -60,6 +61,7 @@ packages:
       name: php-fpm
       executable: php-cgi.exe
       arguments: -b 127.0.0.1:9934 -c {{index .LookupPaths "php-cgi" | default .InstallPath }}\php.ini
+      log-directory: C:\gameap\services\logs\php-fpm
       env:
         - name: PHP_FCGI_MAX_REQUESTS
           value: "0"
@@ -69,7 +71,7 @@ packages:
         username: NT AUTHORITY\NETWORK SERVICE
     dependencies:
       - vcredist16
-      - winsw
+      - shawl
 
   - name: php-extensions
     dependencies:
@@ -126,10 +128,11 @@ packages:
       name: GameAP Daemon
       executable: gameap-daemon
       working-directory: C:\gameap\daemon
+      log-directory: C:\gameap\services\logs\gameap-daemon
       service-account:
         username: NT AUTHORITY\NETWORK SERVICE
     dependencies:
-      - winsw
+      - shawl
 
   - name: gameap
     service:
@@ -138,10 +141,30 @@ packages:
       executable: gameap
       arguments: --env C:\gameap\web\config.env
       working-directory: C:\gameap\web
+      log-directory: C:\gameap\services\logs\gameap
       service-account:
         username: NT AUTHORITY\NETWORK SERVICE
+      on-failure:
+        - action: restart
+          delay: 1s
+        - action: restart
+          delay: 5s
+        - action: restart
+          delay: 10s
+        - action: restart
+          delay: 30s
+      reset-failure: 30m
     dependencies:
-      - winsw
+      - shawl
+
+  - name: shawl
+    lookup-paths: [ shawl ]
+    download-urls:
+      - https://github.com/mtkennerly/shawl/releases/download/v1.7.0/shawl-v1.7.0-win64.zip
+    install-path: C:\gameap\tools\shawl
+    uninstall-commands:
+      - del /F /Q {{package_install_path}}\*
+      - rmdir /S /Q {{package_install_path}}
 
   - name: winsw
     lookup-paths: [ winsw ]

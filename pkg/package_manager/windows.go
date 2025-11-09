@@ -23,6 +23,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -399,12 +400,12 @@ func (pm *WindowsPackageManager) Purge(_ context.Context, _ ...string) error {
 }
 
 func (pm *WindowsPackageManager) installService(ctx context.Context, p windows.Package) error {
-	return pm.installWinSWService(ctx, p)
+	return pm.installShawlService(ctx, p)
 }
 
 // installWinSWService installs a service using WinSW (https://github.com/winsw/winsw)
 //
-//nolint:funlen
+//nolint:funlen,unused
 func (pm *WindowsPackageManager) installWinSWService(ctx context.Context, p windows.Package) error {
 	var err error
 
@@ -628,6 +629,211 @@ func (pm *WindowsPackageManager) installServyService(ctx context.Context, p wind
 	}
 
 	log.Printf("Service '%s' successfully installed", serviceName)
+
+	return nil
+}
+
+// installShawlService installs a service using Shawl (https://github.com/mtkennerly/shawl)
+//
+//nolint:funlen
+func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p windows.Package) error {
+	if p.Service == nil {
+		return nil
+	}
+
+	log.Println("Installing service for package", p.Name)
+
+	if service.IsExists(ctx, p.Service.ID) {
+		log.Printf("Service '%s' is already exists", p.Service.ID)
+
+		return nil
+	}
+
+	if service.IsExists(ctx, p.Service.Name) {
+		log.Printf("Service '%s' is already exists", p.Service.Name)
+
+		return nil
+	}
+
+	shawlPath, err := exec.LookPath("shawl")
+	if err != nil {
+		return errors.WithMessage(err, "failed to find shawl executable")
+	}
+
+	if shawlPath == "" {
+		return errors.New("shawl executable not found")
+	}
+
+	serviceName := p.Service.Name
+	if serviceName == "" {
+		serviceName = p.Service.ID
+	}
+
+	serviceAccount := defaultServiceUser
+	if p.Service.ServiceAccount != nil && p.Service.ServiceAccount.Username != "" {
+		serviceAccount = p.Service.ServiceAccount.Username
+	}
+
+	shawlArgs := []string{
+		"run",
+		"--name", serviceName,
+	}
+
+	if len(p.Service.OnFailure) > 0 {
+		shawlArgs = append(shawlArgs, "--restart")
+
+		for _, failure := range p.Service.OnFailure {
+			if failure.Delay.Duration > 0 {
+				shawlArgs = append(
+					shawlArgs,
+					"--restart-delay",
+					fmt.Sprintf("%d", failure.Delay.Milliseconds()),
+				)
+
+				break
+			}
+		}
+	}
+
+	shawlArgs = append(shawlArgs, "--stop-timeout", "10000")
+
+	if p.Service.WorkingDirectory != "" {
+		shawlArgs = append(shawlArgs, "--cwd", p.Service.WorkingDirectory)
+	}
+
+	logDir := "C:\\gameap\\logs"
+
+	if p.Service.LogDirectory != "" {
+		logDir = p.Service.LogDirectory
+	}
+
+	shawlArgs = append(shawlArgs, "--log-dir", logDir)
+
+	logBaseName := strings.ReplaceAll(serviceName, " ", "_")
+	shawlArgs = append(shawlArgs, "--log-as", logBaseName+".log")
+	shawlArgs = append(shawlArgs, "--log-rotate", "daily")
+	shawlArgs = append(shawlArgs, "--log-retain", "60")
+
+	for _, env := range p.Service.Env {
+		shawlArgs = append(shawlArgs, "--env", fmt.Sprintf("%s=%s", env.Name, env.Value))
+	}
+
+	shawlArgs = append(shawlArgs, "--")
+	shawlArgs = append(shawlArgs, p.Service.Executable)
+
+	if p.Service.Arguments != "" {
+		shawlArgs = append(shawlArgs, strings.Split(p.Service.Arguments, " ")...)
+	}
+
+	binPath := fmt.Sprintf("%s %s", shawlPath, strings.Join(shawlArgs, " "))
+
+	if !utils.IsFileExists(servicesConfigPath) {
+		log.Println("Creating services config directory at", servicesConfigPath)
+
+		err = os.MkdirAll(servicesConfigPath, 0755)
+		if err != nil {
+			return errors.WithMessage(err, "failed to create services config directory")
+		}
+	}
+
+	configPath := filepath.Join(servicesConfigPath, serviceName+".yaml")
+
+	yamlConfig, err := yaml.Marshal(p.Service)
+	if err != nil {
+		return errors.WithMessage(err, "failed to marshal service config to YAML")
+	}
+
+	log.Println("Marshalled service config")
+	log.Println(string(yamlConfig))
+
+	log.Println("Saving service config to", configPath)
+
+	err = utils.WriteContentsToFile(yamlConfig, configPath)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to save config for service '%s'", serviceName)
+	}
+
+	scArgs := []string{
+		"create",
+		serviceName,
+		"start=auto",
+		fmt.Sprintf("obj=%s", serviceAccount),
+		fmt.Sprintf("binPath=%s", binPath),
+	}
+
+	log.Println("Creating service with sc command:", "sc", strings.Join(scArgs, " "))
+
+	err = oscore.ExecCommand(ctx, "sc", scArgs...)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to install service '%s'", serviceName)
+	}
+
+	if len(p.Service.OnFailure) > 0 {
+		err = pm.configureServiceFailureActions(ctx, serviceName, p.Service.OnFailure, p.Service.ResetFailure.Duration)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to configure failure actions for service '%s'", serviceName)
+		}
+	}
+
+	log.Printf("Service '%s' successfully installed", serviceName)
+
+	return nil
+}
+
+func (pm *WindowsPackageManager) configureServiceFailureActions(
+	ctx context.Context,
+	serviceName string,
+	onFailure []windows.ServiceOnFailure,
+	resetFailure time.Duration,
+) error {
+	if len(onFailure) == 0 {
+		return nil
+	}
+
+	actions := make([]string, 0, len(onFailure))
+	for _, failure := range onFailure {
+		action := ""
+		delay := "0"
+
+		switch failure.Action {
+		case "restart":
+			action = "restart"
+		case "reboot":
+			action = "reboot"
+		case "run":
+			action = "run"
+		default:
+			action = ""
+		}
+
+		if failure.Delay.Duration > 0 {
+			delay = fmt.Sprintf("%d", int(failure.Delay.Milliseconds()))
+		}
+
+		actions = append(actions, fmt.Sprintf("%s/%s", action, delay))
+	}
+
+	actionsString := strings.Join(actions, "/")
+
+	if resetFailure == 0 {
+		resetFailure = time.Hour
+	}
+
+	resetSeconds := int(resetFailure.Seconds())
+
+	scFailureArgs := []string{
+		"failure",
+		serviceName,
+		fmt.Sprintf("reset=%d", resetSeconds),
+		fmt.Sprintf("actions=%s", actionsString),
+	}
+
+	log.Println("Configuring service failure actions:", "sc", strings.Join(scFailureArgs, " "))
+
+	err := oscore.ExecCommand(ctx, "sc", scFailureArgs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to configure service failure actions")
+	}
 
 	return nil
 }
@@ -872,6 +1078,7 @@ type WinSWServiceConfigEnv struct {
 	Value string `xml:"value,attr"`
 }
 
+//nolint:unused
 func newWinSWServiceConfig(p windows.Package) WinSWServiceConfig {
 	config := WinSWServiceConfig{
 		ID:               p.Service.ID,
@@ -884,9 +1091,14 @@ func newWinSWServiceConfig(p windows.Package) WinSWServiceConfig {
 	if len(p.Service.OnFailure) > 0 {
 		onFailures := make([]WinSWServiceConfigOnFailure, 0, len(p.Service.OnFailure))
 		for _, of := range p.Service.OnFailure {
+			delay := ""
+			if of.Delay.Duration > 0 {
+				delay = of.Delay.String()
+			}
+
 			onFailures = append(onFailures, WinSWServiceConfigOnFailure{
 				Action: of.Action,
-				Delay:  of.Delay,
+				Delay:  delay,
 			})
 		}
 

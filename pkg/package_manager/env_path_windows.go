@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-//nolint:gocognit
+//nolint:gocognit,funlen
 func UpdateEnvPath(ctx context.Context) {
 	packages, err := windows.LoadPackages(internalcontext.OSInfoFromContext(ctx))
 	if err != nil {
@@ -26,6 +26,7 @@ func UpdateEnvPath(ctx context.Context) {
 	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
 	appendPath := make([]string, 0, len(packages)*2)
 
+	// Add installed packages to PATH
 	for _, p := range packages {
 		if p.InstallPath == "" {
 			continue
@@ -44,6 +45,33 @@ func UpdateEnvPath(ctx context.Context) {
 		}
 
 		appendPath = append(appendPath, p.InstallPath)
+	}
+
+	// Add path env to PATH
+	for _, p := range packages {
+		if len(p.PathEnv) == 0 {
+			continue
+		}
+
+		for _, pathEnv := range p.PathEnv {
+			if pathEnv == "" {
+				continue
+			}
+
+			if !utils.IsFileExists(pathEnv) {
+				continue
+			}
+
+			if utils.Contains(currentPath, pathEnv) {
+				continue
+			}
+
+			if utils.Contains(appendPath, pathEnv) {
+				continue
+			}
+
+			appendPath = append(appendPath, pathEnv)
+		}
 	}
 
 	//nolint:nestif

@@ -9,9 +9,6 @@ const (
 )
 
 const (
-	processName = "gameap.exe" //nolint:unused
-)
-
-const (
-	defaultServiceConfigPath = "C:\\gameap\\services\\gameap.xml"
+	processName = "gameap.exe"
+	serviceName = "GameAP"
 )

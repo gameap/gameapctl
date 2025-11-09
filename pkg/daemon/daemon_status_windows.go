@@ -5,44 +5,22 @@ package daemon
 import (
 	"context"
 	"log"
-	"os/exec"
 
-	"github.com/gameap/gameapctl/pkg/oscore"
-	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/pkg/errors"
 )
 
-const (
-	defaultDaemonConfigPath = "C:\\gameap\\services\\gameap-daemon.xml"
-
-	exitCodeStatusNotActive = 0
-	exitCodeStatusActive    = 1
-)
-
 func Status(ctx context.Context) error {
-	if !utils.IsFileExists(defaultDaemonConfigPath) {
-		return errors.New("daemon config file not found")
-	}
-
-	var exitErr *exec.ExitError
-
-	_, err := oscore.ExecCommandWithOutput(ctx, "winsw", "status", defaultDaemonConfigPath)
-	if err != nil && !errors.As(err, &exitErr) {
-		return errors.Wrap(err, "failed to get daemon status")
-	}
-
-	if exitErr != nil {
-		if exitErr.ExitCode() == exitCodeStatusNotActive {
-			return errors.New("daemon process is not active")
-		}
-
-		if exitErr.ExitCode() != exitCodeStatusActive {
-			return errors.WithMessagef(
-				errors.New("unknown response"),
-				"invalid exit code %d", exitErr.ExitCode(),
-			)
+	err := service.Status(ctx, serviceName)
+	if err != nil {
+		if errors.Is(err, service.ErrInactiveService) {
+			return errors.WithMessage(err, "daemon process is not active")
+		} else {
+			return errors.WithMessage(err, "failed to get daemon status")
 		}
 	}
+
+	log.Println("Daemon status is active. Checking process...")
 
 	p, err := FindProcess(ctx)
 	if err != nil {

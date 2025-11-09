@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/goccy/go-yaml"
@@ -12,6 +13,40 @@ import (
 
 //go:embed *.yaml
 var embedFS embed.FS
+
+// DurationWithDefault is a time.Duration that defaults to 1 hour if parsing fails or value is empty.
+type DurationWithDefault struct {
+	time.Duration
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for DurationWithDefault.
+//
+//nolint:nilerr
+func (d *DurationWithDefault) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		d.Duration = time.Hour
+
+		return nil
+	}
+
+	if s == "" {
+		d.Duration = time.Hour
+
+		return nil
+	}
+
+	duration, err := time.ParseDuration(s)
+	if err != nil {
+		d.Duration = time.Hour
+
+		return nil
+	}
+
+	d.Duration = duration
+
+	return nil
+}
 
 // config represents the root configuration.
 type config struct {
@@ -42,21 +77,23 @@ type InstallStep struct {
 
 // Service represents a Windows service configuration.
 type Service struct {
-	ID               string             `yaml:"id"`
-	Name             string             `yaml:"name"`
-	Executable       string             `yaml:"executable"`
-	Arguments        string             `yaml:"arguments,omitempty"`
-	WorkingDirectory string             `yaml:"working-directory,omitempty"`
-	StopExecutable   string             `yaml:"stop-executable,omitempty"`
-	StopArguments    string             `yaml:"stop-arguments,omitempty"`
-	OnFailure        []ServiceOnFailure `yaml:"on-failure,omitempty"`
-	ServiceAccount   *ServiceAccount    `yaml:"service-account,omitempty"`
-	Env              []EnvironmentVar   `yaml:"env,omitempty"`
+	ID               string              `yaml:"id"`
+	Name             string              `yaml:"name"`
+	Executable       string              `yaml:"executable"`
+	Arguments        string              `yaml:"arguments,omitempty"`
+	WorkingDirectory string              `yaml:"working-directory,omitempty"`
+	LogDirectory     string              `yaml:"log-directory,omitempty"`
+	StopExecutable   string              `yaml:"stop-executable,omitempty"`
+	StopArguments    string              `yaml:"stop-arguments,omitempty"`
+	OnFailure        []ServiceOnFailure  `yaml:"on-failure,omitempty"`
+	ResetFailure     DurationWithDefault `yaml:"reset-failure,omitempty"`
+	ServiceAccount   *ServiceAccount     `yaml:"service-account,omitempty"`
+	Env              []EnvironmentVar    `yaml:"env,omitempty"`
 }
 
 type ServiceOnFailure struct {
-	Action string `yaml:"action"`
-	Delay  string `yaml:"delay"`
+	Action string              `yaml:"action"`
+	Delay  DurationWithDefault `yaml:"delay,omitempty"`
 }
 
 // ServiceAccount represents the service account configuration.

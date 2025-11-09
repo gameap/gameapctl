@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/gopherclass/go-shellquote"
 	"github.com/pkg/errors"
@@ -214,7 +215,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	default:
-		err = utils.ExecCommand("sc", "start", serviceName)
+		err = oscore.ExecCommand(ctx, "sc", "start", serviceName)
 	}
 	if err != nil {
 		return err
@@ -242,7 +243,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 
 	switch svc.State {
 	case windowsServiceStateRunning, windowsServiceStateStartPending:
-		err = utils.ExecCommand("sc", "stop", serviceName)
+		err = oscore.ExecCommand(ctx, "sc", "stop", serviceName)
 	case windowsServiceStateStopped:
 		log.Printf("Service '%s' is already stopped\n", serviceName)
 	case windowsServiceStateStopPending:
