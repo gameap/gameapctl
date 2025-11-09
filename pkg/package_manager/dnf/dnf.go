@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"strings"
+	"sync"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/goccy/go-yaml"
@@ -24,7 +25,37 @@ type PackageConfig struct {
 	PostInstall []string `yaml:"post-install"`
 }
 
+var (
+	packageCache      = make(map[string]map[string]PackageConfig)
+	packageCacheMutex sync.RWMutex
+)
+
+func buildCacheKey(osinf osinfo.Info) string {
+	return fmt.Sprintf(
+		"%s_%s_%s",
+		osinf.Distribution.String(),
+		osinf.DistributionVersion,
+		osinf.Platform.String(),
+	)
+}
+
 func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
+	cacheKey := buildCacheKey(osinf)
+
+	packageCacheMutex.RLock()
+	if cached, exists := packageCache[cacheKey]; exists {
+		packageCacheMutex.RUnlock()
+
+		return cached, nil
+	}
+	packageCacheMutex.RUnlock()
+
+	packageCacheMutex.Lock()
+	defer packageCacheMutex.Unlock()
+
+	if cached, exists := packageCache[cacheKey]; exists {
+		return cached, nil
+	}
 	packages := make(map[string]PackageConfig)
 
 	distribution := osinf.Distribution.String()
@@ -70,6 +101,8 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 			packages[pkg.Name] = pkg
 		}
 	}
+
+	packageCache[cacheKey] = packages
 
 	return packages, nil
 }

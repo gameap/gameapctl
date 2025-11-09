@@ -11,7 +11,7 @@ packages:
     install-path: C:\gameap\tools\nginx
     install:
       - run-commands:
-        - robocopy {{package_install_path}}\conf\nginx-1.29.3 {{package_install_path}} /E /MOVE
+        - robocopy {{package_install_path}}\nginx-1.29.3 {{package_install_path}} /E /MOVE
     service:
       id: nginx
       name: nginx
@@ -133,6 +133,7 @@ packages:
         username: NT AUTHORITY\NETWORK SERVICE
     dependencies:
       - shawl
+      - winsw # GameAP Daemon uses WinSW as service wrapper
 
   - name: gameap
     service:

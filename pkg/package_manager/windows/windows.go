@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -121,7 +122,38 @@ type Permission struct {
 	Access string `yaml:"access"`
 }
 
+var (
+	packageCache      = make(map[string]map[string]Package)
+	packageCacheMutex sync.RWMutex
+)
+
+func buildCacheKey(osinf osinfo.Info) string {
+	return fmt.Sprintf(
+		"%s_%s_%s_%s",
+		osinf.Distribution.String(),
+		osinf.DistributionVersion,
+		osinf.DistributionCodename,
+		osinf.Platform.String(),
+	)
+}
+
 func LoadPackages(osinf osinfo.Info) (map[string]Package, error) {
+	cacheKey := buildCacheKey(osinf)
+
+	packageCacheMutex.RLock()
+	if cached, exists := packageCache[cacheKey]; exists {
+		packageCacheMutex.RUnlock()
+
+		return cached, nil
+	}
+	packageCacheMutex.RUnlock()
+
+	packageCacheMutex.Lock()
+	defer packageCacheMutex.Unlock()
+
+	if cached, exists := packageCache[cacheKey]; exists {
+		return cached, nil
+	}
 	packages := make(map[string]Package)
 
 	distribution := osinf.Distribution.String()
@@ -176,6 +208,8 @@ func LoadPackages(osinf osinfo.Info) (map[string]Package, error) {
 			packages[pkg.Name] = replaceValuesInPackage(pkg, osinf)
 		}
 	}
+
+	packageCache[cacheKey] = packages
 
 	return packages, nil
 }
