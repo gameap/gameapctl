@@ -803,7 +803,7 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 
 	shawlArgs := []string{
 		"run",
-		"--name", serviceName,
+		"--name", strings.ReplaceAll(serviceName, " ", "_"),
 	}
 
 	if len(p.Service.OnFailure) > 0 {
