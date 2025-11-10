@@ -231,6 +231,15 @@ func (e *extendedAPT) Search(ctx context.Context, name string) ([]PackageInfo, e
 func (e *extendedAPT) Install(ctx context.Context, packs ...string) error {
 	var err error
 
+	packs, err = e.excludeByLookupPathFound(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check lookup paths")
+	}
+
+	if len(packs) == 0 {
+		return nil
+	}
+
 	err = e.installDependencies(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install dependencies")
@@ -294,6 +303,34 @@ func (e *extendedAPT) replaceAliases(_ context.Context, packs []string) []string
 	return replacedPacks
 }
 
+func (e *extendedAPT) excludeByLookupPathFound(_ context.Context, packs ...string) ([]string, error) {
+	filteredPacks := make([]string, 0, len(packs))
+
+	for _, packName := range packs {
+		config, exists := e.packages[packName]
+		if !exists || len(config.LookupPaths) == 0 {
+			filteredPacks = append(filteredPacks, packName)
+
+			continue
+		}
+
+		found := false
+		for _, lookupPath := range config.LookupPaths {
+			if _, err := exec.LookPath(lookupPath); err == nil {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			filteredPacks = append(filteredPacks, packName)
+		}
+	}
+
+	return filteredPacks, nil
+}
+
 func (e *extendedAPT) installDependencies(ctx context.Context, packs ...string) error {
 	dependencies := make([]string, 0)
 
@@ -319,17 +356,14 @@ func (e *extendedAPT) installDependencies(ctx context.Context, packs ...string) 
 }
 
 func (e *extendedAPT) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
-	err := e.executeInstallationSteps(
-		ctx,
-		packs,
-		func(config pmapt.PackageConfig) []string { return config.PreInstall },
-	)
+	err := e.executePreInstallationSteps(ctx, packs)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to run post-installation steps")
+		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
 	}
 
 	updatedPacks := make([]string, 0, len(packs))
 
+	// Hardcode. To be refactored later.
 	for _, pack := range packs {
 		switch pack {
 		case PHPPackage, PHPExtensionsPackage:
@@ -368,6 +402,60 @@ func (e *extendedAPT) postInstallationSteps(ctx context.Context, packs ...string
 	}
 
 	return nil
+}
+
+func (e *extendedAPT) executePreInstallationSteps(ctx context.Context, packs []string) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := e.packages[packName]
+		if !exists {
+			continue
+		}
+
+		if len(config.PreInstall) == 0 {
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		for _, step := range config.PreInstall {
+			if !e.checkConditions(step.Conditions) {
+				continue
+			}
+
+			for _, cmd := range step.RunCommands {
+				if err := e.executeCommand(ctx, cmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute pre-install command for %s: %s", packName, cmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return nil
+}
+
+func (e *extendedAPT) checkConditions(conditions []pmapt.Condition) bool {
+	if len(conditions) == 0 {
+		return true
+	}
+
+	for _, condition := range conditions {
+		if condition.FileNotExists != "" {
+			if _, err := os.Stat(condition.FileNotExists); err == nil {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func (e *extendedAPT) executeInstallationSteps(

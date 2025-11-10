@@ -4,13 +4,15 @@ packages:
 
   - name: php
     pre-install:
-      - apt-get install -y software-properties-common
-      - add-apt-repository -y ppa:ondrej/php
-      - apt-get update
+      - run-commands:
+        - apt-get install -y software-properties-common
+        - add-apt-repository -y ppa:ondrej/php
+        - apt-get update
 
   - name: nginx
     pre-install:
-      - mkdir -p /usr/share/keyrings/
-      - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
-      - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{{distname}}/ {{codename}} nginx" > /etc/apt/sources.list.d/nginx.list
-      - apt-get update
+      - run-commands:
+        - mkdir -p /usr/share/keyrings/
+        - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+        - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{{distname}}/ {{codename}} nginx" > /etc/apt/sources.list.d/nginx.list
+        - apt-get update

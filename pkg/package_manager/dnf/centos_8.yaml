@@ -2,5 +2,6 @@ packages:
   - name: php
     replace-with: [php-cli, php-common, php-fpm]
     pre-install:
-      - dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
-      - dnf -y module switch-to php:remi-8.2
+      - run-commands:
+        - dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
+        - dnf -y module switch-to php:remi-8.2

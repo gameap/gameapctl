@@ -17,12 +17,27 @@ type packagesConfig struct {
 	Packages []PackageConfig `yaml:"packages"`
 }
 
+type Condition struct {
+	FileNotExists string `yaml:"file-not-exists"`
+}
+
+type PreInstallStep struct {
+	Conditions  []Condition `yaml:"conditions,omitempty"`
+	RunCommands []string    `yaml:"run-commands,omitempty"`
+}
+
+type InstallStep struct {
+	RunCommands []string `yaml:"run-commands,omitempty"`
+}
+
 type PackageConfig struct {
-	Name        string   `yaml:"name"`
-	ReplaceWith []string `yaml:"replace-with"`
-	Virtual     bool     `yaml:"virtual"`
-	PreInstall  []string `yaml:"pre-install"`
-	PostInstall []string `yaml:"post-install"`
+	Name        string           `yaml:"name"`
+	ReplaceWith []string         `yaml:"replace-with"`
+	Virtual     bool             `yaml:"virtual"`
+	LookupPaths []string         `yaml:"lookup-paths"`
+	PreInstall  []PreInstallStep `yaml:"pre-install"`
+	Install     []InstallStep    `yaml:"install"`
+	PostInstall []string         `yaml:"post-install"`
 }
 
 var (
@@ -95,7 +110,12 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 		}
 
 		for _, pkg := range config.Packages {
-			pkg.PreInstall = replaceDistributionVariablesSlice(pkg.PreInstall, osinf)
+			for i := range pkg.PreInstall {
+				pkg.PreInstall[i].RunCommands = replaceDistributionVariablesSlice(pkg.PreInstall[i].RunCommands, osinf)
+			}
+			for i := range pkg.Install {
+				pkg.Install[i].RunCommands = replaceDistributionVariablesSlice(pkg.Install[i].RunCommands, osinf)
+			}
 			pkg.PostInstall = replaceDistributionVariablesSlice(pkg.PostInstall, osinf)
 
 			packages[pkg.Name] = pkg

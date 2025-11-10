@@ -99,6 +99,15 @@ func newExtendedDNF(osinfo osinfo.Info, underlined PackageManager) (*extendedDNF
 func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
 	var err error
 
+	packs, err = d.excludeByLookupPathFound(ctx, packs...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check lookup paths")
+	}
+
+	if len(packs) == 0 {
+		return nil
+	}
+
 	packs, err = d.preInstallationSteps(ctx, packs...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre-installation steps")
@@ -153,6 +162,88 @@ func (d *extendedDNF) replaceAliases(_ context.Context, packs []string) []string
 	return updatedPacks
 }
 
+func (d *extendedDNF) excludeByLookupPathFound(_ context.Context, packs ...string) ([]string, error) {
+	filteredPacks := make([]string, 0, len(packs))
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists || len(config.LookupPaths) == 0 {
+			filteredPacks = append(filteredPacks, packName)
+
+			continue
+		}
+
+		found := false
+		for _, lookupPath := range config.LookupPaths {
+			if _, err := exec.LookPath(lookupPath); err == nil {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			filteredPacks = append(filteredPacks, packName)
+		}
+	}
+
+	return filteredPacks, nil
+}
+
+func (d *extendedDNF) executePreInstallationSteps(ctx context.Context, packs []string) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists {
+			continue
+		}
+
+		if len(config.PreInstall) == 0 {
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		for _, step := range config.PreInstall {
+			if !d.checkConditions(step.Conditions) {
+				continue
+			}
+
+			for _, cmd := range step.RunCommands {
+				if err := d.executeCommand(ctx, cmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute pre-install command for %s: %s", packName, cmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return nil
+}
+
+func (d *extendedDNF) checkConditions(conditions []pmdnf.Condition) bool {
+	if len(conditions) == 0 {
+		return true
+	}
+
+	for _, condition := range conditions {
+		if condition.FileNotExists != "" {
+			if _, err := os.Stat(condition.FileNotExists); err == nil {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func (d *extendedDNF) executeInstallationSteps(
 	ctx context.Context,
 	packs []string,
@@ -191,11 +282,7 @@ func (d *extendedDNF) executeInstallationSteps(
 }
 
 func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
-	err := d.executeInstallationSteps(
-		ctx,
-		packs,
-		func(config pmdnf.PackageConfig) []string { return config.PreInstall },
-	)
+	err := d.executePreInstallationSteps(ctx, packs)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
 	}

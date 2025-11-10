@@ -99,8 +99,12 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 		d := &extendedDNF{
 			packages: map[string]pmdnf.PackageConfig{
 				"package-with-pre": {
-					Name:       "package-with-pre",
-					PreInstall: []string{"echo pre-install"},
+					Name: "package-with-pre",
+					PreInstall: []pmdnf.PreInstallStep{
+						{
+							RunCommands: []string{"echo pre-install"},
+						},
+					},
 				},
 				"package-without-pre": {
 					Name: "package-without-pre",
@@ -117,8 +121,12 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 		d := &extendedDNF{
 			packages: map[string]pmdnf.PackageConfig{
 				"test-package": {
-					Name:       "test-package",
-					PreInstall: []string{"echo test"},
+					Name: "test-package",
+					PreInstall: []pmdnf.PreInstallStep{
+						{
+							RunCommands: []string{"echo test"},
+						},
+					},
 				},
 			},
 		}
