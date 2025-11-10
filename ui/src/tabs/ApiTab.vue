@@ -21,6 +21,11 @@ const gameapActive = computed(() => {
   return getServiceByName.value("gameap").status === "active"
 })
 
+const gameapAvailable = computed(() => {
+  return getServiceByName.value("gameap").status === "active" ||
+      getServiceByName.value("gameap").status === "inactive"
+})
+
 const defaultPath = computed(() => {
   return nodeOS.value === "windows"
       ? "C:\\gameap\\web"
@@ -166,7 +171,7 @@ function handleUninstallButtonClick() {
 
           <n-button-group>
             <n-button
-                :disabled="gameapActive"
+                :disabled="gameapAvailable"
                 @click="onClickGameAPInstallationButton()"
             >
               <template #icon>
@@ -176,7 +181,7 @@ function handleUninstallButtonClick() {
             </n-button>
 
             <n-button
-                :disabled="!gameapActive"
+                :disabled="!gameapAvailable"
                 @click="onClickGameAPUpgradingButton()"
             >
               <template #icon>
@@ -186,7 +191,7 @@ function handleUninstallButtonClick() {
             </n-button>
 
             <n-button
-                :disabled="!gameapActive"
+                :disabled="!gameapAvailable"
                 type="error"
                 @click="onClickGameAPUninstallationButton()"
                 >
@@ -195,7 +200,6 @@ function handleUninstallButtonClick() {
               </template>
               Remove
             </n-button>
-
           </n-button-group>
 
         </n-card>
