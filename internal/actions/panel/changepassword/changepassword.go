@@ -128,9 +128,7 @@ func ChangePassword(ctx context.Context, username, password string) error {
 		return errors.WithMessage(err, "failed to hash password")
 	}
 
-	// Update password and updated_at
-	// Format timestamp in RFC3339 format for database compatibility
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC()
 	updateQuery := "UPDATE users SET password = ?, updated_at = ? WHERE login = ?"
 	if isPostgres {
 		updateQuery = "UPDATE users SET password = $1, updated_at = $2 WHERE login = $3"
@@ -223,6 +221,13 @@ func connectDatabase(driver, dsn string) (*sql.DB, error) {
 	switch driver {
 	case "mysql":
 		driverName = "mysql"
+		if !strings.Contains(dsn, "parseTime=") {
+			if strings.Contains(dsn, "?") {
+				dsn += "&parseTime=true"
+			} else {
+				dsn += "?parseTime=true"
+			}
+		}
 	case "postgres", "postgresql", "pgsql":
 		driverName = "pgx"
 	case "sqlite":

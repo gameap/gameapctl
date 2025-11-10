@@ -3,6 +3,7 @@ package apt
 import (
 	"embed"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -30,15 +31,19 @@ type InstallStep struct {
 	RunCommands []string `yaml:"run-commands,omitempty"`
 }
 
+type PostInstallStep struct {
+	RunCommands []string `yaml:"run-commands,omitempty"`
+}
+
 type PackageConfig struct {
-	Name         string           `yaml:"name"`
-	Dependencies []string         `yaml:"dependencies"`
-	ReplaceWith  []string         `yaml:"replace-with"`
-	Virtual      bool             `yaml:"virtual"`
-	LookupPaths  []string         `yaml:"lookup-paths"`
-	PreInstall   []PreInstallStep `yaml:"pre-install"`
-	Install      []InstallStep    `yaml:"install"`
-	PostInstall  []string         `yaml:"post-install"`
+	Name         string            `yaml:"name"`
+	Dependencies []string          `yaml:"dependencies"`
+	ReplaceWith  []string          `yaml:"replace-with"`
+	Virtual      bool              `yaml:"virtual"`
+	LookupPaths  []string          `yaml:"lookup-paths"`
+	PreInstall   []PreInstallStep  `yaml:"pre-install"`
+	Install      []InstallStep     `yaml:"install"`
+	PostInstall  []PostInstallStep `yaml:"post-install"`
 }
 
 var (
@@ -118,6 +123,8 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 		)
 	}
 
+	log.Printf("Loading packages from files: %v", filesToLoad)
+
 	for _, filename := range filesToLoad {
 		data, err := fs.ReadFile(filename)
 		if err != nil {
@@ -132,12 +139,20 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 
 		for _, pkg := range config.Packages {
 			for i := range pkg.PreInstall {
-				pkg.PreInstall[i].RunCommands = replaceDistributionVariablesSlice(pkg.PreInstall[i].RunCommands, osinf)
+				pkg.PreInstall[i].RunCommands = normalizeCommandSlice(
+					replaceDistributionVariablesSlice(pkg.PreInstall[i].RunCommands, osinf),
+				)
 			}
 			for i := range pkg.Install {
-				pkg.Install[i].RunCommands = replaceDistributionVariablesSlice(pkg.Install[i].RunCommands, osinf)
+				pkg.Install[i].RunCommands = normalizeCommandSlice(
+					replaceDistributionVariablesSlice(pkg.Install[i].RunCommands, osinf),
+				)
 			}
-			pkg.PostInstall = replaceDistributionVariablesSlice(pkg.PostInstall, osinf)
+			for i := range pkg.PostInstall {
+				pkg.PostInstall[i].RunCommands = normalizeCommandSlice(replaceDistributionVariablesSlice(
+					pkg.PostInstall[i].RunCommands, osinf,
+				))
+			}
 
 			packages[pkg.Name] = pkg
 		}
@@ -164,4 +179,36 @@ func replaceDistributionVariables(input string, osinf osinfo.Info) string {
 	result = strings.ReplaceAll(result, "{{architecture}}", osinf.Platform.String())
 
 	return result
+}
+
+func normalizeCommandSlice(cmds []string) []string {
+	normalized := make([]string, len(cmds))
+	for i, cmd := range cmds {
+		normalized[i] = normalizeCommand(cmd)
+	}
+
+	return normalized
+}
+
+func normalizeCommand(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+
+	var normalized strings.Builder
+	prevSpace := false
+
+	for _, r := range s {
+		if r == ' ' || r == '\t' {
+			if !prevSpace {
+				normalized.WriteRune(' ')
+				prevSpace = true
+			}
+		} else {
+			normalized.WriteRune(r)
+			prevSpace = false
+		}
+	}
+
+	return strings.TrimSpace(normalized.String())
 }

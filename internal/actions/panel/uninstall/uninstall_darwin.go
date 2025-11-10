@@ -21,10 +21,6 @@ func removeData(_ context.Context) error {
 	return nil
 }
 
-func removePlatformServices(_ context.Context, _ packagemanager.PackageManager) error {
-	return nil
-}
-
 func removePlatformDatabase(
 	_ context.Context,
 	_ packagemanager.PackageManager,

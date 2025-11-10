@@ -22,7 +22,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/service"
-	pkgstings "github.com/gameap/gameapctl/pkg/strings"
+	"github.com/gameap/gameapctl/pkg/shellquote"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
@@ -55,59 +55,66 @@ func (pm *WindowsPackageManager) Search(_ context.Context, _ string) ([]PackageI
 	return nil, nil
 }
 
-func (pm *WindowsPackageManager) Install(ctx context.Context, packs ...string) error {
+func (pm *WindowsPackageManager) Install(ctx context.Context, pack string, opts ...InstallOptions) error {
 	var err error
 
-	err = pm.installDependencies(ctx, packs...)
+	options := &installOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	err = pm.installDependencies(ctx, pack, opts...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install dependencies")
 	}
 
-	for _, packName := range packs {
-		p, exists := pm.packages[packName]
-		if !exists {
-			continue
-		}
-
-		err = pm.installPackage(ctx, p)
-		if err != nil {
-			return err
-		}
-
-		UpdateEnvPath(ctx)
+	p, exists := pm.packages[pack]
+	if !exists {
+		return nil
 	}
+
+	err = pm.installPackage(ctx, p, options)
+	if err != nil {
+		return err
+	}
+
+	UpdateEnvPath(ctx)
 
 	return nil
 }
 
-func (pm *WindowsPackageManager) installDependencies(ctx context.Context, packs ...string) error {
+func (pm *WindowsPackageManager) installDependencies(
+	ctx context.Context,
+	packName string,
+	opts ...InstallOptions,
+) error {
 	dependencies := make([]string, 0)
 
-	for _, packName := range packs {
-		config, exists := pm.packages[packName]
-		if !exists {
-			continue
-		}
-
-		for _, d := range config.Dependencies {
-			if d == packName {
-				return errors.WithMessagef(
-					ErrCannotDependOnSelf,
-					"failed to resolve dependencies for package '%s'", packName,
-				)
-			}
-		}
-
-		dependencies = append(dependencies, config.Dependencies...)
+	config, exists := pm.packages[packName]
+	if !exists {
+		return nil
 	}
+
+	for _, d := range config.Dependencies {
+		if d == packName {
+			return errors.WithMessagef(
+				ErrCannotDependOnSelf,
+				"failed to resolve dependencies for package '%s'", packName,
+			)
+		}
+	}
+
+	dependencies = append(dependencies, config.Dependencies...)
 
 	if len(dependencies) == 0 {
 		return nil
 	}
 
-	err := pm.Install(ctx, dependencies...)
-	if err != nil {
-		return errors.WithMessage(err, "failed to install dependencies")
+	for _, dep := range dependencies {
+		err := pm.Install(ctx, dep, opts...)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install dependencies")
+		}
 	}
 
 	return nil
@@ -133,33 +140,25 @@ func convertAccessToOSCoreFlag(access string) oscore.GrantFlag {
 func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, p windows.Package) error {
 	for _, pre := range p.PreInstall {
 		if len(pre.GrantPermissions) > 0 {
-			for _, p := range pre.GrantPermissions {
-				log.Printf("Granting %s to %s for %s\n", p.Access, p.User, p.Path)
-
-				err := oscore.Grant(ctx, p.Path, p.User, convertAccessToOSCoreFlag(p.Access))
-				if err != nil {
-					return errors.WithMessagef(
-						err,
-						"failed to grant %s to %s for %s",
-						p.Access,
-						p.User,
-						p.Path,
-					)
-				}
+			err := pm.grantPermissions(ctx, pre.GrantPermissions)
+			if err != nil {
+				return errors.WithMessagef(
+					err,
+					"failed to grant permissions for package '%s'",
+					p.Name,
+				)
 			}
 		}
 
-		if len(pre.Commands) > 0 {
-			for _, cmdStr := range pre.Commands {
-				err := oscore.ExecCommand(ctx, "cmd", "/C", cmdStr)
-				if err != nil {
-					return errors.WithMessagef(
-						err,
-						"failed to execute pre install command for package '%s': %s",
-						p.Name,
-						cmdStr,
-					)
-				}
+		for _, cmdStr := range pre.Commands {
+			err := pm.executeCommand(ctx, cmdStr)
+			if err != nil {
+				return errors.WithMessagef(
+					err,
+					"failed to execute pre install command for package '%s': %s",
+					p.Name,
+					cmdStr,
+				)
 			}
 		}
 	}
@@ -167,15 +166,35 @@ func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, p win
 	return nil
 }
 
+func (pm *WindowsPackageManager) grantPermissions(ctx context.Context, permissions []windows.Permission) error {
+	for _, p := range permissions {
+		log.Printf("Granting %s to %s for %s\n", p.Access, p.User, p.Path)
+
+		err := oscore.Grant(ctx, p.Path, p.User, convertAccessToOSCoreFlag(p.Access))
+		if err != nil {
+			return errors.WithMessagef(
+				err,
+				"failed to grant %s to %s for %s",
+				p.Access,
+				p.User,
+				p.Path,
+			)
+		}
+	}
+
+	return nil
+}
+
 //nolint:gocognit,funlen,gocyclo
-func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.Package) error {
+func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.Package, opts *installOptions) error {
 	log.Println("Installing", p.Name, "package")
 	var err error
 
 	runtimeVars := runtimeTemplateVariables{
 		LookupPaths: make(map[string]string, len(p.LookupPaths)),
+		Options:     opts,
 
-		// default values
+		// default configValues
 		InstallPath: p.InstallPath,
 	}
 
@@ -293,29 +312,43 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		return errors.WithMessage(err, "failed to download file")
 	}
 
-	if len(p.InstallCommands) > 0 {
-		log.Println("Running install commands for package ", p.Name)
-
-		for _, cmd := range p.InstallCommands {
-			err = pm.executeCommand(ctx, cmd)
-			if err != nil {
-				return errors.WithMessagef(err, "failed to execute install command: %s", cmd)
-			}
-		}
-	}
-
 	//nolint:nestif
 	if len(p.Install) > 0 {
 		log.Println("Running install steps for package ", p.Name)
 
 		for _, step := range p.Install {
+			if len(step.GrantPermissions) > 0 {
+				err = pm.grantPermissions(ctx, step.GrantPermissions)
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to grant permissions for package '%s'",
+						p.Name,
+					)
+				}
+			}
+
 			if len(step.RunCommands) > 0 {
 				log.Println("Running install commands for package ", p.Name)
 
 				for _, cmd := range step.RunCommands {
 					log.Println("Running install command:", cmd)
 
-					execCmd := exec.Command("cmd", "/C", cmd)
+					scmd, err := shellquote.Split(cmd)
+					if err != nil || len(scmd) == 0 {
+						return errors.WithMessagef(err, "failed to parse install command: %s", cmd)
+					}
+
+					env := os.Environ()
+					for _, e := range step.Env {
+						env = append(env, e.String())
+					}
+
+					// Trusted source: Commands come from embedded YAML files (compiled into the binary), not user input
+					//
+					//nolint:gosec
+					execCmd := exec.Command("cmd", append([]string{"/C"}, scmd...)...)
+					execCmd.Env = env
 					execCmd.Stdout = log.Writer()
 					execCmd.Stderr = log.Writer()
 					execCmd.Dir = dir
@@ -420,14 +453,17 @@ func (pm *WindowsPackageManager) removePackage(ctx context.Context, p windows.Pa
 		}
 	}
 
-	if len(p.UninstallCommands) > 0 {
+	if len(p.Uninstall) > 0 {
 		log.Println("Running uninstall commands for package", p.Name)
 
-		for _, cmd := range p.UninstallCommands {
-			log.Println("Running uninstall command:", cmd)
-			err := pm.executeCommand(ctx, cmd)
-			if err != nil {
-				log.Println(errors.WithMessagef(err, "failed to execute uninstall command: %s", cmd))
+		for _, step := range p.Uninstall {
+			for _, cmd := range step.RunCommands {
+				log.Println("Running uninstall command:", cmd)
+
+				err := pm.executeCommand(ctx, cmd)
+				if err != nil {
+					log.Println(errors.WithMessagef(err, "failed to execute uninstall command: %s", cmd))
+				}
 			}
 		}
 	}
@@ -726,7 +762,7 @@ func (pm *WindowsPackageManager) installServyService(ctx context.Context, p wind
 	if len(p.Service.Env) > 0 {
 		envVars := make([]string, 0, len(p.Service.Env))
 		for _, e := range p.Service.Env {
-			envVars = append(envVars, fmt.Sprintf("%s=%s", e.Name, e.Value))
+			envVars = append(envVars, e.String())
 		}
 		config.EnvironmentVariables = strings.Join(envVars, ";")
 	}
@@ -969,15 +1005,121 @@ func (pm *WindowsPackageManager) configureServiceFailureActions(
 type runtimeTemplateVariables struct {
 	// runtime
 	LookupPaths map[string]string
+	Options     *installOptions
 
-	// some default values for package
+	// some default configValues for package
 	InstallPath string
 }
 
+//nolint:gocognit,funlen
 func (pm *WindowsPackageManager) replaceRuntimeVariables(
 	ctx context.Context, p windows.Package, vars runtimeTemplateVariables,
 ) (windows.Package, error) {
 	var err error
+
+	for i := range p.PreInstall {
+		for j := range p.PreInstall[i].Commands {
+			p.PreInstall[i].Commands[j], err = pm.replaceRuntimeVariablesString(
+				ctx,
+				p.PreInstall[i].Commands[j],
+				vars,
+			)
+			if err != nil {
+				return p, errors.WithMessagef(
+					err,
+					"failed to replace runtimeTemplateVariables in pre install step %d command %d for package '%s'",
+					i,
+					j,
+					p.Name,
+				)
+			}
+		}
+	}
+
+	for i := range p.Install {
+		for j := range p.Install[i].RunCommands {
+			p.Install[i].RunCommands[j], err = pm.replaceRuntimeVariablesString(
+				ctx,
+				p.Install[i].RunCommands[j],
+				vars,
+			)
+			if err != nil {
+				return p, errors.WithMessagef(
+					err,
+					"failed to replace runtimeTemplateVariables in install step %d command %d for package '%s'",
+					i,
+					j,
+					p.Name,
+				)
+			}
+
+			for k := range p.Install[i].Env {
+				p.Install[i].Env[k].Value, err = pm.replaceRuntimeVariablesString(
+					ctx,
+					p.Install[i].Env[k].Value,
+					vars,
+				)
+				if err != nil {
+					return p, errors.WithMessagef(
+						err,
+						"failed to replace runtimeTemplateVariables in install step %d env variable '%s' for package '%s'",
+						i,
+						p.Install[i].Env[k].Name,
+						p.Name,
+					)
+				}
+			}
+
+			for k := range p.Install[i].WaitForFiles {
+				p.Install[i].WaitForFiles[k], err = pm.replaceRuntimeVariablesString(
+					ctx,
+					p.Install[i].WaitForFiles[k],
+					vars,
+				)
+				if err != nil {
+					return p, errors.WithMessagef(
+						err,
+						"failed to replace runtimeTemplateVariables in install step %d wait for file '%s' for package '%s'",
+						i,
+						p.Install[i].WaitForFiles[k],
+						p.Name,
+					)
+				}
+			}
+
+			p.Install[i].WaitForService, err = pm.replaceRuntimeVariablesString(
+				ctx,
+				p.Install[i].WaitForService,
+				vars,
+			)
+			if err != nil {
+				return p, errors.WithMessagef(
+					err,
+					"failed to replace runtimeTemplateVariables in install step %d wait for service '%s' for package '%s'",
+					i,
+					p.Install[i].WaitForService,
+					p.Name,
+				)
+			}
+
+			for k := range p.Install[i].GrantPermissions {
+				p.Install[i].GrantPermissions[k].Path, err = pm.replaceRuntimeVariablesString(
+					ctx,
+					p.Install[i].GrantPermissions[k].Path,
+					vars,
+				)
+				if err != nil {
+					return p, errors.WithMessagef(
+						err,
+						"failed to replace runtimeTemplateVariables in install step %d grant permission path '%s' for package '%s'",
+						i,
+						p.Install[i].GrantPermissions[k].Path,
+						p.Name,
+					)
+				}
+			}
+		}
+	}
 
 	//nolint:nestif
 	if p.Service != nil {
@@ -1016,23 +1158,25 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 	return p, nil
 }
 
-var runtimeTemplateFuncMap = template.FuncMap{
-	"default": func(defaultVal interface{}, value interface{}) interface{} {
-		if value == nil || value == "" {
-			return defaultVal
-		}
-
-		return value
-	},
-	"generatePassword": func(length int) (string, error) {
-		return pkgstings.GeneratePassword(length)
-	},
-}
-
 func (pm *WindowsPackageManager) replaceRuntimeVariablesString(
 	_ context.Context, v string, vars runtimeTemplateVariables,
 ) (string, error) {
-	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Parse(v)
+	funcMap := template.FuncMap{
+		"configValue": func(name string) string {
+			if vars.Options == nil {
+				return ""
+			}
+
+			val, exists := vars.Options.configValues[name]
+			if !exists {
+				return ""
+			}
+
+			return val
+		},
+	}
+
+	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Funcs(funcMap).Parse(v)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse template")
 	}
@@ -1054,9 +1198,15 @@ func (pm *WindowsPackageManager) executeCommand(ctx context.Context, cmdStr stri
 		return nil
 	}
 
-	args := []string{
-		"/C", cmdStr,
+	cmd, err := shellquote.Split(cmdStr)
+	if err != nil || len(cmd) == 0 {
+		return errors.WithMessagef(err, "failed to parse command: %s", cmdStr)
 	}
+
+	args := make([]string, 0, len(cmd)+1)
+
+	args = append(args, "/C")
+	args = append(args, cmd...)
 
 	return oscore.ExecCommand(ctx, "cmd", args...)
 }

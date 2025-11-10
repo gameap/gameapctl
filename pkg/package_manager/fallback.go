@@ -36,9 +36,9 @@ func (fb *fallback) Search(ctx context.Context, name string) ([]PackageInfo, err
 	return append(bpackages, fpackages...), nil
 }
 
-func (fb *fallback) Install(ctx context.Context, packs ...string) error {
-	if err := fb.basePackageManager.Install(ctx, packs...); err != nil {
-		if ferr := fb.fallbackPackageManager.Install(ctx, packs...); ferr != nil {
+func (fb *fallback) Install(ctx context.Context, pack string, opts ...InstallOptions) error {
+	if err := fb.basePackageManager.Install(ctx, pack, opts...); err != nil {
+		if ferr := fb.fallbackPackageManager.Install(ctx, pack, opts...); ferr != nil {
 			return multierr.Append(err, ferr)
 		}
 	}

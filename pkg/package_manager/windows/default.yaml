@@ -52,20 +52,47 @@ packages:
   - name: postgresql
     lookup-paths: [ psql, postgres ]
     download-urls:
-      - https://get.enterprisedb.com/postgresql/postgresql-16.10-2-windows-x64.exe
+      - https://get.enterprisedb.com/postgresql/postgresql-17.6-2-windows-x64-binaries.zip
+    install-path: ${ProgramFiles}\PostgreSQL\17
     install:
       - run-commands:
-          - > 
-            start /wait postgresql-16.10-2-windows-x64.exe 
-              --mode unattended 
-              --unattendedmodeui minimal 
-              --superpassword gameap_password 
-              --servicename postgresql-16 
-              --serviceport 9432 
-              --datadir "C:\gameap\postgresql\data"
-        wait-for-service: postgresql-16
-    path-env:
-      - C:\php
+          - robocopy "{{package_install_path}}\pgsql" "{{package_install_path}}" /E /MOVE
+        allowed-install-exit-codes:
+          # https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/return-codes-used-robocopy-utility
+          - 1 # All files were copied successfully.
+          - 3 # Some files were copied. Additional files were present. No failure was met.
+          - 5 # Some files were copied. Some files were mismatched. No failure was met.
+      - run-commands:
+          - echo {{ configValue "db-root-password" }} > ${TEMP}\db_root_password.txt
+          - >
+            "bin\initdb.exe"
+              -D "${ProgramData}\PostgreSQL\17\data"
+              -U postgres
+              --pwfile=${TEMP}\db_root_password.txt
+              --encoding=UTF8
+              --locale=en_US.UTF-8
+          - del ${TEMP}\db_root_password.txt
+          - >
+            "bin\pg_ctl.exe"
+              register
+              -N "PostgreSQL"
+              -D "${ProgramData}\PostgreSQL\17\data"
+              -U "NT AUTHORITY\NETWORK SERVICE"
+      - grant-permissions:
+          - path: ${ProgramData}\PostgreSQL\17\data
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+
+      - run-commands:
+          - net start PostgreSQL
+          - >
+            "bin\psql.exe"
+              postgresql://postgres:{{ configValue "db-root-password" }}@127.0.0.1:5432
+                -c "CREATE USER {{ configValue "db-user" }} WITH PASSWORD '{{ configValue "db-password" }}';"
+          - >
+            "bin\psql.exe"
+              postgresql://postgres:{{ configValue "db-root-password" }}@127.0.0.1:5432
+                -c "CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};"
 
   - name: php
     lookup-paths: [ php, php-cgi ]
@@ -120,15 +147,17 @@ packages:
     lookup-paths: [git]
     download-urls:
       - https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe
-    install-commands:
-      - Git-2.43.0-64-bit.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=icons,ext\reg\shellhere,assoc,assoc_sh
+    install:
+      - run-commands:
+        - Git-2.43.0-64-bit.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=icons,ext\reg\shellhere,assoc,assoc_sh
 
   - name: nodejs
     lookup-paths: [node]
     download-urls:
       - https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi
-    install-commands:
-      - start /wait msiexec /i node-v20.11.1-x64.msi /qb
+    install:
+      - run-commands:
+        - start /wait msiexec /i node-v20.11.1-x64.msi /qb
     path-env:
       - ${ProgramFiles}\nodejs
 
@@ -186,19 +215,22 @@ packages:
     download-urls:
       - https://github.com/mtkennerly/shawl/releases/download/v1.7.0/shawl-v1.7.0-win64.zip
     install-path: C:\gameap\tools\shawl
-    uninstall-commands:
-      - del /F /Q {{package_install_path}}\*
-      - rmdir /S /Q {{package_install_path}}
+    uninstall:
+      - run-commands:
+        - del /F /Q {{package_install_path}}\*
+        - rmdir /S /Q {{package_install_path}}
 
   - name: winsw
     lookup-paths: [ winsw ]
     download-urls:
       - https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
     install-path: ${SystemRoot}\System32
-    install-commands:
-      - move {{package_install_path}}\WinSW-x64.exe {{package_install_path}}\winsw.exe
-    uninstall-commands:
-      - del ${SystemRoot}\System32\winsw.exe
+    install:
+      - run-commands:
+        - move {{package_install_path}}\WinSW-x64.exe {{package_install_path}}\winsw.exe
+    uninstall:
+      - run-commands:
+        - del ${SystemRoot}\System32\winsw.exe
 
   - name: servy
     lookup-paths: [ servy ]
@@ -211,5 +243,6 @@ packages:
           - ${ProgramFiles}\Servy\servy-cli.exe
     path-env:
       - ${ProgramFiles}\Servy
-    uninstall-commands:
-      - \"${ProgramFiles}\Servy\unins000.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES
+    uninstall:
+      - run-commands:
+        - \"${ProgramFiles}\Servy\unins000.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES

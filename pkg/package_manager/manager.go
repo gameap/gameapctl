@@ -9,6 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	ConfigValueDBRootPassword = "db-root-password"
+	ConfigValueDBUser         = "db-user"
+	ConfigValueDBPassword     = "db-password"
+	ConfigValueDBName         = "db-name"
+)
+
 type PackageInfo struct {
 	Name            string
 	Architecture    string
@@ -18,9 +25,24 @@ type PackageInfo struct {
 	InstalledSizeKB int
 }
 
+type installOptions struct {
+	configValues map[string]string
+}
+
+type InstallOptions func(*installOptions)
+
+func WithConfigValue(key, value string) InstallOptions {
+	return func(opts *installOptions) {
+		if opts.configValues == nil {
+			opts.configValues = make(map[string]string)
+		}
+		opts.configValues[key] = value
+	}
+}
+
 type PackageManager interface {
 	Search(ctx context.Context, name string) ([]PackageInfo, error)
-	Install(ctx context.Context, packs ...string) error
+	Install(ctx context.Context, pack string, opts ...InstallOptions) error
 	CheckForUpdates(ctx context.Context) error
 	Remove(ctx context.Context, packs ...string) error
 	Purge(ctx context.Context, packs ...string) error

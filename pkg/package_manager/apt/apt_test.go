@@ -20,7 +20,7 @@ func TestLoadPackages_Default(t *testing.T) {
 		assert.Equal(t, []string{"postgresql", "postgresql-contrib"}, pkg.ReplaceWith)
 		assert.False(t, pkg.Virtual)
 		assert.Empty(t, pkg.PreInstall)
-		assert.Empty(t, pkg.PostInstall)
+		require.Len(t, pkg.PostInstall, 2)
 		assert.Empty(t, pkg.Install)
 	})
 
@@ -37,20 +37,23 @@ func TestLoadPackages_Default(t *testing.T) {
 		assert.Equal(t, "composer", pkg.Name)
 		assert.True(t, pkg.Virtual)
 		require.Len(t, pkg.Install, 1)
-		assert.Contains(t, pkg.Install[0], "curl -sS https://getcomposer.org/installer")
-		assert.Contains(t, pkg.Install[0], "php -- --install-dir=/usr/local/bin --filename=composer")
+		require.Len(t, pkg.Install[0].RunCommands, 1)
+		assert.Contains(t, pkg.Install[0].RunCommands[0], "curl -sS https://getcomposer.org/installer")
+		assert.Contains(t, pkg.Install[0].RunCommands[0], "php -- --install-dir=/usr/local/bin --filename=composer")
 	})
 
 	t.Run("nodejs with pre-install", func(t *testing.T) {
 		pkg, exists := packages["nodejs"]
 		require.True(t, exists, "nodejs should exist in default.yaml")
 		assert.Equal(t, "nodejs", pkg.Name)
-		require.Len(t, pkg.PreInstall, 3)
-		assert.Equal(t, "mkdir -p /usr/share/keyrings/", pkg.PreInstall[0])
-		assert.Contains(t, pkg.PreInstall[1], "curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key")
-		assert.Contains(t, pkg.PreInstall[1], "gpg --dearmor -o /usr/share/keyrings/nodesource.gpg")
-		assert.Contains(t, pkg.PreInstall[2], "deb [signed-by=/usr/share/keyrings/nodesource.gpg]")
-		assert.Contains(t, pkg.PreInstall[2], "https://deb.nodesource.com/node_20.x")
+		require.Len(t, pkg.PreInstall, 2)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		require.Len(t, pkg.PreInstall[1].RunCommands, 2)
+		assert.Equal(t, "mkdir -p /usr/share/keyrings/", pkg.PreInstall[0].RunCommands[0])
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[1], "curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key")
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[1], "gpg --dearmor -o /usr/share/keyrings/nodesource.gpg")
+		assert.Contains(t, pkg.PreInstall[1].RunCommands[0], "deb [signed-by=/usr/share/keyrings/nodesource.gpg]")
+		assert.Contains(t, pkg.PreInstall[1].RunCommands[0], "https://deb.nodesource.com/node_20.x")
 	})
 }
 
@@ -243,4 +246,80 @@ func TestReplaceDistributionVariablesSlice(t *testing.T) {
 		result := replaceDistributionVariablesSlice(inputs, osinf)
 		assert.Equal(t, expected, result)
 	})
+}
+
+func Test_normalizeCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "single line command",
+			input:    "apt-get install -y postgresql",
+			expected: "apt-get install -y postgresql",
+		},
+		{
+			name: "multiline command with newlines",
+			input: `curl -fsSL https://example.com/key.gpg
+  | gpg --dearmor
+  -o /usr/share/keyrings/example.gpg`,
+			expected: `curl -fsSL https://example.com/key.gpg | gpg --dearmor -o /usr/share/keyrings/example.gpg`,
+		},
+		{
+			name:     "multiple consecutive spaces",
+			input:    "apt-get    install     -y  package",
+			expected: "apt-get install -y package",
+		},
+		{
+			name:     "leading and trailing spaces",
+			input:    "  apt-get update  ",
+			expected: "apt-get update",
+		},
+		{
+			name:     "tabs and spaces mixed",
+			input:    "echo\t\ttest\tcommand",
+			expected: "echo test command",
+		},
+		{
+			name:     "windows line endings (CRLF)",
+			input:    "line1\r\nline2\r\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "unix line endings (LF)",
+			input:    "line1\nline2\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "old mac line endings (CR)",
+			input:    "line1\rline2\rline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "only whitespace",
+			input:    "   \n\t\r\n   ",
+			expected: "",
+		},
+		{
+			name: "real command from yaml",
+			input: `curl -sS https://getcomposer.org/installer
+  | php --
+    --install-dir=/usr/local/bin
+    --filename=composer`,
+			expected: `curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeCommand(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

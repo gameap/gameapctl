@@ -1,7 +1,4 @@
 packages:
-  - name: mysql-server
-    replace-with: [mysql-server]
-
   - name: lib32gcc
     replace-with: [lib32gcc1]
 

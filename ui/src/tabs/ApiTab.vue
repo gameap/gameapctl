@@ -48,7 +48,7 @@ const installationForm = ref({
   source: "repo",
   branch: "master",
   webServer: "nginx",
-  database: "mysql",
+  database: "postgres",
   withDaemon: false,
 })
 const uninstallationFormRef = ref({})
@@ -67,6 +67,11 @@ const webServerOptions = [
   {label: "None", value: "none"},
 ]
 const databaseOptions = [
+  {label: "MySQL", value: "mysql"},
+  {label: "SQLite", value: "sqlite"},
+  {label: "None", value: "none"},
+]
+const databaseOptionsV4 = [
   {label: "PostgreSQL", value: "postgres"},
   {label: "MySQL", value: "mysql"},
   {label: "SQLite", value: "sqlite"},
@@ -135,6 +140,10 @@ function handleInstallButtonClick(e) {
 }
 
 function handleChangeVersionTab(tabName) {
+  if (tabName === "v3" && installationForm.value.database === "postgres") {
+    installationForm.value.database = "mysql"
+  }
+
   installationForm.value.version = tabName
 }
 
@@ -239,7 +248,7 @@ function handleUninstallButtonClick() {
               </n-input-group>
             </n-form-item>
             <n-form-item label="Database" path="database">
-              <n-select v-model:value="installationForm.database" :options="databaseOptions" />
+              <n-select v-model:value="installationForm.database" :options="databaseOptionsV4" />
             </n-form-item>
             <n-form-item label="&nbsp;" path="withDaemon">
               <n-checkbox v-model:checked="installationForm.withDaemon">

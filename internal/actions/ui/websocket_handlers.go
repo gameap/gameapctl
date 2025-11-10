@@ -97,12 +97,13 @@ func nodeInfo(ctx context.Context, w io.Writer, _ []string) error {
 	return nil
 }
 
-var replaceMap = map[string]string{
+var serviceReplaceMap = map[string]string{
 	"daemon":       gameapDaemonService,
-	"gameapdaemon": gameapDaemonService,
 	"gameap":       gameapServiceName,
+	"gameapdaemon": gameapDaemonService,
 	"mysql":        "mariadb",
 	"php":          "php-fpm",
+	"postgresql":   postgreSQLServiceName,
 }
 
 func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
@@ -112,7 +113,7 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 
 	serviceName := strings.ToLower(args[0])
 
-	if replace, ok := replaceMap[serviceName]; ok {
+	if replace, ok := serviceReplaceMap[serviceName]; ok {
 		serviceName = replace
 	}
 
@@ -332,7 +333,7 @@ func serviceCommand(ctx context.Context, w io.Writer, args []string) error {
 	command := args[0]
 	serviceName := strings.ToLower(args[1])
 
-	if replace, ok := replaceMap[serviceName]; ok {
+	if replace, ok := serviceReplaceMap[serviceName]; ok {
 		serviceName = replace
 	}
 

@@ -5,6 +5,8 @@ import (
 	"context"
 	"log"
 	"os/exec"
+
+	"github.com/pkg/errors"
 )
 
 func ExecCommand(ctx context.Context, command string, args ...string) error {
@@ -27,7 +29,7 @@ func ExecCommandWithOutput(ctx context.Context, command string, args ...string) 
 	log.Println('\n', cmd.String())
 	err := cmd.Run()
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "failed to run command %s", command)
 	}
 
 	return buf.String(), nil

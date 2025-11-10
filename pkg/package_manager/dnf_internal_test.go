@@ -80,7 +80,7 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 			},
 		}
 
-		packs, err := d.preInstallationSteps(context.Background(), "test-package")
+		packs, err := d.preInstallationSteps(context.Background(), []string{"test-package"}, &installOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"test-package"}, packs)
 	})
@@ -90,7 +90,7 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 			packages: map[string]pmdnf.PackageConfig{},
 		}
 
-		packs, err := d.preInstallationSteps(context.Background(), "unknown-package")
+		packs, err := d.preInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"unknown-package"}, packs)
 	})
@@ -112,7 +112,7 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 			},
 		}
 
-		packs, err := d.preInstallationSteps(context.Background(), "package-with-pre", "package-without-pre")
+		packs, err := d.preInstallationSteps(context.Background(), []string{"package-with-pre", "package-without-pre"}, &installOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"package-with-pre", "package-without-pre"}, packs)
 	})
@@ -131,7 +131,7 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 			},
 		}
 
-		packs, err := d.preInstallationSteps(context.Background(), "test-package", "test-package")
+		packs, err := d.preInstallationSteps(context.Background(), []string{"test-package", "test-package"}, &installOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{"test-package", "test-package"}, packs)
 	})
@@ -148,7 +148,7 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 			},
 		}
 
-		err := d.postInstallationSteps(context.Background(), "test-package")
+		err := d.postInstallationSteps(context.Background(), []string{"test-package"}, &installOptions{})
 		require.NoError(t, err)
 	})
 
@@ -157,7 +157,7 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 			packages: map[string]pmdnf.PackageConfig{},
 		}
 
-		err := d.postInstallationSteps(context.Background(), "unknown-package")
+		err := d.postInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
 		require.NoError(t, err)
 	})
 
@@ -165,8 +165,12 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 		d := &extendedDNF{
 			packages: map[string]pmdnf.PackageConfig{
 				"package-with-post": {
-					Name:        "package-with-post",
-					PostInstall: []string{"echo post-install"},
+					Name: "package-with-post",
+					PostInstall: []pmdnf.PostInstallStep{
+						{
+							RunCommands: []string{"echo post-install"},
+						},
+					},
 				},
 				"package-without-post": {
 					Name: "package-without-post",
@@ -174,7 +178,7 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 			},
 		}
 
-		err := d.postInstallationSteps(context.Background(), "package-with-post", "package-without-post")
+		err := d.postInstallationSteps(context.Background(), []string{"package-with-post", "package-without-post"}, &installOptions{})
 		require.NoError(t, err)
 	})
 
@@ -182,13 +186,17 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 		d := &extendedDNF{
 			packages: map[string]pmdnf.PackageConfig{
 				"test-package": {
-					Name:        "test-package",
-					PostInstall: []string{"echo test"},
+					Name: "test-package",
+					PostInstall: []pmdnf.PostInstallStep{
+						{
+							RunCommands: []string{"echo test"},
+						},
+					},
 				},
 			},
 		}
 
-		err := d.postInstallationSteps(context.Background(), "test-package", "test-package")
+		err := d.postInstallationSteps(context.Background(), []string{"test-package", "test-package"}, &installOptions{})
 		require.NoError(t, err)
 	})
 }

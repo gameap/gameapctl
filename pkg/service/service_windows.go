@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/pkg/oscore"
-	"github.com/gopherclass/go-shellquote"
+	"github.com/gameap/gameapctl/pkg/shellquote"
 	"github.com/pkg/errors"
 )
 

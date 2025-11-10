@@ -52,10 +52,11 @@ func TestLoadPackages_Default(t *testing.T) {
 		require.True(t, exists, "postgresql should exist in default.yaml")
 		assert.Equal(t, "postgresql", pkg.Name)
 		assert.Equal(t, []string{"postgresql-server", "postgresql-contrib"}, pkg.ReplaceWith)
-		require.Len(t, pkg.PostInstall, 3)
-		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0])
-		assert.Equal(t, "systemctl enable postgresql", pkg.PostInstall[1])
-		assert.Equal(t, "systemctl start postgresql", pkg.PostInstall[2])
+		require.Len(t, pkg.PostInstall, 2)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 3)
+		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl enable postgresql", pkg.PostInstall[0].RunCommands[1])
+		assert.Equal(t, "systemctl start postgresql", pkg.PostInstall[0].RunCommands[2])
 	})
 
 	t.Run("redis-server with post-install", func(t *testing.T) {
@@ -63,9 +64,10 @@ func TestLoadPackages_Default(t *testing.T) {
 		require.True(t, exists, "redis-server should exist in default.yaml")
 		assert.Equal(t, "redis-server", pkg.Name)
 		assert.Equal(t, []string{"redis"}, pkg.ReplaceWith)
-		require.Len(t, pkg.PostInstall, 2)
-		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0])
-		assert.Equal(t, "systemctl start redis", pkg.PostInstall[1])
+		require.Len(t, pkg.PostInstall, 1)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2)
+		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start redis", pkg.PostInstall[0].RunCommands[1])
 	})
 }
 
@@ -82,10 +84,11 @@ func TestLoadPackages_CentOS7(t *testing.T) {
 		require.True(t, exists, "php should exist in centos_7.yaml")
 		assert.Equal(t, "php", pkg.Name)
 		assert.Equal(t, []string{"php-cli", "php-common", "php-fpm"}, pkg.ReplaceWith)
-		require.Len(t, pkg.PreInstall, 3)
-		assert.Equal(t, "yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm", pkg.PreInstall[0])
-		assert.Equal(t, "yum -y install yum-utils", pkg.PreInstall[1])
-		assert.Equal(t, "yum-config-manager --enable remi-php82", pkg.PreInstall[2])
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 3)
+		assert.Equal(t, "yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "yum -y install yum-utils", pkg.PreInstall[0].RunCommands[1])
+		assert.Equal(t, "yum-config-manager --enable remi-php82", pkg.PreInstall[0].RunCommands[2])
 	})
 
 	t.Run("inherits from default.yaml", func(t *testing.T) {
@@ -108,9 +111,10 @@ func TestLoadPackages_CentOS8(t *testing.T) {
 		require.True(t, exists, "php should exist in centos_8.yaml")
 		assert.Equal(t, "php", pkg.Name)
 		assert.Equal(t, []string{"php-cli", "php-common", "php-fpm"}, pkg.ReplaceWith)
-		require.Len(t, pkg.PreInstall, 2)
-		assert.Equal(t, "dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm", pkg.PreInstall[0])
-		assert.Equal(t, "dnf -y module switch-to php:remi-8.2", pkg.PreInstall[1])
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		assert.Equal(t, "dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "dnf -y module switch-to php:remi-8.2", pkg.PreInstall[0].RunCommands[1])
 	})
 }
 
@@ -128,21 +132,24 @@ func TestLoadPackages_CentOS10(t *testing.T) {
 		assert.Equal(t, "redis-server", pkg.Name)
 		assert.Equal(t, []string{"redis"}, pkg.ReplaceWith)
 
-		require.Len(t, pkg.PreInstall, 2)
-		assert.Equal(t, "dnf install -y epel-release", pkg.PreInstall[0])
-		assert.Equal(t, "dnf module enable redis:remi-7.2 -y", pkg.PreInstall[1])
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		assert.Equal(t, "dnf install -y epel-release", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "dnf module enable redis:remi-7.2 -y", pkg.PreInstall[0].RunCommands[1])
 
-		require.Len(t, pkg.PostInstall, 2)
-		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0])
-		assert.Equal(t, "systemctl start redis", pkg.PostInstall[1])
+		require.Len(t, pkg.PostInstall, 1)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2)
+		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start redis", pkg.PostInstall[0].RunCommands[1])
 	})
 
 	t.Run("postgresql overrides default", func(t *testing.T) {
 		pkg, exists := packages["postgresql"]
 		require.True(t, exists, "postgresql should exist")
 		assert.Equal(t, []string{"postgresql-server", "postgresql-contrib"}, pkg.ReplaceWith)
-		require.Len(t, pkg.PostInstall, 3)
-		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0])
+		require.Len(t, pkg.PostInstall, 2)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 3)
+		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0].RunCommands[0])
 	})
 }
 
@@ -190,10 +197,12 @@ func TestLoadPackages_MergeOverride(t *testing.T) {
 		pkg, exists := packages["redis-server"]
 		require.True(t, exists)
 
-		require.Len(t, pkg.PreInstall, 2, "CentOS 10 should have pre-install commands")
-		assert.Contains(t, pkg.PreInstall[0], "epel-release")
+		require.Len(t, pkg.PreInstall, 1, "CentOS 10 should have pre-install steps")
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2, "CentOS 10 should have pre-install commands")
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[0], "epel-release")
 
-		require.Len(t, pkg.PostInstall, 2, "CentOS 10 should override default post-install")
+		require.Len(t, pkg.PostInstall, 1, "CentOS 10 should override default post-install")
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2, "CentOS 10 should have post-install commands")
 	})
 }
 
@@ -223,4 +232,78 @@ func TestLoadPackages_CaseInsensitiveDistribution(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, len(packagesLower), len(packagesUpper), "should load same files regardless of case")
+}
+
+func Test_normalizeCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "single line command",
+			input:    "dnf install -y postgresql",
+			expected: "dnf install -y postgresql",
+		},
+		{
+			name: "multiline command with newlines",
+			input: `systemctl enable postgresql &&
+  systemctl start postgresql &&
+  systemctl status postgresql`,
+			expected: `systemctl enable postgresql && systemctl start postgresql && systemctl status postgresql`,
+		},
+		{
+			name:     "multiple consecutive spaces",
+			input:    "dnf    install     -y  package",
+			expected: "dnf install -y package",
+		},
+		{
+			name:     "leading and trailing spaces",
+			input:    "  dnf update  ",
+			expected: "dnf update",
+		},
+		{
+			name:     "tabs and spaces mixed",
+			input:    "echo\t\ttest\tcommand",
+			expected: "echo test command",
+		},
+		{
+			name:     "windows line endings (CRLF)",
+			input:    "line1\r\nline2\r\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "unix line endings (LF)",
+			input:    "line1\nline2\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "old mac line endings (CR)",
+			input:    "line1\rline2\rline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "only whitespace",
+			input:    "   \n\t\r\n   ",
+			expected: "",
+		},
+		{
+			name: "real command from yaml",
+			input: `dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
+  && dnf -y module switch-to php:remi-8.2`,
+			expected: `dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm && dnf -y module switch-to php:remi-8.2`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeCommand(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

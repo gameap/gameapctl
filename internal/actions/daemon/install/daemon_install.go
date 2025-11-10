@@ -170,11 +170,10 @@ func Install(ctx context.Context, host, token string) error {
 	}
 
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		if err = pm.Install(
-			ctx,
-			packagemanager.UnzipPackage,
-			packagemanager.XZUtilsPackage,
-		); err != nil {
+		if err = pm.Install(ctx, packagemanager.UnzipPackage); err != nil {
+			return errors.WithMessage(err, "failed to install archive managers")
+		}
+		if err = pm.Install(ctx, packagemanager.XZUtilsPackage); err != nil {
 			return errors.WithMessage(err, "failed to install archive managers")
 		}
 	}
@@ -258,12 +257,15 @@ func installSteamCMD(
 
 	if runtime.GOOS == "linux" && strconv.IntSize == 64 {
 		fmt.Println("Installing 32-bit libraries ...")
-		err := pm.Install(
-			ctx,
-			packagemanager.Lib32GCCPackage,
-			packagemanager.Lib32Stdc6Package,
-			packagemanager.Lib32z1Package,
-		)
+		err := pm.Install(ctx, packagemanager.Lib32GCCPackage)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to install 32 bit libraries")
+		}
+		err = pm.Install(ctx, packagemanager.Lib32Stdc6Package)
+		if err != nil {
+			return state, errors.WithMessage(err, "failed to install 32 bit libraries")
+		}
+		err = pm.Install(ctx, packagemanager.Lib32z1Package)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to install 32 bit libraries")
 		}

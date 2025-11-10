@@ -24,6 +24,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 "/var/run/mysqld/mysqld.sock",
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 		{
 			User:                 "root",
@@ -32,6 +33,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 "/var/lib/mysql/mysql.sock",
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 		{
 			User:                 "root",
@@ -39,6 +41,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 		{
 			User:                 "root",
@@ -47,6 +50,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, dbCreds.Port),
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 		{
 			User:                 "root",
@@ -54,6 +58,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, "3309"),
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 		{
 			User:                 "root",
@@ -62,6 +67,7 @@ func mysqlMakeAdminConnection(ctx context.Context, dbCreds databaseCredentials) 
 			Addr:                 fmt.Sprintf("%s:%s", dbCreds.Host, "3309"),
 			DBName:               "mysql",
 			AllowNativePasswords: true,
+			ParseTime:            true,
 		},
 	}
 

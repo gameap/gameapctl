@@ -74,14 +74,12 @@ func parseYumInfoOutput(out []byte) ([]PackageInfo, error) {
 	return packages, nil
 }
 
-func (y *yum) Install(_ context.Context, packs ...string) error {
-	args := []string{"install", "-y"}
-	for _, pack := range packs {
-		if pack == "" || pack == " " {
-			continue
-		}
-		args = append(args, pack)
+func (y *yum) Install(_ context.Context, pack string, _ ...InstallOptions) error {
+	if pack == "" || pack == " " {
+		return nil
 	}
+
+	args := []string{"install", "-y", pack}
 	cmd := exec.Command("yum", args...)
 
 	cmd.Env = os.Environ()

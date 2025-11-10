@@ -40,9 +40,9 @@ const (
 )
 
 const (
-	defaultMysqlUsername = "gameap"
-	defaultMysqlHost     = "localhost"
-	defaultMysqlDatabase = "gameap"
+	defaultDBUsername   = "gameap"
+	defaultDBHost       = "localhost"
+	defaultDatabaseName = "gameap"
 )
 
 const (
@@ -527,7 +527,7 @@ func installMariaDB(
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMariaDBInstalled(ctx) {
-			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
 			}
@@ -572,7 +572,7 @@ func installMariaDB(
 
 	fmt.Println("Configuring MariaDB ...")
 	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
-		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
@@ -622,7 +622,7 @@ func installMySQL(
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMySQLInstalled(ctx) {
-			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
 			}
@@ -682,7 +682,7 @@ func installMySQL(
 
 	fmt.Println("Configuring MySQL ...")
 	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
-		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
@@ -761,28 +761,23 @@ func checkMySQLConnection(
 	return state, nil
 }
 
-func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
+func preconfigureDatabase(_ context.Context, dbCreds databaseCredentials) (databaseCredentials, error) {
+	var err error
+
 	if dbCreds.Username == "" {
-		dbCreds.Username = defaultMysqlUsername
+		dbCreds.Username = defaultDBUsername
 	}
 
 	if dbCreds.DatabaseName == "" {
-		dbCreds.DatabaseName = defaultMysqlDatabase
+		dbCreds.DatabaseName = defaultDatabaseName
 	}
 
 	if dbCreds.Host == "" {
-		dbCreds.Host = defaultMysqlHost
-	}
-
-	passwordGenerator, err := password.NewGenerator(&password.GeneratorInput{
-		Symbols: "_-+=",
-	})
-	if err != nil {
-		return dbCreds, errors.Wrap(err, "failed to create password generator")
+		dbCreds.Host = defaultDBHost
 	}
 
 	if dbCreds.Password == "" {
-		dbCreds.Password, err = passwordGenerator.Generate(
+		dbCreds.Password, err = DatabasePasswordGenerator.Generate(
 			defaultPasswordLen, defaultPasswordNumDigits, defaultPasswordNumSymbols, false, false,
 		)
 		if err != nil {
@@ -791,7 +786,7 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 	}
 
 	if dbCreds.RootPassword == "" {
-		dbCreds.RootPassword, err = passwordGenerator.Generate(
+		dbCreds.RootPassword, err = DatabasePasswordGenerator.Generate(
 			defaultPasswordLen, defaultPasswordNumDigits, defaultPasswordNumSymbols, false, false,
 		)
 		if err != nil {

@@ -5,4 +5,6 @@ const (
 	gameapDaemonService = "GameAP Daemon"
 
 	gameapProcessName = "gameap.exe"
+
+	postgreSQLServiceName = "PostgreSQL"
 )

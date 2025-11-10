@@ -181,6 +181,82 @@ func Test_replaceValuesSlice(t *testing.T) {
 	})
 }
 
+func Test_normalizeCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "single line command",
+			input:    "start /wait msiexec /i test.msi",
+			expected: "start /wait msiexec /i test.msi",
+		},
+		{
+			name: "multiline command with newlines",
+			input: `start /wait postgresql-16.10-2-windows-x64.exe
+  --mode unattended
+  --unattendedmodeui none
+  --prefix "C:\Program Files\PostgreSQL\16"`,
+			expected: `start /wait postgresql-16.10-2-windows-x64.exe --mode unattended --unattendedmodeui none --prefix "C:\Program Files\PostgreSQL\16"`,
+		},
+		{
+			name:     "multiple consecutive spaces",
+			input:    "test    command     with  spaces",
+			expected: "test command with spaces",
+		},
+		{
+			name:     "leading and trailing spaces",
+			input:    "  test command  ",
+			expected: "test command",
+		},
+		{
+			name:     "tabs and spaces mixed",
+			input:    "test\t\tcommand\twith\ttabs",
+			expected: "test command with tabs",
+		},
+		{
+			name:     "windows line endings (CRLF)",
+			input:    "line1\r\nline2\r\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "unix line endings (LF)",
+			input:    "line1\nline2\nline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "old mac line endings (CR)",
+			input:    "line1\rline2\rline3",
+			expected: "line1 line2 line3",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "only whitespace",
+			input:    "   \n\t\r\n   ",
+			expected: "",
+		},
+		{
+			name: "postgresql command from yaml",
+			input: `C:\Program Files\PostgreSQL\16\bin\psql.exe
+  postgresql://postgres:password@127.0.0.1:5432
+    -c "CREATE DATABASE test;"`,
+			expected: `C:\Program Files\PostgreSQL\16\bin\psql.exe postgresql://postgres:password@127.0.0.1:5432 -c "CREATE DATABASE test;"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeCommand(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
 func TestPackageStructure(t *testing.T) {
 	t.Run("package with service", func(t *testing.T) {
 		pkg := Package{

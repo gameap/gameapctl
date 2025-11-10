@@ -21,7 +21,7 @@ func (pm *WindowsPackageManager) Search(_ context.Context, _ string) ([]PackageI
 	return nil, errNotAvailableForNonWindows
 }
 
-func (pm *WindowsPackageManager) Install(_ context.Context, _ ...string) error {
+func (pm *WindowsPackageManager) Install(_ context.Context, _ string, _ ...InstallOptions) error {
 	return errNotAvailableForNonWindows
 }
 

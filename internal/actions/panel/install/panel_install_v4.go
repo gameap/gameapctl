@@ -24,6 +24,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
 	"github.com/urfave/cli/v2"
@@ -170,13 +171,42 @@ func HandleV4(cliCtx *cli.Context) error {
 	//nolint:nestif
 	if state.OSInfo.IsLinux() {
 		fmt.Println("Checking for ca-certificates ...")
-		if !utils.IsCommandAvailable("update-ca-certificates") {
+
+		var updateCACommand string
+
+		switch {
+		case utils.IsCommandAvailable("update-ca-certificates"):
+			// Debian, Ubuntu, etc.
+			updateCACommand = "update-ca-certificates"
+		case utils.IsCommandAvailable("update-ca-trust"):
+			// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
+			updateCACommand = "update-ca-trust"
+		case utils.IsCommandAvailable("trust"):
+			// openSUSE, SLES, etc.
+			updateCACommand = "trust"
+		default:
+			return errors.New("no known command found to update ca-certificates")
+		}
+
+		if !utils.IsCommandAvailable(updateCACommand) {
 			fmt.Println("Installing ca-certificates ...")
 			if err = pm.Install(ctx, packagemanager.CACertificatesPackage); err != nil {
 				return errors.WithMessage(err, "failed to install curl")
 			}
 
-			err = oscore.ExecCommand(ctx, "update-ca-certificates")
+			switch {
+			case utils.IsCommandAvailable("update-ca-certificates"):
+				// Debian, Ubuntu, etc.
+				err = oscore.ExecCommand(ctx, "update-ca-certificates")
+			case utils.IsCommandAvailable("update-ca-trust"):
+				// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
+				err = oscore.ExecCommand(ctx, "update-ca-trust", "extract")
+			case utils.IsCommandAvailable("trust"):
+				// openSUSE, SLES, etc.
+				err = oscore.ExecCommand(ctx, "trust", "extract-compat")
+			default:
+				return errors.New("no known command found to update ca-certificates")
+			}
 			if err != nil {
 				return errors.WithMessage(err, "failed to update ca-certificates")
 			}
@@ -225,21 +255,26 @@ func HandleV4(cliCtx *cli.Context) error {
 		}
 	}
 
+	state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
+	if err != nil {
+		return errors.WithMessage(err, "failed to preconfigure database")
+	}
+
 	switch state.Database {
 	case postgresDatabase:
 		state, err = installPostgreSQL(ctx, pm, state)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, "failed to install postgres")
 		}
 	case mysqlDatabase:
 		state, err = installMySQLOrMariaDBV4(ctx, pm, state)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, "failed to install mysql")
 		}
 	case sqliteDatabase:
 		state, err = installSqliteV4(ctx, state)
 		if err != nil {
-			return err
+			return errors.WithMessage(err, "failed to install sqlite")
 		}
 	}
 
@@ -349,7 +384,6 @@ func HandleV4(cliCtx *cli.Context) error {
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	// Build database URL
 	var databaseURL string
-	var cacheDriver string
 
 	switch state.Database {
 	case mysqlDatabase:
@@ -361,10 +395,8 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 			state.DBCreds.Port,
 			state.DBCreds.DatabaseName,
 		)
-		cacheDriver = "mysql"
 	case sqliteDatabase:
 		databaseURL = state.DBCreds.DatabaseName
-		cacheDriver = "inmemory"
 	case postgresDatabase:
 		databaseURL = fmt.Sprintf(
 			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -374,7 +406,6 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 			state.DBCreds.Port,
 			state.DBCreds.DatabaseName,
 		)
-		cacheDriver = "redis"
 	}
 
 	// Install GameAP v4
@@ -385,7 +416,7 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 		HTTPPort:        state.Port,
 		DatabaseDriver:  state.Database,
 		DatabaseURL:     databaseURL,
-		CacheDriver:     cacheDriver,
+		CacheDriver:     "inmemory",
 		FilesDriver:     "local",
 	})
 	if err != nil {
@@ -454,7 +485,7 @@ func installMariaDBV4(
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMariaDBInstalled(ctx) {
-			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
 			}
@@ -468,7 +499,14 @@ func installMariaDBV4(
 			}
 
 			fmt.Println("Installing MariaDB server ...")
-			err = pm.Install(ctx, packagemanager.MariaDBServerPackage)
+			err = pm.Install(
+				ctx,
+				packagemanager.MariaDBServerPackage,
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBRootPassword, state.DBCreds.RootPassword),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBUser, state.DBCreds.Username),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBPassword, state.DBCreds.Password),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBName, state.DBCreds.DatabaseName),
+			)
 			if err != nil {
 				return state, errors.WithMessage(err, "failed to install MariaDB server")
 			}
@@ -499,7 +537,7 @@ func installMariaDBV4(
 
 	fmt.Println("Configuring MariaDB ...")
 	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
-		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
@@ -549,7 +587,7 @@ func installMySQLV4(
 		state.DBCreds.Host == "localhost" ||
 		strings.HasPrefix(state.DBCreds.Host, "127.") {
 		if !isMySQLInstalled(ctx) {
-			state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+			state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 			if err != nil {
 				return state, err
 			}
@@ -562,7 +600,14 @@ func installMySQLV4(
 				}
 			}
 
-			if err := pm.Install(ctx, packagemanager.MySQLServerPackage); err != nil {
+			if err := pm.Install(
+				ctx,
+				packagemanager.MySQLServerPackage,
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBRootPassword, state.DBCreds.RootPassword),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBUser, state.DBCreds.Username),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBPassword, state.DBCreds.Password),
+				packagemanager.WithConfigValue(packagemanager.ConfigValueDBName, state.DBCreds.DatabaseName),
+			); err != nil {
 				if state.OSInfo.Distribution == packagemanager.DistributionWindows {
 					return state, errors.WithMessage(err, "failed to install mysql")
 				}
@@ -609,7 +654,7 @@ func installMySQLV4(
 
 	fmt.Println("Configuring MySQL ...")
 	if state.DBCreds.Host == "" || state.DBCreds.Username == "" {
-		state.DBCreds, err = preconfigureMysql(ctx, state.DBCreds)
+		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 		if err != nil {
 			return state, err
 		}
@@ -688,6 +733,80 @@ func checkMySQLConnectionV4(
 	return state, nil
 }
 
+func checkPostgreSQLConnectionV4(
+	ctx context.Context,
+	state panelInstallStateV4,
+) (panelInstallStateV4, error) {
+	fmt.Println("Checking PostgreSQL connection ...")
+	db, err := sql.Open(
+		"pgx",
+		fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			state.DBCreds.Username,
+			state.DBCreds.Password,
+			state.DBCreds.Host,
+			state.DBCreds.Port,
+			state.DBCreds.DatabaseName,
+		),
+	)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to open PostgreSQL")
+	}
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(db)
+	err = db.PingContext(ctx)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to connect to PostgreSQL")
+	}
+
+	_, err = db.ExecContext(ctx, "SELECT 1")
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to execute PostgreSQL query")
+	}
+
+	isDatabaseEmpty, err := postgresqlIsDatabaseEmpty(ctx, db, state.DBCreds.DatabaseName)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to check database")
+	}
+
+	state.DatabaseIsNotEmpty = !isDatabaseEmpty
+
+	return state, nil
+}
+
+func postgresqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, _ string) (bool, error) {
+	var tableExists bool
+
+	err := db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1
+		FROM information_schema.tables
+		WHERE table_schema = 'public'
+		AND table_name = $1
+	)`, "games").Scan(&tableExists)
+	if err != nil {
+		return false, errors.WithMessage(err, "failed to execute query")
+	}
+	if !tableExists {
+		return true, nil
+	}
+
+	var recordsExist bool
+
+	err = db.QueryRowContext(
+		ctx,
+		"SELECT EXISTS(SELECT 1 FROM games LIMIT 1)",
+	).Scan(&recordsExist)
+	if err != nil {
+		return false, errors.WithMessage(err, "failed to execute query")
+	}
+
+	return !recordsExist, nil
+}
+
 func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	if !utils.IsFileExists(state.DBCreds.DatabaseName) {
 		err := os.MkdirAll(state.DataDirectory, 0644)
@@ -717,12 +836,51 @@ func installPostgreSQL(
 	pm packagemanager.PackageManager,
 	state panelInstallStateV4,
 ) (panelInstallStateV4, error) {
-	err := pm.Install(ctx, packagemanager.PostgreSQLPackage)
+	fmt.Println("Installing PostgreSQL ...")
+
+	var err error
+
+	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
+		state.DBCreds.Port = "5432"
+	} else {
+		// Default port for windows
+		state.DBCreds.Port = "9543"
+	}
+
+	err = pm.Install(
+		ctx,
+		packagemanager.PostgreSQLPackage,
+		packagemanager.WithConfigValue(packagemanager.ConfigValueDBRootPassword, state.DBCreds.RootPassword),
+		packagemanager.WithConfigValue(packagemanager.ConfigValueDBUser, state.DBCreds.Username),
+		packagemanager.WithConfigValue(packagemanager.ConfigValueDBPassword, state.DBCreds.Password),
+		packagemanager.WithConfigValue(packagemanager.ConfigValueDBName, state.DBCreds.DatabaseName),
+	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install PostgreSQL")
 	}
 
-	return state, nil
+	state, err = checkPostgreSQLConnectionV4(ctx, state)
+	if err != nil {
+		log.Println(err)
+		switch state.DBCreds.Host {
+		case "localhost":
+			state.DBCreds.Host = "127.0.0.1"
+		case "127.0.0.1":
+			state.DBCreds.Host = "localhost"
+		}
+
+		state, err = checkPostgreSQLConnectionV4(ctx, state)
+	}
+
+	if err != nil {
+		log.Println(err)
+		if state.DBCreds.Port != "5432" {
+			state.DBCreds.Port = "5432"
+			state, err = checkPostgreSQLConnectionV4(ctx, state)
+		}
+	}
+
+	return state, err
 }
 
 //nolint:funlen

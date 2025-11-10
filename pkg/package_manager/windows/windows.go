@@ -56,24 +56,30 @@ type config struct {
 
 // Package represents a software package configuration.
 type Package struct {
-	Name              string        `yaml:"name"`
-	LookupPaths       []string      `yaml:"lookup-paths,omitempty"`
-	DownloadURLs      []string      `yaml:"download-urls,omitempty"`
-	InstallPath       string        `yaml:"install-path,omitempty"`
-	PreInstall        []PreInstall  `yaml:"pre-install,omitempty"`
-	InstallCommands   []string      `yaml:"install-commands,omitempty"`
-	Install           []InstallStep `yaml:"install,omitempty"`
-	UninstallCommands []string      `yaml:"uninstall-commands,omitempty"`
-	PathEnv           []string      `yaml:"path-env,omitempty"`
-	Dependencies      []string      `yaml:"dependencies,omitempty"`
-	Service           *Service      `yaml:"service,omitempty"`
+	Name         string          `yaml:"name"`
+	LookupPaths  []string        `yaml:"lookup-paths,omitempty"`
+	DownloadURLs []string        `yaml:"download-urls,omitempty"`
+	InstallPath  string          `yaml:"install-path,omitempty"`
+	PreInstall   []PreInstall    `yaml:"pre-install,omitempty"`
+	Install      []InstallStep   `yaml:"install,omitempty"`
+	PathEnv      []string        `yaml:"path-env,omitempty"`
+	Uninstall    []UninstallStep `yaml:"uninstall,omitempty"`
+	Dependencies []string        `yaml:"dependencies,omitempty"`
+	Service      *Service        `yaml:"service,omitempty"`
 }
 
 type InstallStep struct {
-	RunCommands             []string `yaml:"run-commands,omitempty"`
-	AllowedInstallExitCodes []int    `yaml:"allowed-install-exit-codes,omitempty"`
-	WaitForService          string   `yaml:"wait-for-service,omitempty"`
-	WaitForFiles            []string `yaml:"wait-for-files,omitempty"`
+	GrantPermissions        []Permission     `yaml:"grant-permissions,omitempty"`
+	RunCommands             []string         `yaml:"run-commands,omitempty"`
+	Env                     []EnvironmentVar `yaml:"env,omitempty"`
+	AllowedInstallExitCodes []int            `yaml:"allowed-install-exit-codes,omitempty"`
+	WaitForService          string           `yaml:"wait-for-service,omitempty"`
+	WaitForFiles            []string         `yaml:"wait-for-files,omitempty"`
+}
+
+type UninstallStep struct {
+	RunCommands               []string `yaml:"run-commands,omitempty"`
+	AllowedUninstallExitCodes []int    `yaml:"allowed-uninstall-exit-codes,omitempty"`
 }
 
 // Service represents a Windows service configuration.
@@ -107,6 +113,17 @@ type ServiceAccount struct {
 type EnvironmentVar struct {
 	Name  string `yaml:"name"`
 	Value string `yaml:"value"`
+}
+
+func (e EnvironmentVar) String() string {
+	sb := strings.Builder{}
+	sb.Grow(len(e.Name) + len(e.Value) + 1)
+
+	sb.WriteString(e.Name)
+	sb.WriteString("=")
+	sb.WriteString(e.Value)
+
+	return sb.String()
 }
 
 // PreInstall represents pre-installation steps.
@@ -217,13 +234,13 @@ func LoadPackages(osinf osinfo.Info) (map[string]Package, error) {
 func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	pkg.LookupPaths = expandEnvSlice(replaceValuesSlice(pkg.LookupPaths, osinf, pkg))
 	pkg.DownloadURLs = replaceValuesSlice(pkg.DownloadURLs, osinf, pkg)
-	pkg.InstallCommands = expandEnvSlice(replaceValuesSlice(pkg.InstallCommands, osinf, pkg))
-	pkg.UninstallCommands = expandEnvSlice(replaceValuesSlice(pkg.UninstallCommands, osinf, pkg))
 	pkg.PathEnv = expandEnvSlice(replaceValuesSlice(pkg.PathEnv, osinf, pkg))
 	pkg.InstallPath = os.ExpandEnv(replaceValues(pkg.InstallPath, osinf, pkg))
 
 	for i := range pkg.PreInstall {
-		pkg.PreInstall[i].Commands = expandEnvSlice(replaceValuesSlice(pkg.PreInstall[i].Commands, osinf, pkg))
+		pkg.PreInstall[i].Commands = normalizeCommands(
+			expandEnvSlice(replaceValuesSlice(pkg.PreInstall[i].Commands, osinf, pkg)),
+		)
 
 		for j := range pkg.PreInstall[i].GrantPermissions {
 			pkg.PreInstall[i].GrantPermissions[j].Path = os.ExpandEnv(replaceValues(
@@ -235,8 +252,32 @@ func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	}
 
 	for i := range pkg.Install {
-		pkg.Install[i].RunCommands = expandEnvSlice(replaceValuesSlice(pkg.Install[i].RunCommands, osinf, pkg))
+		pkg.Install[i].RunCommands = normalizeCommands(
+			expandEnvSlice(replaceValuesSlice(pkg.Install[i].RunCommands, osinf, pkg)),
+		)
 		pkg.Install[i].WaitForFiles = expandEnvSlice(replaceValuesSlice(pkg.Install[i].WaitForFiles, osinf, pkg))
+
+		for j := range pkg.Install[i].Env {
+			pkg.Install[i].Env[j].Value = os.ExpandEnv(replaceValues(
+				pkg.Install[i].Env[j].Value,
+				osinf,
+				pkg,
+			))
+		}
+
+		for j := range pkg.Install[i].GrantPermissions {
+			pkg.Install[i].GrantPermissions[j].Path = os.ExpandEnv(replaceValues(
+				pkg.Install[i].GrantPermissions[j].Path,
+				osinf,
+				pkg,
+			))
+		}
+	}
+
+	for i := range pkg.Uninstall {
+		pkg.Uninstall[i].RunCommands = normalizeCommands(
+			expandEnvSlice(replaceValuesSlice(pkg.Uninstall[i].RunCommands, osinf, pkg)),
+		)
 	}
 
 	return pkg
@@ -272,4 +313,36 @@ func expandEnvSlice(s []string) []string {
 	}
 
 	return result
+}
+
+func normalizeCommands(commands []string) []string {
+	normalized := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		normalized = append(normalized, normalizeCommand(cmd))
+	}
+
+	return normalized
+}
+
+func normalizeCommand(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+
+	var normalized strings.Builder
+	prevSpace := false
+
+	for _, r := range s {
+		if r == ' ' || r == '\t' {
+			if !prevSpace {
+				normalized.WriteRune(' ')
+				prevSpace = true
+			}
+		} else {
+			normalized.WriteRune(r)
+			prevSpace = false
+		}
+	}
+
+	return strings.TrimSpace(normalized.String())
 }

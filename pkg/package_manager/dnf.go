@@ -7,11 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 )
 
 type dnf struct{}
@@ -33,14 +35,12 @@ func (d *dnf) Search(_ context.Context, name string) ([]PackageInfo, error) {
 	return parseYumInfoOutput(out)
 }
 
-func (d *dnf) Install(_ context.Context, packs ...string) error {
-	args := []string{"install", "-y"}
-	for _, pack := range packs {
-		if pack == "" || pack == " " {
-			continue
-		}
-		args = append(args, pack)
+func (d *dnf) Install(_ context.Context, pack string, _ ...InstallOptions) error {
+	if pack == "" || pack == " " {
+		return nil
 	}
+
+	args := []string{"install", "-y", pack}
 	cmd := exec.Command("dnf", args...)
 
 	cmd.Env = os.Environ()
@@ -96,10 +96,15 @@ func newExtendedDNF(osinfo osinfo.Info, underlined PackageManager) (*extendedDNF
 	}, nil
 }
 
-func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
+func (d *extendedDNF) Install(ctx context.Context, pack string, opts ...InstallOptions) error {
 	var err error
 
-	packs, err = d.excludeByLookupPathFound(ctx, packs...)
+	options := &installOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	packs, err := d.excludeByLookupPathFound(ctx, pack)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check lookup paths")
 	}
@@ -108,19 +113,21 @@ func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
 		return nil
 	}
 
-	packs, err = d.preInstallationSteps(ctx, packs...)
+	packs, err = d.preInstallationSteps(ctx, lo.Uniq(append(packs, pack)), options)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre-installation steps")
 	}
 
 	packs = d.replaceAliases(ctx, packs)
 
-	err = d.underlined.Install(ctx, packs...)
-	if err != nil {
-		return errors.WithMessage(err, "failed to install packages")
+	for _, p := range packs {
+		err = d.underlined.Install(ctx, p, opts...)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install packages")
+		}
 	}
 
-	err = d.postInstallationSteps(ctx, packs...)
+	err = d.postInstallationSteps(ctx, lo.Uniq(append(packs, pack)), options)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run post-installation steps")
 	}
@@ -191,7 +198,7 @@ func (d *extendedDNF) excludeByLookupPathFound(_ context.Context, packs ...strin
 	return filteredPacks, nil
 }
 
-func (d *extendedDNF) executePreInstallationSteps(ctx context.Context, packs []string) error {
+func (d *extendedDNF) executePreInstallationSteps(ctx context.Context, packs []string, options *installOptions) error {
 	executedPackages := make(map[string]bool)
 
 	for _, packName := range packs {
@@ -208,16 +215,35 @@ func (d *extendedDNF) executePreInstallationSteps(ctx context.Context, packs []s
 			continue
 		}
 
+		runtimeVars := dnfRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
 		for _, step := range config.PreInstall {
 			if !d.checkConditions(step.Conditions) {
 				continue
 			}
 
 			for _, cmd := range step.RunCommands {
-				if err := d.executeCommand(ctx, cmd); err != nil {
+				processedCmd, err := d.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
 					return errors.WithMessagef(
 						err,
-						"failed to execute pre-install command for %s: %s", packName, cmd,
+						"failed to replace runtime variables in pre-install command for %s: %s", packName, cmd,
+					)
+				}
+
+				if err := d.executeCommand(ctx, processedCmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute pre-install command for %s: %s", packName, processedCmd,
 					)
 				}
 			}
@@ -245,11 +271,18 @@ func (d *extendedDNF) checkConditions(conditions []pmdnf.Condition) bool {
 	return true
 }
 
-func (d *extendedDNF) executeInstallationSteps(
-	ctx context.Context,
-	packs []string,
-	getCommands func(pmdnf.PackageConfig) []string,
-) error {
+func (d *extendedDNF) preInstallationSteps(
+	ctx context.Context, packs []string, options *installOptions,
+) ([]string, error) {
+	err := d.executePreInstallationSteps(ctx, packs, options)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
+	}
+
+	return packs, nil
+}
+
+func (d *extendedDNF) postInstallationSteps(ctx context.Context, packs []string, options *installOptions) error {
 	executedPackages := make(map[string]bool)
 
 	for _, packName := range packs {
@@ -258,8 +291,7 @@ func (d *extendedDNF) executeInstallationSteps(
 			continue
 		}
 
-		commands := getCommands(config)
-		if len(commands) == 0 {
+		if len(config.PostInstall) == 0 {
 			continue
 		}
 
@@ -267,38 +299,39 @@ func (d *extendedDNF) executeInstallationSteps(
 			continue
 		}
 
-		for _, cmd := range commands {
-			if err := d.executeCommand(ctx, cmd); err != nil {
-				return errors.WithMessagef(
-					err,
-					"failed to execute command for %s: %s", packName, cmd,
-				)
+		runtimeVars := dnfRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
+		for _, step := range config.PostInstall {
+			for _, cmd := range step.RunCommands {
+				processedCmd, err := d.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to replace runtime variables in post-install command for %s: %s", packName, cmd,
+					)
+				}
+
+				log.Println("Running post-install command:", processedCmd)
+
+				if err := d.executeCommand(ctx, processedCmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute post-install command for %s: %s", packName, processedCmd,
+					)
+				}
 			}
 		}
 
 		executedPackages[packName] = true
-	}
-
-	return nil
-}
-
-func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
-	err := d.executePreInstallationSteps(ctx, packs)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
-	}
-
-	return packs, nil
-}
-
-func (d *extendedDNF) postInstallationSteps(ctx context.Context, packs ...string) error {
-	err := d.executeInstallationSteps(
-		ctx,
-		packs,
-		func(config pmdnf.PackageConfig) []string { return config.PostInstall },
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to run post-installation steps")
 	}
 
 	return nil
@@ -319,4 +352,43 @@ func (d *extendedDNF) executeCommand(ctx context.Context, cmdStr string) error {
 	args := []string{"-c", cmdStr}
 
 	return oscore.ExecCommand(ctx, command, args...)
+}
+
+type dnfRuntimeTemplateVariables struct {
+	LookupPaths map[string]string
+	Options     *installOptions
+}
+
+func (d *extendedDNF) replaceRuntimeVariablesString(
+	_ context.Context, v string, vars dnfRuntimeTemplateVariables,
+) (string, error) {
+	funcMap := template.FuncMap{
+		"configValue": func(name string) string {
+			if vars.Options == nil {
+				return ""
+			}
+
+			val, exists := vars.Options.configValues[name]
+			if !exists {
+				return ""
+			}
+
+			return val
+		},
+	}
+
+	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Funcs(funcMap).Parse(v)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse template")
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(len(v) + 100) //nolint:mnd
+
+	err = tmpl.Execute(&buf, vars)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to execute template")
+	}
+
+	return buf.String(), nil
 }
