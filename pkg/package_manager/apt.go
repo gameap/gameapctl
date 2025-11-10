@@ -303,6 +303,7 @@ func (e *extendedAPT) replaceAliases(_ context.Context, packs []string) []string
 	return replacedPacks
 }
 
+//nolint:unparam
 func (e *extendedAPT) excludeByLookupPathFound(_ context.Context, packs ...string) ([]string, error) {
 	filteredPacks := make([]string, 0, len(packs))
 

@@ -22,6 +22,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/service"
+	pkgstings "github.com/gameap/gameapctl/pkg/strings"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
@@ -1022,6 +1023,9 @@ var runtimeTemplateFuncMap = template.FuncMap{
 		}
 
 		return value
+	},
+	"generatePassword": func(length int) (string, error) {
+		return pkgstings.GeneratePassword(length)
 	},
 }
 

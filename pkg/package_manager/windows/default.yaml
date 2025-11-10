@@ -49,6 +49,24 @@ packages:
           - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
         wait-for-service: MariaDB
 
+  - name: postgresql
+    lookup-paths: [ psql, postgres ]
+    download-urls:
+      - https://get.enterprisedb.com/postgresql/postgresql-16.10-2-windows-x64.exe
+    install:
+      - run-commands:
+          - > 
+            start /wait postgresql-16.10-2-windows-x64.exe 
+              --mode unattended 
+              --unattendedmodeui minimal 
+              --superpassword gameap_password 
+              --servicename postgresql-16 
+              --serviceport 9432 
+              --datadir "C:\gameap\postgresql\data"
+        wait-for-service: postgresql-16
+    path-env:
+      - C:\php
+
   - name: php
     lookup-paths: [ php, php-cgi ]
     download-urls:

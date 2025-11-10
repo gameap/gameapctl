@@ -778,7 +778,7 @@ func preconfigureMysql(_ context.Context, dbCreds databaseCredentials) (database
 		Symbols: "_-+=",
 	})
 	if err != nil {
-		return dbCreds, errors.WithMessage(err, "failed to create password generator")
+		return dbCreds, errors.Wrap(err, "failed to create password generator")
 	}
 
 	if dbCreds.Password == "" {

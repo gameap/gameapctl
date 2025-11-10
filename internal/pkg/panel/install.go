@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -40,8 +41,8 @@ func SetupGameAPFromGithub(
 	}
 
 	fmt.Println("Cloning gameap ...")
-	err = utils.ExecCommand(
-		"git", "clone", "-b", branch, "https://github.com/et-nik/gameap.git", path,
+	err = oscore.ExecCommand(
+		ctx, "git", "clone", "-b", branch, "https://github.com/et-nik/gameap.git", path,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to clone gameap from github")
@@ -56,7 +57,7 @@ func SetupGameAPFromGithub(
 		return errors.WithMessage(err, "failed to define php composer command and args")
 	}
 
-	err = utils.ExecCommand(cmdName, args...)
+	err = oscore.ExecCommand(ctx, cmdName, args...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run composer update")
 	}

@@ -7,16 +7,28 @@ packages:
 
   - name: php
     pre-install:
-      - run-commands:
+      - conditions:
+          - file-not-exists: /usr/share/keyrings/nodesource.gpg
+        run-commands:
         - mkdir -p /usr/share/keyrings/
         - curl -fsSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/php-keyring.gpg
-        - echo "deb [signed-by=/usr/share/keyrings/php-keyring.gpg] https://packages.sury.org/php/ {{codename}} main" > /etc/apt/sources.list.d/php.list
-        - apt-get update
+
+      - conditions:
+          - file-not-exists: /etc/apt/sources.list.d/php.list
+        run-commands:
+          - echo "deb [signed-by=/usr/share/keyrings/php-keyring.gpg] https://packages.sury.org/php/ {{codename}} main" > /etc/apt/sources.list.d/php.list
+          - apt-get update
 
   - name: nginx
     pre-install:
-      - run-commands:
-        - mkdir -p /usr/share/keyrings/
-        - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
-        - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{{distname}}/ {{codename}} nginx" > /etc/apt/sources.list.d/nginx.list
-        - apt-get update
+      - conditions:
+          - file-not-exists: /usr/share/keyrings/nginx-archive-keyring.gpg
+        run-commands:
+          - mkdir -p /usr/share/keyrings/
+          - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+
+      - conditions:
+          - file-not-exists: /etc/apt/sources.list.d/nginx.list
+        run-commands:
+          - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{{distname}}/ {{codename}} nginx" > /etc/apt/sources.list.d/nginx.list
+          - apt-get update

@@ -162,6 +162,7 @@ func (d *extendedDNF) replaceAliases(_ context.Context, packs []string) []string
 	return updatedPacks
 }
 
+//nolint:unparam
 func (d *extendedDNF) excludeByLookupPathFound(_ context.Context, packs ...string) ([]string, error) {
 	filteredPacks := make([]string, 0, len(packs))
 

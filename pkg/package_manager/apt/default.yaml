@@ -7,7 +7,7 @@ packages:
 
   - name: composer
     virtual: true
-    lookup-paths: [ compose ]
+    lookup-paths: [ composer ]
     install:
       - run-commands:
         - > 
@@ -21,11 +21,14 @@ packages:
           - file-not-exists: /usr/share/keyrings/nodesource.gpg
         run-commands:
           - mkdir -p /usr/share/keyrings/
-
           - >
-            curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | 
+            curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |
             gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
 
+      - conditions:
+          - file-not-exists: /etc/apt/sources.list.d/nodesource.list
+        run-commands:
           - >
-            echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > 
+            echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >
             /etc/apt/sources.list.d/nodesource.list
+          - apt-get update
