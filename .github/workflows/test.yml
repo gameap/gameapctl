@@ -137,8 +137,8 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'debian:trixie' ]
-        database: [ sqlite ]
+        distro: [ 'debian:trixie', 'ubuntu:24.04' ]
+        database: [ sqlite, postgres, mysql ]
         go-version: [ 1.25.x ]
         experimental: [ false ]
 
@@ -255,7 +255,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        database: [ sqlite ]
+        database: [ sqlite, postgres, mysql ]
         go-version: [ 1.25.x ]
         experimental: [ false ]
 
