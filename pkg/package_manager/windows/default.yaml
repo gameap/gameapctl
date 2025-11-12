@@ -140,11 +140,11 @@ packages:
           - sc stop PostgreSQL
           - sc delete PostgreSQL
       - conditions:
-          - file-exists: "${ProgramData}\PostgreSQL\17\data"
+          - file-exists: ${ProgramData}\PostgreSQL\17\data
         run-commands:
-          - rmdir /S /Q "${ProgramData}\PostgreSQL\17\data"
+          - rmdir /S /Q ${ProgramData}\PostgreSQL\17\data
       - conditions:
-          - file-exists: "{{package_install_path}}"
+          - file-exists: {{package_install_path}}
         run-commands:
           - rmdir /S /Q "{{package_install_path}}"
 
