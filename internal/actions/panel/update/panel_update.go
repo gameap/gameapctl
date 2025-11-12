@@ -27,6 +27,8 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
 
+	fmt.Printf("Detected installed GameAP version: %s\n", currentMajorVersion)
+
 	toValue := cliCtx.String("to")
 	if toValue != "" {
 		toVersion, err := parseToVersion(toValue)
