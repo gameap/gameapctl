@@ -93,8 +93,6 @@ func handleV3toV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to build v4 install config")
 	}
 
-	installConfig.LegacyPath = v3Path
-
 	if installConfig.DatabaseDriver == dbDriverSQLite {
 		log.Println("Handling SQLite database migration...")
 		if err := handleSQLiteMigration(v3Path, v3Config, &installConfig); err != nil {
@@ -207,7 +205,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	}
 
 	newState := gameapctl.PanelInstallState{
-		Version:              "4",
+		Version:              "v4",
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 installConfig.HTTPPort,

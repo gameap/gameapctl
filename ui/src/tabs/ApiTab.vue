@@ -150,23 +150,23 @@ function handleChangeVersionTab(tabName) {
 function handleUninstallButtonClick() {
   showUninstallationAskModal.value = false
 
-  let params = ""
+  let params = []
 
   if (uninstallationForm.value.withDaemon) {
-    params += " --with-daemon"
+    params.push("--with-daemon=true")
   }
 
   if (uninstallationForm.value.withData) {
-    params += " --with-data"
+    params.push("--with-data=true")
   }
 
   if (uninstallationForm.value.withServices) {
-    params += " --with-services"
+    params.push("--with-services=true")
   }
 
   runActionWithoutDialog(
       "gameap-uninstall",
-      "gameap-uninstall " + params,
+      "gameap-uninstall " + params.join(" "),
   )
 }
 

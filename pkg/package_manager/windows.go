@@ -139,6 +139,12 @@ func convertAccessToOSCoreFlag(access string) oscore.GrantFlag {
 
 func (pm *WindowsPackageManager) preInstallationSteps(ctx context.Context, p windows.Package) error {
 	for _, pre := range p.PreInstall {
+		if !pm.checkConditions(ctx, pre.Conditions) {
+			log.Println("Skipping pre-install step due to conditions not met")
+
+			continue
+		}
+
 		if len(pre.GrantPermissions) > 0 {
 			err := pm.grantPermissions(ctx, pre.GrantPermissions)
 			if err != nil {
@@ -317,6 +323,12 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 		log.Println("Running install steps for package ", p.Name)
 
 		for _, step := range p.Install {
+			if !pm.checkConditions(ctx, step.Conditions) {
+				log.Println("Skipping install step due to conditions not met")
+
+				continue
+			}
+
 			if len(step.GrantPermissions) > 0 {
 				err = pm.grantPermissions(ctx, step.GrantPermissions)
 				if err != nil {
@@ -457,6 +469,12 @@ func (pm *WindowsPackageManager) removePackage(ctx context.Context, p windows.Pa
 		log.Println("Running uninstall commands for package", p.Name)
 
 		for _, step := range p.Uninstall {
+			if !pm.checkConditions(ctx, step.Conditions) {
+				log.Println("Skipping uninstall step due to conditions not met")
+
+				continue
+			}
+
 			for _, cmd := range step.RunCommands {
 				log.Println("Running uninstall command:", cmd)
 
@@ -557,6 +575,40 @@ func removePathEnvVariable(pathsToRemove []string) error {
 	}
 
 	return nil
+}
+
+func (pm *WindowsPackageManager) checkConditions(ctx context.Context, conditions []windows.Condition) bool {
+	if len(conditions) == 0 {
+		return true
+	}
+
+	for _, condition := range conditions {
+		if condition.FileExists != "" {
+			if _, err := os.Stat(condition.FileExists); os.IsNotExist(err) {
+				return false
+			}
+		}
+
+		if condition.FileNotExists != "" {
+			if _, err := os.Stat(condition.FileNotExists); err == nil {
+				return false
+			}
+		}
+
+		if condition.ServiceExists != "" {
+			if !service.IsExists(ctx, condition.ServiceExists) {
+				return false
+			}
+		}
+
+		if condition.ServiceNotExists != "" {
+			if service.IsExists(ctx, condition.ServiceNotExists) {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func (pm *WindowsPackageManager) Purge(ctx context.Context, packs ...string) error {
@@ -1018,6 +1070,16 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 	var err error
 
 	for i := range p.PreInstall {
+		p.PreInstall[i].Conditions, err = pm.replaceRuntimeVariablesInConditions(ctx, p.PreInstall[i].Conditions, vars)
+		if err != nil {
+			return p, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in pre install step %d conditions for package '%s'",
+				i,
+				p.Name,
+			)
+		}
+
 		for j := range p.PreInstall[i].Commands {
 			p.PreInstall[i].Commands[j], err = pm.replaceRuntimeVariablesString(
 				ctx,
@@ -1037,6 +1099,16 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 	}
 
 	for i := range p.Install {
+		p.Install[i].Conditions, err = pm.replaceRuntimeVariablesInConditions(ctx, p.Install[i].Conditions, vars)
+		if err != nil {
+			return p, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in install step %d conditions for package '%s'",
+				i,
+				p.Name,
+			)
+		}
+
 		for j := range p.Install[i].RunCommands {
 			p.Install[i].RunCommands[j], err = pm.replaceRuntimeVariablesString(
 				ctx,
@@ -1121,6 +1193,35 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 		}
 	}
 
+	for i := range p.Uninstall {
+		p.Uninstall[i].Conditions, err = pm.replaceRuntimeVariablesInConditions(ctx, p.Uninstall[i].Conditions, vars)
+		if err != nil {
+			return p, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in uninstall step %d conditions for package '%s'",
+				i,
+				p.Name,
+			)
+		}
+
+		for j := range p.Uninstall[i].RunCommands {
+			p.Uninstall[i].RunCommands[j], err = pm.replaceRuntimeVariablesString(
+				ctx,
+				p.Uninstall[i].RunCommands[j],
+				vars,
+			)
+			if err != nil {
+				return p, errors.WithMessagef(
+					err,
+					"failed to replace runtimeTemplateVariables in uninstall step %d command %d for package '%s'",
+					i,
+					j,
+					p.Name,
+				)
+			}
+		}
+	}
+
 	//nolint:nestif
 	if p.Service != nil {
 		p.Service.Executable, err = pm.replaceRuntimeVariablesString(ctx, p.Service.Executable, vars)
@@ -1156,6 +1257,42 @@ func (pm *WindowsPackageManager) replaceRuntimeVariables(
 	}
 
 	return p, nil
+}
+
+func (pm *WindowsPackageManager) replaceRuntimeVariablesInConditions(
+	ctx context.Context, conditions []windows.Condition, vars runtimeTemplateVariables,
+) ([]windows.Condition, error) {
+	var err error
+
+	for i := range conditions {
+		conditions[i].FileExists, err = pm.replaceRuntimeVariablesString(
+			ctx,
+			conditions[i].FileExists,
+			vars,
+		)
+		if err != nil {
+			return conditions, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in condition %d FileExists",
+				i,
+			)
+		}
+
+		conditions[i].FileNotExists, err = pm.replaceRuntimeVariablesString(
+			ctx,
+			conditions[i].FileNotExists,
+			vars,
+		)
+		if err != nil {
+			return conditions, errors.WithMessagef(
+				err,
+				"failed to replace runtimeTemplateVariables in condition %d FileNotExists",
+				i,
+			)
+		}
+	}
+
+	return conditions, nil
 }
 
 func (pm *WindowsPackageManager) replaceRuntimeVariablesString(

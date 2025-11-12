@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
@@ -127,6 +128,7 @@ func removeData(_ context.Context) error {
 	webDir := "C:\\gameap\\web"
 	if utils.IsFileExists(webDir) && webDir != dataDir {
 		fmt.Printf("Removing GameAP web directory: %s\n", webDir)
+
 		if err := os.RemoveAll(webDir); err != nil {
 			log.Println(errors.WithMessagef(err, "failed to remove %s", webDir))
 		}
@@ -141,17 +143,23 @@ func removePlatformDatabase(
 	state gameapctl.PanelInstallState,
 ) error {
 	if !state.DatabaseWasInstalled {
+		fmt.Println("Skipping database removal as it was not installed by GameAP")
+
 		return nil
 	}
 
 	if state.Database == "mysql" || state.Database == "mariadb" {
+		fmt.Println("Removing MySQL database package")
+
 		err := pm.Remove(ctx, packagemanager.MySQLServerPackage)
 		if err != nil {
 			log.Println(errors.WithMessagef(err, "failed to remove %s", packagemanager.MySQLServerPackage))
 		}
 	}
 
-	if state.Database == "postgresql" {
+	if strings.HasPrefix(state.Database, "postgres") {
+		fmt.Println("Removing PostgreSQL database package")
+
 		err := pm.Remove(ctx, packagemanager.PostgreSQLPackage)
 		if err != nil {
 			log.Println(errors.WithMessagef(err, "failed to remove %s", packagemanager.PostgreSQLPackage))
