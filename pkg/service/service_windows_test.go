@@ -1,9 +1,10 @@
 package service
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 var scQueryex = `SERVICE_NAME: MessagingService_febe8

@@ -1,0 +1,23 @@
+packages:
+  - name: redis-server
+    replace-with: [redis]
+    pre-install:
+      - run-commands:
+        - dnf install -y epel-release
+        - dnf module enable redis:remi-7.2 -y
+    post-install:
+      - run-commands:
+          - systemctl enable redis
+          - systemctl start redis
+
+  - name: postgresql
+    replace-with: [postgresql-server, postgresql-contrib]
+    post-install:
+      - run-commands:
+          - postgresql-setup --initdb
+          - systemctl enable postgresql
+          - systemctl start postgresql
+      - run-commands:
+          - su - postgres -c "psql -c \"ALTER USER postgres WITH PASSWORD '{{ configValue "db-root-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE USER {{ configValue "db-user" }} WITH PASSWORD '{{ configValue "db-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};\""

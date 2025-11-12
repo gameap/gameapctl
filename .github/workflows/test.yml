@@ -57,7 +57,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:20.04', 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bullseye', 'debian:bookworm', 'debian:trixie' ]
+        distro: [ 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bookworm', 'debian:trixie' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [1.25.x]
@@ -133,6 +133,65 @@ jobs:
           path: /var/log/
           retention-days: 5
 
+  integration-test-v4:
+    needs: test
+    strategy:
+      matrix:
+        distro: [ 'debian:trixie', 'ubuntu:24.04' ]
+        database: [ sqlite, postgres, mysql ]
+        go-version: [ 1.25.x ]
+        experimental: [ false ]
+
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    container:
+      image: ${{ matrix.distro }}
+      options: --user root
+      volumes:
+        - /usr/local/share/ca-certificates:/usr/local/share/ca-certificates
+    steps:
+      - name: Container preparation
+        run: |
+          apt -y update
+          apt-get install ca-certificates -y
+          update-ca-certificates
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Set up dependencies
+        run: go mod download
+
+      - name: GameAP Installation Test
+        run: |
+          cd cmd/gameapctl/
+          go build .
+          ./gameapctl --non-interactive panel install --version 4 --host=127.0.0.1 --database=${{ matrix.database}}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs_v4
+          path: /var/log/
+          retention-days: 5
+
   integration-test-windows:
     needs: test
     strategy:
@@ -191,6 +250,59 @@ jobs:
             C:/gameap/services/*
             C:/gameap/logs/*
           retention-days: 5
+
+  integration-test-windows-v4:
+    needs: test
+    strategy:
+      matrix:
+        database: [ sqlite, postgres, mysql ]
+        go-version: [ 1.25.x ]
+        experimental: [ false ]
+
+    runs-on: windows-latest
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build --if-present
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Set up dependencies
+        run: go mod download
+
+      - name: Tests
+        run: |
+          sc delete nginx
+          del C:\tools\nginx* -Recurse -Force
+          cd .\cmd\gameapctl\
+          go build .
+          .\gameapctl.exe --non-interactive panel install --version=4 --host=127.0.0.1 --port=3080 --database=${{ matrix.database}}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: logs_windows_v4
+          path: |
+            ~/AppData/Local/Temp/gameapctl*
+            C:/gameap/services/*
+            C:/gameap/logs/*
+          retention-days: 5
+
 
   test-cache:
     needs: [test, integration-test, integration-test-windows]

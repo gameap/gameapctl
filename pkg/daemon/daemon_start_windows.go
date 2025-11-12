@@ -1,17 +1,16 @@
 //go:build windows
-// +build windows
 
 package daemon
 
 import (
 	"context"
 
-	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/pkg/errors"
 )
 
-func Start(_ context.Context) error {
-	err := utils.ExecCommand("winsw", "start", defaultDaemonConfigPath)
+func Start(ctx context.Context) error {
+	err := service.Start(ctx, serviceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute start gameap-daemon command")
 	}

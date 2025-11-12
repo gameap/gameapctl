@@ -4,6 +4,7 @@ import osinfo "github.com/gameap/gameapctl/pkg/os_info"
 
 const ApachePackage = "apache2"
 const ComposerPackage = "composer"
+const CACertificatesPackage = "ca-certificates"
 const CurlPackage = "curl"
 const GitPackage = "git"
 const GnuPGPackage = "gnupg"
@@ -17,6 +18,8 @@ const NginxPackage = "nginx"
 const NodeJSPackage = "nodejs"
 const PHPExtensionsPackage = "php-extensions"
 const PHPPackage = "php"
+const PostgreSQLPackage = "postgresql"
+const RedisServerPackage = "redis-server"
 const TarPackage = "tar"
 const TmuxPackage = "tmux"
 const UnzipPackage = "unzip"
@@ -40,3 +43,13 @@ const ArchARM64 = "arm64"
 const Default = "default"
 
 const packageMarkFile = ".gameap-package"
+
+// Windows specific constants.
+const (
+	WinSWPackage      = "winsw"
+	VCRedist16Package = "vc_redist_16"     //nolint:gosec
+	VCRedist17X86     = "vc_redist_17_x86" //nolint:gosec
+	GameAPDaemon      = "gameap-daemon"
+	GameAP            = "gameap"
+	Servy             = "servy"
+)

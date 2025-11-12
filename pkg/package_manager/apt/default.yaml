@@ -1,0 +1,47 @@
+packages:
+  - name: lib32gcc
+    replace-with: []
+
+  - name: mysql-server
+    pre-install:
+      - run-commands:
+          - debconf-set-selections <<< 'mysql-server mysql-server/root_password password {{ configValue "db-root-password" }}'
+          - debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {{ configValue "db-root-password" }}'
+
+  - name: postgresql
+    replace-with: [postgresql, postgresql-contrib]
+    post-install:
+      - run-commands:
+          - service postgresql start
+      - run-commands:
+          - su - postgres -c "psql -c \"ALTER USER postgres WITH PASSWORD '{{ configValue "db-root-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE USER {{ configValue "db-user" }} WITH PASSWORD '{{ configValue "db-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};\""
+
+  - name: composer
+    virtual: true
+    lookup-paths: [ composer ]
+    install:
+      - run-commands:
+        - > 
+          curl -sS https://getcomposer.org/installer |
+            php -- --install-dir=/usr/local/bin --filename=composer
+
+  - name: nodejs
+    lookup-paths: [ node, npm ]
+    pre-install:
+      - conditions:
+          - file-not-exists: /usr/share/keyrings/nodesource.gpg
+        run-commands:
+          - mkdir -p /usr/share/keyrings/
+          - >
+            curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |
+            gpg --dearmor -o /usr/share/keyrings/nodesource.gpg
+
+      - conditions:
+          - file-not-exists: /etc/apt/sources.list.d/nodesource.list
+        run-commands:
+          - >
+            echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >
+            /etc/apt/sources.list.d/nodesource.list
+          - apt-get update

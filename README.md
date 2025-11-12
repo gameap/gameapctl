@@ -42,11 +42,12 @@ Other operating systems may work as well, if they can run the required dependenc
 
 ### CentOS
 
-| Version  | Supported | Notes                                   |
-|----------|-----------|-----------------------------------------|
-| Stream 9 | ✔         | Latest manual test (v0.6.1): 17.11.2023 |
-| Stream 8 | ✔         | Latest manual test (v0.6.2): 17.11.2023 |
-| 7        | ✔         | Latest manual test (v0.6.2): 17.11.2023 |
+| Version   | Supported | Notes                                    |
+|-----------|-----------|------------------------------------------|
+| Stream 10 | ✔         | Latest manual test (v0.10.4): 06.11.2025 |
+| Stream 9  | ✔         | Latest manual test (v0.6.1): 17.11.2023  |
+| Stream 8  | ✔         | Latest manual test (v0.6.2): 17.11.2023  |
+| 7         | ✔         | Latest manual test (v0.6.2): 17.11.2023  |
 
 ### AlmaLinux
 

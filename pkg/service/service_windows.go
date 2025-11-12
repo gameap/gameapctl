@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 package service
 
@@ -14,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gameap/gameapctl/pkg/utils"
-	"github.com/gopherclass/go-shellquote"
+	"github.com/gameap/gameapctl/pkg/oscore"
+	"github.com/gameap/gameapctl/pkg/shellquote"
 	"github.com/pkg/errors"
 )
 
@@ -40,9 +39,9 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if strings.Contains(err.Error(), "already running") {
 			return nil
 		}
+
 		log.Println(errors.WithMessage(err, "failed to start service"))
-	}
-	if err == nil {
+	} else {
 		return nil
 	}
 
@@ -50,6 +49,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 	a, aliasesExists := aliases[serviceName]
 	if err != nil && !aliasesExists && !commandExists {
 		log.Println(err)
+
 		return err
 	}
 
@@ -68,13 +68,14 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		return nil
 	}
 
+	//nolint:nestif
 	if commandExists {
 		var cmd []string
 		cmd, err = shellquote.Split(c.Start)
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to split command"))
 		} else {
-			err = utils.ExecCommand(cmd[0], cmd[1:]...)
+			err = oscore.ExecCommand(ctx, cmd[0], cmd[1:]...)
 			if err != nil {
 				log.Println(errors.WithMessage(err, "failed to exec command"))
 			} else {
@@ -94,7 +95,7 @@ func (s *Windows) Start(ctx context.Context, serviceName string) error {
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to split alias command"))
 		} else {
-			err = utils.ExecCommand(aliasCmd[0], aliasCmd[1:]...)
+			err = oscore.ExecCommand(ctx, aliasCmd[0], aliasCmd[1:]...)
 			if err != nil {
 				log.Println(errors.WithMessage(err, "failed to exec command"))
 			} else {
@@ -113,8 +114,7 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 			return nil
 		}
 		log.Println(errors.WithMessage(err, "failed to stop service"))
-	}
-	if err == nil {
+	} else {
 		return nil
 	}
 
@@ -142,7 +142,7 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 		cmd, err = shellquote.Split(c.Stop)
 
 		if err == nil {
-			err = utils.ExecCommand(cmd[0], cmd[1:]...)
+			err = oscore.ExecCommand(ctx, cmd[0], cmd[1:]...)
 			if err == nil {
 				return nil
 			}
@@ -150,7 +150,7 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 	}
 
 	if err != nil {
-		log.Println(err)
+		log.Println(errors.WithMessage(err, "failed to stop service"))
 	}
 
 	for _, alias := range a {
@@ -162,7 +162,7 @@ func (s *Windows) Stop(ctx context.Context, serviceName string) error {
 		var aliasCmd []string
 		aliasCmd, err = shellquote.Split(ac.Stop)
 		if err != nil {
-			err = utils.ExecCommand(aliasCmd[0], aliasCmd[1:]...)
+			err = oscore.ExecCommand(ctx, aliasCmd[0], aliasCmd[1:]...)
 			if err == nil {
 				return nil
 			}
@@ -180,6 +180,7 @@ func (s *Windows) Status(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
+
 		return NewNotFoundError(serviceName)
 	}
 	if svc == nil {
@@ -197,6 +198,7 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 	svc, err := findService(ctx, serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
+
 		return NewNotFoundError(serviceName)
 	}
 	if svc == nil {
@@ -208,9 +210,10 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		log.Printf("Service '%s' is already running\n", serviceName)
 	case windowsServiceStateStartPending:
 		log.Printf("Service '%s' is starting\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	default:
-		err = utils.ExecCommand("sc", "start", serviceName)
+		err = oscore.ExecCommand(ctx, "sc", "start", serviceName)
 	}
 	if err != nil {
 		return err
@@ -222,7 +225,8 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 	}
 
 	if svc.State != windowsServiceStateStartPending {
-		log.Printf("Service '%s' is starting\n", serviceName)
+		log.Printf("Service '%s' status is starting\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
 	}
 
@@ -237,11 +241,12 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 
 	switch svc.State {
 	case windowsServiceStateRunning, windowsServiceStateStartPending:
-		err = utils.ExecCommand("sc", "stop", serviceName)
+		err = oscore.ExecCommand(ctx, "sc", "stop", serviceName)
 	case windowsServiceStateStopped:
 		log.Printf("Service '%s' is already stopped\n", serviceName)
 	case windowsServiceStateStopPending:
 		log.Printf("Service '%s' is stopping\n", serviceName)
+
 		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
 	}
 	if err != nil {
@@ -254,8 +259,9 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 	}
 
 	if svc.State != windowsServiceStateStartPending {
-		log.Printf("Service '%s' is starting\n", serviceName)
-		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
+		log.Printf("Service status '%s' is starting\n", serviceName)
+
+		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
 	}
 
 	return nil
@@ -264,7 +270,7 @@ func (s *Windows) stop(ctx context.Context, serviceName string) error {
 func (s *Windows) waitStatus(ctx context.Context, serviceName string, status windowsServiceState) error {
 	log.Println("Waiting for service status")
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(5 * time.Second) //nolint:mnd
 	defer func() {
 		t.Stop()
 	}()
@@ -291,8 +297,10 @@ func (s *Windows) waitStatus(ctx context.Context, serviceName string, status win
 			svc.State != windowsServiceStateStopPending &&
 			svc.State != windowsServiceStateContinuePending &&
 			svc.State != windowsServiceStatePausePending {
-
-			return errors.New("failed to wait service status, service state is not pending")
+			return errors.WithMessagef(
+				errors.New("failed to wait service status, service state is not pending"),
+				"current service state: %d", svc.State,
+			)
 		}
 
 		checksAvailable--
@@ -313,13 +321,13 @@ func IsExists(ctx context.Context, serviceName string) bool {
 func findService(_ context.Context, serviceName string) (*windowsService, error) {
 	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
 	buf := &bytes.Buffer{}
-	buf.Grow(10240)
+	buf.Grow(10240) //nolint:mnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
 
 	err := cmd.Run()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "service query command failed")
 	}
 
 	log.Println("\n", cmd.String())
@@ -327,6 +335,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	services, err := parseScQueryex(buf.Bytes())
 	if err != nil {
 		log.Println(buf.String())
+
 		return nil, err
 	}
 
@@ -337,7 +346,7 @@ func findService(_ context.Context, serviceName string) (*windowsService, error)
 	log.Println("Services: ", strings.Join(serviceNames, ", "))
 
 	for _, winservice := range services {
-		if strings.ToLower(winservice.ServiceName) == strings.ToLower(serviceName) {
+		if strings.EqualFold(winservice.ServiceName, serviceName) {
 			return &winservice, nil
 		}
 	}
@@ -383,6 +392,7 @@ type windowsService struct {
 	Flags         string
 }
 
+//nolint:unparam
 func parseScQueryex(buf []byte) ([]windowsService, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(buf))
 	services := make([]windowsService, 0)

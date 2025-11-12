@@ -1,43 +1,80 @@
 //go:build windows
-// +build windows
 
 package packagemanager
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	internalcontext "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/package_manager/windows"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
-func UpdateEnvPath() {
-	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
-	appendPath := make([]string, 0, len(repository)*2)
-
-	for _, p := range repository {
-		if p.DefaultInstallPath == "" {
-			continue
-		}
-
-		if !utils.IsFileExists(p.DefaultInstallPath) {
-			continue
-		}
-
-		if utils.Contains(currentPath, p.DefaultInstallPath) {
-			continue
-		}
-
-		if utils.Contains(appendPath, p.DefaultInstallPath) {
-			continue
-		}
-
-		appendPath = append(appendPath, p.DefaultInstallPath)
+//nolint:gocognit,funlen
+func UpdateEnvPath(ctx context.Context) {
+	packages, err := windows.LoadPackages(internalcontext.OSInfoFromContext(ctx))
+	if err != nil {
+		panic(errors.WithMessage(err, "failed to load packages"))
 	}
 
+	currentPath := strings.Split(os.Getenv("PATH"), string(filepath.ListSeparator))
+	appendPath := make([]string, 0, len(packages)*2)
+
+	// Add installed packages to PATH
+	for _, p := range packages {
+		if p.InstallPath == "" {
+			continue
+		}
+
+		if !utils.IsFileExists(p.InstallPath) {
+			continue
+		}
+
+		if utils.Contains(currentPath, p.InstallPath) {
+			continue
+		}
+
+		if utils.Contains(appendPath, p.InstallPath) {
+			continue
+		}
+
+		appendPath = append(appendPath, p.InstallPath)
+	}
+
+	// Add path env to PATH
+	for _, p := range packages {
+		if len(p.PathEnv) == 0 {
+			continue
+		}
+
+		for _, pathEnv := range p.PathEnv {
+			if pathEnv == "" {
+				continue
+			}
+
+			if !utils.IsFileExists(pathEnv) {
+				continue
+			}
+
+			if utils.Contains(currentPath, pathEnv) {
+				continue
+			}
+
+			if utils.Contains(appendPath, pathEnv) {
+				continue
+			}
+
+			appendPath = append(appendPath, pathEnv)
+		}
+	}
+
+	//nolint:nestif
 	if utils.IsFileExists(gameap.DefaultToolsPath) {
 		entries, err := os.ReadDir(gameap.DefaultToolsPath)
 		if err != nil {
@@ -85,10 +122,7 @@ func UpdateEnvPath() {
 		strings.Join(appendPath, string(filepath.ListSeparator))
 
 	log.Println("New PATH:", newPath)
-	err := os.Setenv(
-		"PATH",
-		newPath,
-	)
+	err = os.Setenv("PATH", newPath)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to set PATH"))
 	}

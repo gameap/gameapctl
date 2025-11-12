@@ -6,7 +6,7 @@ linters:
     - containedctx
     - decorder
     - dogsled
-    - dupl
+    #- dupl
     - dupword
     - err113
     - errname
@@ -19,7 +19,7 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - godox
+    # - godox
     - gomodguard
     - goprintffuncname
     - gosec
@@ -68,6 +68,13 @@ linters:
       rules:
         - name: var-naming
           disabled: true
+    funlen:
+      lines: 100
+      statements: 60
+    tagliatelle:
+      case:
+        rules:
+          yaml: kebab
   exclusions:
     generated: lax
     presets:
@@ -76,6 +83,9 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      - linters:
+          - staticcheck
+        text: "SA1019"  # Disable deprecated warnings
       - linters:
           - dupl
           - funlen

@@ -1,8 +1,12 @@
 package packagemanager
 
 import (
+	"context"
 	"testing"
 
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,4 +67,231 @@ Description  : The mysql-common package provides the essential shared files for 
 				"MySQL program. You will need to install this package to use any other MySQL package.",
 		},
 	}, parsed)
+}
+
+func Test_extendedDNF_preInstallationSteps(t *testing.T) {
+	t.Run("no pre-install steps", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"test-package": {
+					Name:        "test-package",
+					ReplaceWith: []string{"actual-package"},
+				},
+			},
+		}
+
+		packs, err := d.preInstallationSteps(context.Background(), []string{"test-package"}, &installOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"test-package"}, packs)
+	})
+
+	t.Run("package not in config", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{},
+		}
+
+		packs, err := d.preInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"unknown-package"}, packs)
+	})
+
+	t.Run("multiple packages with different configs", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"package-with-pre": {
+					Name: "package-with-pre",
+					PreInstall: []pmdnf.PreInstallStep{
+						{
+							RunCommands: []string{"echo pre-install"},
+						},
+					},
+				},
+				"package-without-pre": {
+					Name: "package-without-pre",
+				},
+			},
+		}
+
+		packs, err := d.preInstallationSteps(context.Background(), []string{"package-with-pre", "package-without-pre"}, &installOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"package-with-pre", "package-without-pre"}, packs)
+	})
+
+	t.Run("duplicate packages in list", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"test-package": {
+					Name: "test-package",
+					PreInstall: []pmdnf.PreInstallStep{
+						{
+							RunCommands: []string{"echo test"},
+						},
+					},
+				},
+			},
+		}
+
+		packs, err := d.preInstallationSteps(context.Background(), []string{"test-package", "test-package"}, &installOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"test-package", "test-package"}, packs)
+	})
+}
+
+func Test_extendedDNF_postInstallationSteps(t *testing.T) {
+	t.Run("no post-install steps", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"test-package": {
+					Name:        "test-package",
+					ReplaceWith: []string{"actual-package"},
+				},
+			},
+		}
+
+		err := d.postInstallationSteps(context.Background(), []string{"test-package"}, &installOptions{})
+		require.NoError(t, err)
+	})
+
+	t.Run("package not in config", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{},
+		}
+
+		err := d.postInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
+		require.NoError(t, err)
+	})
+
+	t.Run("multiple packages with different configs", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"package-with-post": {
+					Name: "package-with-post",
+					PostInstall: []pmdnf.PostInstallStep{
+						{
+							RunCommands: []string{"echo post-install"},
+						},
+					},
+				},
+				"package-without-post": {
+					Name: "package-without-post",
+				},
+			},
+		}
+
+		err := d.postInstallationSteps(context.Background(), []string{"package-with-post", "package-without-post"}, &installOptions{})
+		require.NoError(t, err)
+	})
+
+	t.Run("duplicate packages in list", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"test-package": {
+					Name: "test-package",
+					PostInstall: []pmdnf.PostInstallStep{
+						{
+							RunCommands: []string{"echo test"},
+						},
+					},
+				},
+			},
+		}
+
+		err := d.postInstallationSteps(context.Background(), []string{"test-package", "test-package"}, &installOptions{})
+		require.NoError(t, err)
+	})
+}
+
+func Test_extendedDNF_executeCommand(t *testing.T) {
+	d := &extendedDNF{}
+
+	t.Run("empty command", func(t *testing.T) {
+		err := d.executeCommand(context.Background(), "")
+		require.NoError(t, err)
+	})
+
+	t.Run("whitespace only command", func(t *testing.T) {
+		err := d.executeCommand(context.Background(), "   ")
+		require.NoError(t, err)
+	})
+
+	t.Run("simple command", func(t *testing.T) {
+		err := d.executeCommand(context.Background(), "echo test")
+		require.NoError(t, err)
+	})
+
+	t.Run("command with multiple arguments", func(t *testing.T) {
+		err := d.executeCommand(context.Background(), "echo hello world")
+		require.NoError(t, err)
+	})
+}
+
+func Test_extendedDNF_replaceAliases(t *testing.T) {
+	t.Run("replace with configured packages", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"php": {
+					Name:        "php",
+					ReplaceWith: []string{"php-cli", "php-common", "php-fpm"},
+				},
+			},
+		}
+
+		result := d.replaceAliases(context.Background(), []string{"php"})
+		assert.Equal(t, []string{"php-cli", "php-common", "php-fpm"}, result)
+	})
+
+	t.Run("keep unknown packages as is", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{},
+		}
+
+		result := d.replaceAliases(context.Background(), []string{"unknown-package"})
+		assert.Equal(t, []string{"unknown-package"}, result)
+	})
+
+	t.Run("mixed known and unknown packages", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"php": {
+					Name:        "php",
+					ReplaceWith: []string{"php-cli", "php-fpm"},
+				},
+			},
+		}
+
+		result := d.replaceAliases(context.Background(), []string{"php", "nginx", "mysql"})
+		assert.Equal(t, []string{"php-cli", "php-fpm", "nginx", "mysql"}, result)
+	})
+
+	t.Run("empty replace-with array", func(t *testing.T) {
+		d := &extendedDNF{
+			packages: map[string]pmdnf.PackageConfig{
+				"lib32gcc": {
+					Name:        "lib32gcc",
+					ReplaceWith: []string{},
+				},
+			},
+		}
+
+		result := d.replaceAliases(context.Background(), []string{"lib32gcc"})
+		assert.Empty(t, result)
+	})
+}
+
+func Test_newExtendedDNF(t *testing.T) {
+	t.Run("creates extended dnf with packages", func(t *testing.T) {
+		osInfo := osinfo.Info{
+			Distribution:        osinfo.DistributionCentOS,
+			DistributionVersion: "8",
+			Platform:            osinfo.PlatformAmd64,
+		}
+
+		mockDNF := &dnf{}
+		extended, err := newExtendedDNF(osInfo, mockDNF)
+
+		require.NoError(t, err)
+		require.NotNil(t, extended)
+		assert.NotNil(t, extended.packages)
+		assert.NotNil(t, extended.underlined)
+	})
 }

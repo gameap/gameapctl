@@ -1,0 +1,9 @@
+packages:
+  - name: lib32gcc
+    replace-with: []
+
+  - name: lib32stdc6
+    replace-with: []
+
+  - name: lib32z1
+    replace-with: []

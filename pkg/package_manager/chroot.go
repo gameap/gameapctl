@@ -38,35 +38,30 @@ func (ch *chRoot) Search(ctx context.Context, name string) ([]PackageInfo, error
 	return packages, nil
 }
 
-func (ch *chRoot) Install(ctx context.Context, packs ...string) error {
+func (ch *chRoot) Install(ctx context.Context, pack string, _ ...InstallOptions) error {
+	if _, ok := skipChrootPackages[pack]; ok {
+		return nil
+	}
+
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	for _, pack := range packs {
-		if _, ok := skipChrootPackages[pack]; ok {
-			continue
-		}
-
-		if _, ok := chrootPackages[pack]; !ok {
-			return NewErrPackageNotFound(pack)
-		}
-
-		if _, ok := chrootPackages[pack][osInfo.Platform]; !ok {
-			return NewErrPackageNotFound(pack)
-		}
+	if _, ok := chrootPackages[pack]; !ok {
+		return NewErrPackageNotFound(pack)
 	}
 
-	for _, pack := range packs {
-		err := ch.installPackage(ctx, pack)
-		if err != nil {
-			return errors.WithMessagef(err, "failed to install %s package", pack)
-		}
-		log.Println("Package", pack, "installed")
+	if _, ok := chrootPackages[pack][osInfo.Platform]; !ok {
+		return NewErrPackageNotFound(pack)
 	}
+
+	err := ch.installPackage(ctx, pack)
+	if err != nil {
+		return errors.WithMessagef(err, "failed to install %s package", pack)
+	}
+	log.Println("Package", pack, "installed")
 
 	return nil
 }
 
-//nolint:funlen
 func (ch *chRoot) installPackage(ctx context.Context, pack string) error {
 	if _, ok := skipChrootPackages[pack]; ok {
 		return nil

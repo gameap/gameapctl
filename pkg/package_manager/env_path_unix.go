@@ -1,6 +1,9 @@
 //go:build linux || darwin
-// +build linux darwin
 
 package packagemanager
 
-func UpdateEnvPath() {}
+import (
+	"context"
+)
+
+func UpdateEnvPath(ctx context.Context) {}

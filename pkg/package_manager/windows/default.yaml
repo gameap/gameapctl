@@ -1,0 +1,248 @@
+packages:
+  - name: nginx
+    lookup-paths: [ nginx ]
+    pre-install:
+      - grant-permissions:
+          - path: C:\gameap\tools\nginx
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+    download-urls:
+      - http://nginx.org/download/nginx-1.29.3.zip
+    install-path: C:\gameap\tools\nginx
+    install:
+      - run-commands:
+        - robocopy {{package_install_path}}\nginx-1.29.3 {{package_install_path}} /E /MOVE
+        allowed-install-exit-codes:
+          # https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/return-codes-used-robocopy-utility
+          - 1 # All files were copied successfully.
+          - 3 # Some files were copied. Additional files were present. No failure was met.
+          - 5 # Some files were copied. Some files were mismatched. No failure was met.
+    service:
+      id: nginx
+      name: nginx
+      executable: nginx.exe
+      working-directory: C:\gameap\tools\nginx
+      log-directory: C:\gameap\services\logs\nginx
+      stop-executable: nginx
+      stop-arguments: -s stop
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+        password: ""
+    dependencies:
+      - shawl
+
+  - name: mysql-server
+    lookup-paths: [mysql, mysqld]
+    download-urls:
+        - https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi
+    install:
+      - run-commands:
+          - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
+        wait-for-service: MariaDB
+
+  - name: mariadb-server
+    lookup-paths: [ mariadb, mariadbd ]
+    download-urls:
+      - https://archive.mariadb.org/mariadb-10.6.16/winx64-packages/mariadb-10.6.16-winx64.msi
+    install:
+      - run-commands:
+          - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
+        wait-for-service: MariaDB
+
+  - name: postgresql
+    lookup-paths: [ psql, postgres ]
+    download-urls:
+      - https://get.enterprisedb.com/postgresql/postgresql-17.6-2-windows-x64-binaries.zip
+    install-path: ${ProgramFiles}\PostgreSQL\17
+    install:
+      - run-commands:
+          - robocopy "{{package_install_path}}\pgsql" "{{package_install_path}}" /E /MOVE
+        allowed-install-exit-codes:
+          # https://learn.microsoft.com/en-us/troubleshoot/windows-server/backup-and-storage/return-codes-used-robocopy-utility
+          - 1 # All files were copied successfully.
+          - 3 # Some files were copied. Additional files were present. No failure was met.
+          - 5 # Some files were copied. Some files were mismatched. No failure was met.
+      - run-commands:
+          - echo {{ configValue "db-root-password" }} > ${TEMP}\db_root_password.txt
+          - >
+            "bin\initdb.exe"
+              -D "${ProgramData}\PostgreSQL\17\data"
+              -U postgres
+              --pwfile=${TEMP}\db_root_password.txt
+              --encoding=UTF8
+              --locale=en_US.UTF-8
+          - del ${TEMP}\db_root_password.txt
+          - >
+            "bin\pg_ctl.exe"
+              register
+              -N "PostgreSQL"
+              -D "${ProgramData}\PostgreSQL\17\data"
+              -U "NT AUTHORITY\NETWORK SERVICE"
+      - grant-permissions:
+          - path: ${ProgramData}\PostgreSQL\17\data
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+
+      - run-commands:
+          - net start PostgreSQL
+          - >
+            "bin\psql.exe"
+              postgresql://postgres:{{ configValue "db-root-password" }}@127.0.0.1:5432
+                -c "CREATE USER {{ configValue "db-user" }} WITH PASSWORD '{{ configValue "db-password" }}';"
+          - >
+            "bin\psql.exe"
+              postgresql://postgres:{{ configValue "db-root-password" }}@127.0.0.1:5432
+                -c "CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};"
+
+  - name: php
+    lookup-paths: [ php, php-cgi ]
+    download-urls:
+      - https://packages.gameap.com/deps/php-8.3.7-Win32-vs16-x64.zip
+    install-path: C:\php
+    pre-install:
+      - grant-permissions:
+          - path: C:\php
+            user: NT AUTHORITY\NETWORK SERVICE
+            access: full-control
+    path-env:
+      - C:\php
+    service:
+      id: php-fpm
+      name: php-fpm
+      executable: php-cgi.exe
+      arguments: -b 127.0.0.1:9934 -c {{index .LookupPaths "php-cgi" | default .InstallPath }}\php.ini
+      log-directory: C:\gameap\services\logs\php-fpm
+      env:
+        - name: PHP_FCGI_MAX_REQUESTS
+          value: "0"
+        - name: PHP_FCGI_CHILDREN
+          value: "4"
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+    dependencies:
+      - vcredist16
+      - shawl
+
+  - name: php-extensions
+    dependencies:
+      - php
+
+  - name: vcredist16
+    download-urls:
+      - https://aka.ms/vs/16/release/VC_redist.x64.exe
+    install:
+      - run-commands:
+          - VC_redist.x64.exe /install /quiet /norestart
+        allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
+
+  - name: vcredist17-x86
+    download-urls:
+      - https://aka.ms/vs/17/release/vc_redist.x86.exe
+    install:
+      - run-commands:
+        - VC_redist.x86.exe /install /quiet /norestart
+        allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
+
+  - name: git
+    lookup-paths: [git]
+    download-urls:
+      - https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe
+    install:
+      - run-commands:
+        - Git-2.43.0-64-bit.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=icons,ext\reg\shellhere,assoc,assoc_sh
+
+  - name: nodejs
+    lookup-paths: [node]
+    download-urls:
+      - https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi
+    install:
+      - run-commands:
+        - start /wait msiexec /i node-v20.11.1-x64.msi /qb
+    path-env:
+      - ${ProgramFiles}\nodejs
+
+  - name: composer
+    lookup-paths: [composer]
+    dependencies: [php]
+    download-urls:
+      - https://getcomposer.org/Composer-Setup.exe
+    install:
+      - run-commands:
+        - Composer-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /ALLUSERS
+        wait-for-files:
+          - ${ProgramData}\ComposerSetup\bin\composer
+    path-env:
+      - ${ProgramData}\ComposerSetup\bin
+
+  - name: gameap-daemon
+    service:
+      id: GameAP Daemon
+      name: GameAP Daemon
+      executable: gameap-daemon
+      working-directory: C:\gameap\daemon
+      log-directory: C:\gameap\services\logs\gameap-daemon
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+    dependencies:
+      - shawl
+      - winsw # GameAP Daemon uses WinSW as service wrapper
+
+  - name: gameap
+    service:
+      id: GameAP
+      name: GameAP
+      executable: gameap
+      arguments: --env C:\gameap\web\config.env
+      working-directory: C:\gameap\web
+      log-directory: C:\gameap\services\logs\gameap
+      service-account:
+        username: NT AUTHORITY\NETWORK SERVICE
+      on-failure:
+        - action: restart
+          delay: 1s
+        - action: restart
+          delay: 5s
+        - action: restart
+          delay: 10s
+        - action: restart
+          delay: 30s
+      reset-failure: 30m
+    dependencies:
+      - shawl
+
+  - name: shawl
+    lookup-paths: [ shawl ]
+    download-urls:
+      - https://github.com/mtkennerly/shawl/releases/download/v1.7.0/shawl-v1.7.0-win64.zip
+    install-path: C:\gameap\tools\shawl
+    uninstall:
+      - run-commands:
+        - del /F /Q {{package_install_path}}\*
+        - rmdir /S /Q {{package_install_path}}
+
+  - name: winsw
+    lookup-paths: [ winsw ]
+    download-urls:
+      - https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
+    install-path: ${SystemRoot}\System32
+    install:
+      - run-commands:
+        - move {{package_install_path}}\WinSW-x64.exe {{package_install_path}}\winsw.exe
+    uninstall:
+      - run-commands:
+        - del ${SystemRoot}\System32\winsw.exe
+
+  - name: servy
+    lookup-paths: [ servy ]
+    download-urls:
+      - https://github.com/aelassas/servy/releases/download/v2.9/servy-2.9-net48-x64-installer.exe
+    install:
+      - run-commands:
+          - start /wait servy-2.9-net48-x64-installer.exe /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP- /CLOSEAPPLICATIONS /NOCANCEL
+        wait-for-files:
+          - ${ProgramFiles}\Servy\servy-cli.exe
+    path-env:
+      - ${ProgramFiles}\Servy
+    uninstall:
+      - run-commands:
+        - \"${ProgramFiles}\Servy\unins000.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES

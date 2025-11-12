@@ -2,4 +2,5 @@ package daemon
 
 const (
 	daemonProcessName = "gameap-daemon.exe"
+	serviceName       = "GameAP Daemon"
 )

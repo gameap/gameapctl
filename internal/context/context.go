@@ -23,7 +23,7 @@ func contextWithOSInfo(ctx context.Context, info osinfo.Info) context.Context {
 }
 
 func SetOSContext(ctx context.Context) (context.Context, error) {
-	osInfo, err := osinfo.GetOSInfo()
+	osInfo, err := osinfo.GetOSInfo(ctx)
 	if err != nil {
 		return ctx, err
 	}

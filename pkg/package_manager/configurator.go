@@ -20,51 +20,56 @@ import (
 var ErrConfigNotFound = errors.New("config not found")
 var ErrFailedToConfigure = errors.New("failed to configure")
 
+const (
+	ConfigurationNginxConf      = "nginx_conf"
+	ConfigurationGameAPHostConf = "gameap_host_conf"
+	ConfigurationPHPFpmSock     = "fpm_sock"
+)
+
 var staticConfigs = map[string]map[osinfo.Distribution]map[string]string{
 	NginxPackage: {
 		Default: {
-			"nginx_conf":       "/etc/nginx/nginx.conf",
-			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
+			ConfigurationNginxConf:      "/etc/nginx/nginx.conf",
+			ConfigurationGameAPHostConf: "/etc/nginx/conf.d/gameap.conf",
 		},
 		DistributionDebian: {
-			"nginx_conf":       "/etc/nginx/nginx.conf",
-			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
+			ConfigurationNginxConf:      "/etc/nginx/nginx.conf",
+			ConfigurationGameAPHostConf: "/etc/nginx/conf.d/gameap.conf",
 		},
 		DistributionUbuntu: {
-			"nginx_conf":       "/etc/nginx/nginx.conf",
-			"gameap_host_conf": "/etc/nginx/conf.d/gameap.conf",
+			ConfigurationNginxConf:      "/etc/nginx/nginx.conf",
+			ConfigurationGameAPHostConf: "/etc/nginx/conf.d/gameap.conf",
 		},
 		DistributionWindows: {
-			"nginx_conf":       "C:\\gameap\\tools\\nginx\\conf\\nginx.conf",
-			"gameap_host_conf": "C:\\gameap\\tools\\nginx\\conf\\gameap.conf",
+			ConfigurationNginxConf:      "C:\\gameap\\tools\\nginx\\conf\\nginx.conf",
+			ConfigurationGameAPHostConf: "C:\\gameap\\tools\\nginx\\conf\\gameap.conf",
 		},
 	},
 	ApachePackage: {
 		Default: {
-			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
+			ConfigurationGameAPHostConf: "/etc/apache2/sites-available/gameap.conf",
 		},
 		DistributionDebian: {
-			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
+			ConfigurationGameAPHostConf: "/etc/apache2/sites-available/gameap.conf",
 		},
 		DistributionUbuntu: {
-			"gameap_host_conf": "/etc/apache2/sites-available/gameap.conf",
+			ConfigurationGameAPHostConf: "/etc/apache2/sites-available/gameap.conf",
 		},
 		DistributionWindows: {
-			"gameap_host_conf": "C:\\gameap\\tools\\apache2\\sites-available\\gameap.conf",
+			ConfigurationGameAPHostConf: "C:\\gameap\\tools\\apache2\\sites-available\\gameap.conf",
 		},
 	},
 	PHPPackage: {
 		DistributionWindows: {
-			"fpm_sock": "127.0.0.1:9934",
+			ConfigurationPHPFpmSock: "127.0.0.1:9934",
 		},
 	},
 }
 
-//nolint:goconst
 var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx context.Context) (string, error){
 	PHPPackage: {
 		DistributionDefault: {
-			"fpm_sock": func(_ context.Context) (string, error) {
+			ConfigurationPHPFpmSock: func(_ context.Context) (string, error) {
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
@@ -80,18 +85,18 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 				case utils.IsFileExists(fmt.Sprintf("/run/php/php%s-fpm.sock", phpVerion)):
 					return fmt.Sprintf("unix:/run/php/php%s-fpm.sock", phpVerion), nil
 				case utils.IsFileExists("/etc/alternatives/php-fpm.sock"):
-					return "unix:/etc/alternatives/php-fpm.sock", nil
+					return "unix:/etc/alternatives/php-fpm.sock", nil //nolint:goconst
 				case utils.IsFileExists("/var/run/php-fpm/www.sock"):
-					return "unix:/var/run/php-fpm/www.sock", nil
+					return "unix:/var/run/php-fpm/www.sock", nil //nolint:goconst
 				case utils.IsFileExists("/var/run/php/php-fpm.sock"):
-					return "unix:/var/run/php/php-fpm.sock", nil
+					return "unix:/var/run/php/php-fpm.sock", nil //nolint:goconst
 				}
 
 				return "", ErrFailedToConfigure
 			},
 		},
 		DistributionCentOS: {
-			"fpm_sock": func(ctx context.Context) (string, error) {
+			ConfigurationPHPFpmSock: func(ctx context.Context) (string, error) {
 				if utils.IsFileExists(filepath.Join(chrootPHPPath, packageMarkFile)) {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
@@ -114,7 +119,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 			},
 		},
 		DistributionDebian: {
-			"fpm_sock": func(_ context.Context) (string, error) {
+			ConfigurationPHPFpmSock: func(_ context.Context) (string, error) {
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
@@ -141,7 +146,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 			},
 		},
 		DistributionUbuntu: {
-			"fpm_sock": func(_ context.Context) (string, error) {
+			ConfigurationPHPFpmSock: func(_ context.Context) (string, error) {
 				if _, err := os.Stat(filepath.Join(chrootPHPPath, packageMarkFile)); err == nil {
 					return fmt.Sprintf("unix:%s/php-fpm.sock", chrootPHPPath), nil
 				}
@@ -170,7 +175,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 	},
 	NginxPackage: {
 		DistributionWindows: {
-			"nginx_conf": func(ctx context.Context) (string, error) {
+			ConfigurationNginxConf: func(ctx context.Context) (string, error) {
 				path, err := defineNginxPath(ctx)
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")
@@ -178,7 +183,7 @@ var dynamicConfig = map[string]map[osinfo.Distribution]map[string]func(ctx conte
 
 				return filepath.Join(path, "conf", "nginx.conf"), nil
 			},
-			"gameap_host_conf": func(ctx context.Context) (string, error) {
+			ConfigurationGameAPHostConf: func(ctx context.Context) (string, error) {
 				path, err := defineNginxPath(ctx)
 				if err != nil {
 					return "", errors.WithMessage(err, "failed to define nginx path")

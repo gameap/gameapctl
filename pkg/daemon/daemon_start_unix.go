@@ -1,5 +1,4 @@
 //go:build linux || darwin
-// +build linux darwin
 
 package daemon
 
@@ -15,15 +14,10 @@ import (
 	"syscall"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/runhelper"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
-	"github.com/shirou/gopsutil/v3/process"
-)
-
-const (
-	initUnknown = "unknown"
-	initSystemd = "systemd"
 )
 
 const (
@@ -31,15 +25,15 @@ const (
 )
 
 func Start(ctx context.Context) error {
-	init, err := detectInit(ctx)
+	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
 	}
 
 	switch init {
-	case initSystemd:
+	case runhelper.InitSystemd:
 		err = startDaemonSystemd(ctx)
-	case initUnknown:
+	case runhelper.InitUnknown:
 		err = startDaemonFork(ctx)
 	}
 
@@ -48,43 +42,6 @@ func Start(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func detectInit(ctx context.Context) (string, error) {
-	result := initUnknown
-
-	p, err := process.NewProcessWithContext(ctx, 1)
-	if err != nil {
-		return result, errors.WithMessage(err, "failed to load process with pid 1")
-	}
-
-	processName, _ := p.Name()
-	log.Println("Found process name:", processName)
-
-	exe, err := p.Exe()
-	if err != nil {
-		return result, errors.WithMessage(err, "failed to get executable path of the process")
-	}
-
-	originalExe, err := filepath.EvalSymlinks(exe)
-	if err != nil {
-		log.Println(errors.WithMessage(err, "failed to evaluate symlink"))
-	}
-
-	filename := originalExe
-	if filename == "" {
-		filename = exe
-	}
-
-	switch filepath.Base(filename) {
-	case "systemd":
-		log.Println("Detected systemd init")
-		result = initSystemd
-	default:
-		log.Println("Unsupported init:", filename)
-	}
-
-	return result, nil
 }
 
 func startDaemonSystemd(ctx context.Context) error {
@@ -158,11 +115,11 @@ func startDaemonFork(ctx context.Context) error {
 
 	daemonProcess, err := FindProcess(ctx)
 	if err != nil {
-		return daemonAlreadyRunningError(daemonProcess.Pid)
+		return errors.WithMessage(err, "failed to find daemon process")
 	}
 
 	if daemonProcess != nil && daemonProcess.Pid != 0 {
-		return errors.New("daemon is already running")
+		return daemonAlreadyRunningError(daemonProcess.Pid)
 	}
 
 	exePath, err := exec.LookPath("gameap-daemon")
@@ -178,33 +135,44 @@ func startDaemonFork(ctx context.Context) error {
 		}
 	}
 
+	// Open /dev/null for stdin, stdout, stderr
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return errors.WithMessage(err, "failed to open /dev/null")
+	}
+	defer func(devNull *os.File) {
+		err := devNull.Close()
+		if err != nil {
+			log.Println("Failed to close /dev/null:", err)
+		}
+	}(devNull)
+
 	attr := os.ProcAttr{
-		Dir:   gameap.DefaultWorkPath,
-		Env:   os.Environ(),
-		Sys:   &syscall.SysProcAttr{Noctty: true},
-		Files: []*os.File{os.Stdin, nil, nil},
+		Dir: gameap.DefaultWorkPath,
+		Env: os.Environ(),
+		Sys: &syscall.SysProcAttr{
+			Setsid: true, // Create a new session and detach from terminal
+		},
+		Files: []*os.File{devNull, devNull, devNull},
 	}
 	p, err := os.StartProcess(exePath, []string{}, &attr)
 	if err != nil {
-		log.Println(errors.WithMessage(err, "failed to start process"))
-
-		attr = os.ProcAttr{
-			Dir:   gameap.DefaultWorkPath,
-			Env:   os.Environ(),
-			Files: []*os.File{os.Stdin, nil, nil},
-		}
-		p, err = os.StartProcess(exePath, []string{}, &attr)
-		if err != nil {
-			return errors.WithMessage(err, "failed to start process")
-		}
+		return errors.WithMessage(err, "failed to start process")
 	}
 
 	log.Println("Process started with pid", p.Pid)
-	log.Println("Releasing process")
-	err = p.Release()
-	if err != nil {
-		return errors.WithMessage(err, "failed to release process")
-	}
+
+	// Start a goroutine to wait for the process and reap it when it terminates
+	// This prevents zombie processes from accumulating
+	go func() {
+		state, waitErr := p.Wait()
+		if waitErr != nil {
+			log.Printf("Error waiting for process (pid %d): %v\n", p.Pid, waitErr)
+
+			return
+		}
+		log.Printf("Process (pid %d) exited with status: %s\n", p.Pid, state.String())
+	}()
 
 	return nil
 }

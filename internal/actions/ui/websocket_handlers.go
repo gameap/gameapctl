@@ -16,8 +16,11 @@ import (
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -25,11 +28,6 @@ const (
 	serviceStatusActive   = "active"
 	serviceStatusInactive = "inactive"
 	serviceStatusNotFound = "not found"
-)
-
-const (
-	gameapServiceName   = "gameap"
-	gameapDaemonService = "gameap-daemon"
 )
 
 func cmdHandle(ctx context.Context, w io.Writer, m message) error {
@@ -55,6 +53,10 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 		duplicateLogWriter(ctx, w)
 
 		return gameapInstall(ctx, w, args)
+	case "gameap-uninstall":
+		duplicateLogWriter(ctx, w)
+
+		return gameapUninstall(ctx, w, args)
 	case "gameap-upgrade":
 		duplicateLogWriter(ctx, w)
 
@@ -95,11 +97,13 @@ func nodeInfo(ctx context.Context, w io.Writer, _ []string) error {
 	return nil
 }
 
-var replaceMap = map[string]string{
+var serviceReplaceMap = map[string]string{
 	"daemon":       gameapDaemonService,
+	"gameap":       gameapServiceName,
 	"gameapdaemon": gameapDaemonService,
 	"mysql":        "mariadb",
 	"php":          "php-fpm",
+	"postgresql":   postgreSQLServiceName,
 }
 
 func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
@@ -109,7 +113,7 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 
 	serviceName := strings.ToLower(args[0])
 
-	if replace, ok := replaceMap[serviceName]; ok {
+	if replace, ok := serviceReplaceMap[serviceName]; ok {
 		serviceName = replace
 	}
 
@@ -144,10 +148,94 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 }
 
 func gameapStatus(ctx context.Context, w io.Writer, _ []string) error {
-	_, err := gameapctl.LoadPanelInstallState(ctx)
+	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to get panel install state"))
+
 		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		return nil
+	}
+
+	if state.Version == "" || state.Version == "3" || state.Version == "v3" {
+		log.Println("Checking GameAP v3 status")
+
+		return gameapStatusV3(ctx, w, state)
+	}
+
+	if state.Version == "v4" || state.Version == "4" {
+		log.Println("Checking GameAP v4 status")
+
+		return gameapStatusV4(ctx, w, state)
+	}
+
+	return nil
+}
+
+func gameapStatusV3(_ context.Context, w io.Writer, state gameapctl.PanelInstallState) error {
+	if state.Path == "" {
+		log.Println("No installation path found in state, using default path")
+
+		state.Path = gameap.DefaultWebInstallationPath
+	}
+
+	if utils.IsFileExists(state.Path) {
+		log.Println("GameAP v3 installation found at path:", state.Path)
+
+		_, _ = w.Write([]byte(serviceStatusActive))
+
+		return nil
+	}
+
+	log.Println("GameAP v3 installation not found at path:", state.Path)
+
+	_, _ = w.Write([]byte(serviceStatusNotFound))
+
+	return nil
+}
+
+func gameapStatusV4(ctx context.Context, w io.Writer, state gameapctl.PanelInstallState) error {
+	if state.DataDirectory == "" {
+		log.Println("No data directory found in state, using default path")
+
+		state.DataDirectory = gameap.DefaultDataPath
+	}
+
+	if state.ConfigDirectory == "" {
+		log.Println("No config directory found in state, using default path")
+
+		state.ConfigDirectory = gameap.DefaultConfigFilePath
+	}
+
+	if !utils.IsFileExists(state.DataDirectory) {
+		log.Println("Data directory not found:", state.DataDirectory)
+
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		return nil
+	}
+
+	if !utils.IsFileExists(state.ConfigDirectory) {
+		log.Println("Config directory not found:", state.ConfigDirectory)
+
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		return nil
+	}
+
+	pr, err := oscore.FindProcessByName(ctx, gameapProcessName)
+	if err != nil {
+		_, _ = w.Write([]byte(serviceStatusNotFound))
+
+		log.Println(errors.WithMessage(err, "failed to find started gameap process"))
+
+		return nil
+	}
+
+	if pr == nil {
+		_, _ = w.Write([]byte(serviceStatusInactive))
+
+		return nil
 	}
 
 	_, _ = w.Write([]byte(serviceStatusActive))
@@ -182,7 +270,7 @@ func daemonStatus(ctx context.Context, w io.Writer, _ []string) error {
 	return nil
 }
 
-func gameapInstall(_ context.Context, w io.Writer, args []string) error {
+func gameapInstall(ctx context.Context, w io.Writer, args []string) error {
 	// Testing
 	if len(args) == 0 {
 		return errors.New("no args")
@@ -207,7 +295,32 @@ func gameapInstall(_ context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to execute command")
 	}
 
-	packagemanager.UpdateEnvPath()
+	packagemanager.UpdateEnvPath(ctx)
+
+	return nil
+}
+
+func gameapUninstall(ctx context.Context, w io.Writer, args []string) error {
+	ex, err := os.Executable()
+	if err != nil {
+		return errors.Wrap(err, "failed to get executable path")
+	}
+
+	exPath := filepath.Dir(ex)
+
+	exArgs := append([]string{"--non-interactive", "panel", "uninstall"}, args...)
+
+	cmd := exec.Command(ex, exArgs...)
+	cmd.Stdout = w
+	cmd.Stderr = w
+	cmd.Dir = exPath
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.Wrap(err, "failed to execute command")
+	}
+
+	packagemanager.UpdateEnvPath(ctx)
 
 	return nil
 }
@@ -220,7 +333,7 @@ func serviceCommand(ctx context.Context, w io.Writer, args []string) error {
 	command := args[0]
 	serviceName := strings.ToLower(args[1])
 
-	if replace, ok := replaceMap[serviceName]; ok {
+	if replace, ok := serviceReplaceMap[serviceName]; ok {
 		serviceName = replace
 	}
 
@@ -405,7 +518,7 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to execute command")
 	}
 
-	packagemanager.UpdateEnvPath()
+	packagemanager.UpdateEnvPath(ctx)
 
 	return nil
 }

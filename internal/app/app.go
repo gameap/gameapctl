@@ -12,14 +12,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gameap/gameapctl/internal/actions/daemoninstall"
-	"github.com/gameap/gameapctl/internal/actions/daemonrestart"
-	"github.com/gameap/gameapctl/internal/actions/daemonstart"
-	"github.com/gameap/gameapctl/internal/actions/daemonstatus"
-	"github.com/gameap/gameapctl/internal/actions/daemonstop"
-	"github.com/gameap/gameapctl/internal/actions/daemonupdate"
-	"github.com/gameap/gameapctl/internal/actions/panelinstall"
-	"github.com/gameap/gameapctl/internal/actions/panelupdate"
+	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
+	daemonrestart "github.com/gameap/gameapctl/internal/actions/daemon/restart"
+	daemonstart "github.com/gameap/gameapctl/internal/actions/daemon/start"
+	daemonstatus "github.com/gameap/gameapctl/internal/actions/daemon/status"
+	daemonstop "github.com/gameap/gameapctl/internal/actions/daemon/stop"
+	daemonupdate "github.com/gameap/gameapctl/internal/actions/daemon/update"
+	panelchangepassword "github.com/gameap/gameapctl/internal/actions/panel/changepassword"
+	panelinstall "github.com/gameap/gameapctl/internal/actions/panel/install"
+	panelrestart "github.com/gameap/gameapctl/internal/actions/panel/restart"
+	panelstart "github.com/gameap/gameapctl/internal/actions/panel/start"
+	panelstatus "github.com/gameap/gameapctl/internal/actions/panel/status"
+	panelstop "github.com/gameap/gameapctl/internal/actions/panel/stop"
+	paneluninstall "github.com/gameap/gameapctl/internal/actions/panel/uninstall"
+	panelupdate "github.com/gameap/gameapctl/internal/actions/panel/update"
 	"github.com/gameap/gameapctl/internal/actions/selfupdate"
 	"github.com/gameap/gameapctl/internal/actions/sendlogs"
 	"github.com/gameap/gameapctl/internal/actions/ui"
@@ -96,10 +102,10 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install daemon",
 						Usage:       "Install daemon",
-						Before: func(_ *cli.Context) error {
+						Before: func(cliCtx *cli.Context) error {
 							logfilepath = initLogFile("daemon_install")
 
-							packagemanager.UpdateEnvPath()
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -123,8 +129,8 @@ func Run(args []string) {
 						Aliases:     []string{"update", "u"},
 						Description: "Update daemon to a new version",
 						Usage:       "Update daemon to a new version",
-						Before: func(_ *cli.Context) error {
-							packagemanager.UpdateEnvPath()
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -169,10 +175,10 @@ func Run(args []string) {
 						Aliases:     []string{"i"},
 						Description: "Install panel",
 						Usage:       "Install panel",
-						Before: func(_ *cli.Context) error {
+						Before: func(cliCtx *cli.Context) error {
 							logfilepath = initLogFile("panel_install")
 
-							packagemanager.UpdateEnvPath()
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
@@ -194,6 +200,11 @@ func Run(args []string) {
 							&cli.BoolFlag{
 								Name:  "develop",
 								Usage: "Install develop version of panel.",
+							},
+							&cli.StringFlag{
+								Name:  "version",
+								Usage: "Install specific version of panel (3 for PHP, 4 for Go)",
+								Value: "3",
 							},
 							&cli.BoolFlag{
 								Name:  "github",
@@ -230,15 +241,76 @@ func Run(args []string) {
 						},
 					},
 					{
+						Name:   "start",
+						Usage:  "Start GameAP",
+						Action: panelstart.Handle,
+					},
+					{
+						Name:   "stop",
+						Usage:  "Stop GameAP",
+						Action: panelstop.Handle,
+					},
+					{
+						Name:   "restart",
+						Usage:  "Restart GameAP",
+						Action: panelrestart.Handle,
+					},
+					{
+						Name:   "status",
+						Usage:  "GameAP Status",
+						Action: panelstatus.Handle,
+					},
+					{
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
-						Before: func(_ *cli.Context) error {
-							packagemanager.UpdateEnvPath()
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name: "to",
+								Usage: "Update to specific version. " +
+									"The version must be greater than the current one, " +
+									"for example: --to=v4, --to=4",
+							},
+						},
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
 
 							return nil
 						},
 						Action: panelupdate.Handle,
+					},
+					{
+						Name:  "uninstall",
+						Usage: "Uninstall GameAP panel. ",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "with-daemon",
+								Usage: "Uninstall Daemon",
+							},
+							&cli.BoolFlag{
+								Name: "with-data",
+								Usage: "Remove all GameAP data including database and configuration files. " +
+									"Use with caution!",
+							},
+							&cli.BoolFlag{
+								Name: "with-services",
+								Usage: "Remove all services files created by GameAP. " +
+									"Use with caution!",
+							},
+						},
+						Before: func(cliCtx *cli.Context) error {
+							packagemanager.UpdateEnvPath(cliCtx.Context)
+
+							return nil
+						},
+						Action: paneluninstall.Handle,
+					},
+					{
+						Name:        "change-password",
+						Usage:       "Change user password",
+						Description: "Change password for a user in GameAP v4 database",
+						Action:      panelchangepassword.Handle,
+						ArgsUsage:   "<username> [password]",
 					},
 				},
 			},
@@ -246,8 +318,8 @@ func Run(args []string) {
 				Name:        "ui",
 				Description: "Web interface in default browser. ",
 				Usage:       "Web interface in default browser. ",
-				Before: func(_ *cli.Context) error {
-					packagemanager.UpdateEnvPath()
+				Before: func(cliCtx *cli.Context) error {
+					packagemanager.UpdateEnvPath(cliCtx.Context)
 
 					return nil
 				},

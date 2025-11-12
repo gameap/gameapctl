@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 
-	contextInternal "github.com/gameap/gameapctl/internal/context"
-	"github.com/gameap/gameapctl/pkg/utils"
+	osinfo "github.com/gameap/gameapctl/pkg/os_info"
+	"github.com/gameap/gameapctl/pkg/oscore"
+	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 )
 
 type dnf struct{}
@@ -32,14 +35,12 @@ func (d *dnf) Search(_ context.Context, name string) ([]PackageInfo, error) {
 	return parseYumInfoOutput(out)
 }
 
-func (d *dnf) Install(_ context.Context, packs ...string) error {
-	args := []string{"install", "-y"}
-	for _, pack := range packs {
-		if pack == "" || pack == " " {
-			continue
-		}
-		args = append(args, pack)
+func (d *dnf) Install(_ context.Context, pack string, _ ...InstallOptions) error {
+	if pack == "" || pack == " " {
+		return nil
 	}
+
+	args := []string{"install", "-y", pack}
 	cmd := exec.Command("dnf", args...)
 
 	cmd.Env = os.Environ()
@@ -79,24 +80,59 @@ func (d *dnf) Purge(ctx context.Context, packs ...string) error {
 }
 
 type extendedDNF struct {
+	packages   map[string]pmdnf.PackageConfig
 	underlined PackageManager
 }
 
-func newExtendedDNF(underlined PackageManager) *extendedDNF {
-	return &extendedDNF{underlined: underlined}
+func newExtendedDNF(osinfo osinfo.Info, underlined PackageManager) (*extendedDNF, error) {
+	packages, err := pmdnf.LoadPackages(osinfo)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to load dnf packages configuration")
+	}
+
+	return &extendedDNF{
+		packages:   packages,
+		underlined: underlined,
+	}, nil
 }
 
-func (d *extendedDNF) Install(ctx context.Context, packs ...string) error {
+func (d *extendedDNF) Install(ctx context.Context, pack string, opts ...InstallOptions) error {
 	var err error
 
-	packs, err = d.preInstallationSteps(ctx, packs...)
+	options := &installOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	packs, err := d.excludeByLookupPathFound(ctx, pack)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check lookup paths")
+	}
+
+	if len(packs) == 0 {
+		return nil
+	}
+
+	packs, err = d.preInstallationSteps(ctx, lo.Uniq(append(packs, pack)), options)
 	if err != nil {
 		return errors.WithMessage(err, "failed to run pre-installation steps")
 	}
 
 	packs = d.replaceAliases(ctx, packs)
 
-	return d.underlined.Install(ctx, packs...)
+	for _, p := range packs {
+		err = d.underlined.Install(ctx, p, opts...)
+		if err != nil {
+			return errors.WithMessage(err, "failed to install packages")
+		}
+	}
+
+	err = d.postInstallationSteps(ctx, lo.Uniq(append(packs, pack)), options)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run post-installation steps")
+	}
+
+	return nil
 }
 
 func (d *extendedDNF) CheckForUpdates(ctx context.Context) error {
@@ -119,95 +155,240 @@ func (d *extendedDNF) Search(ctx context.Context, name string) ([]PackageInfo, e
 	return d.underlined.Search(ctx, name)
 }
 
-func (d *extendedDNF) replaceAliases(ctx context.Context, packs []string) []string {
-	return replaceAliases(ctx, dnfPackageAliases, packs)
-}
-
-func replaceAliases(ctx context.Context, aliasesMap distVersionPackagesMap, packs []string) []string {
-	replacedPacks := make([]string, 0, len(packs))
-
-	osInfo := contextInternal.OSInfoFromContext(ctx)
-
-	for _, pack := range packs {
-		if aliases, exists :=
-			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][osInfo.Platform][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][osInfo.DistributionCodename][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[osInfo.Distribution][CodeNameDefault][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else if aliases, exists =
-			aliasesMap[DistributionDefault][CodeNameDefault][ArchDefault][pack]; exists {
-			replacedPacks = append(replacedPacks, aliases...)
-		} else {
-			replacedPacks = append(replacedPacks, pack)
-		}
-	}
-
-	return replacedPacks
-}
-
-func (d *extendedDNF) preInstallationSteps(ctx context.Context, packs ...string) ([]string, error) {
+func (d *extendedDNF) replaceAliases(_ context.Context, packs []string) []string {
 	updatedPacks := make([]string, 0, len(packs))
 
-	for _, pack := range packs {
-		switch pack {
-		case PHPPackage:
-			err := d.addPHPRepository(ctx)
-			if err != nil {
-				return nil, errors.WithMessage(err, "failed to add PHP repository")
-			}
-
-			updatedPacks = append(updatedPacks, pack)
-		default:
-			updatedPacks = append(updatedPacks, pack)
+	for _, packName := range packs {
+		if config, exists := d.packages[packName]; exists && config.ReplaceWith != nil {
+			updatedPacks = append(updatedPacks, config.ReplaceWith...)
+		} else {
+			updatedPacks = append(updatedPacks, packName)
 		}
 	}
 
-	return updatedPacks, nil
+	return updatedPacks
 }
 
-func (d *extendedDNF) addPHPRepository(ctx context.Context) error {
-	osInfo := contextInternal.OSInfoFromContext(ctx)
+//nolint:unparam
+func (d *extendedDNF) excludeByLookupPathFound(_ context.Context, packs ...string) ([]string, error) {
+	filteredPacks := make([]string, 0, len(packs))
 
-	switch {
-	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "8":
-		err := utils.ExecCommand("dnf", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-8.rpm")
-		if err != nil {
-			return errors.WithMessage(err, "failed to install remirepo")
-		}
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists || len(config.LookupPaths) == 0 {
+			filteredPacks = append(filteredPacks, packName)
 
-		err = utils.ExecCommand("dnf", "-y", "module", "switch-to", "php:remi-8.2")
-		if err != nil {
-			return errors.WithMessage(err, "failed to switch to remirepo")
-		}
-	case osInfo.Distribution == DistributionCentOS && osInfo.DistributionCodename == "7":
-		repolistOut, err := utils.ExecCommandWithOutput("yum", "repolist")
-		if err != nil {
-			return errors.WithMessage(err, "failed to get repolist")
+			continue
 		}
 
-		if strings.Contains(repolistOut, "remi-php82") {
-			return nil
+		found := false
+		for _, lookupPath := range config.LookupPaths {
+			if _, err := exec.LookPath(lookupPath); err == nil {
+				found = true
+
+				break
+			}
 		}
 
-		err = utils.ExecCommand("yum", "-y", "install", "https://rpms.remirepo.net/enterprise/remi-release-7.rpm")
-		if err != nil {
-			return errors.WithMessage(err, "failed to install remirepo")
+		if !found {
+			filteredPacks = append(filteredPacks, packName)
+		}
+	}
+
+	return filteredPacks, nil
+}
+
+func (d *extendedDNF) executePreInstallationSteps(ctx context.Context, packs []string, options *installOptions) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists {
+			continue
 		}
 
-		err = utils.ExecCommand("yum", "-y", "install", "yum-utils")
-		if err != nil {
-			return errors.WithMessage(err, "failed to install yum-utils")
+		if len(config.PreInstall) == 0 {
+			continue
 		}
 
-		err = utils.ExecCommand("yum-config-manager", "--enable", "remi-php82")
-		if err != nil {
-			return errors.WithMessage(err, "failed to enable remi-php82 repository")
+		if executedPackages[packName] {
+			continue
 		}
+
+		runtimeVars := dnfRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
+		for _, step := range config.PreInstall {
+			if !d.checkConditions(step.Conditions) {
+				continue
+			}
+
+			for _, cmd := range step.RunCommands {
+				processedCmd, err := d.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to replace runtime variables in pre-install command for %s: %s", packName, cmd,
+					)
+				}
+
+				if err := d.executeCommand(ctx, processedCmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute pre-install command for %s: %s", packName, processedCmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
 	}
 
 	return nil
+}
+
+func (d *extendedDNF) checkConditions(conditions []pmdnf.Condition) bool {
+	if len(conditions) == 0 {
+		return true
+	}
+
+	for _, condition := range conditions {
+		if condition.FileNotExists != "" {
+			if _, err := os.Stat(condition.FileNotExists); err == nil {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (d *extendedDNF) preInstallationSteps(
+	ctx context.Context, packs []string, options *installOptions,
+) ([]string, error) {
+	err := d.executePreInstallationSteps(ctx, packs, options)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to run pre-installation steps")
+	}
+
+	return packs, nil
+}
+
+func (d *extendedDNF) postInstallationSteps(ctx context.Context, packs []string, options *installOptions) error {
+	executedPackages := make(map[string]bool)
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists {
+			continue
+		}
+
+		if len(config.PostInstall) == 0 {
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		runtimeVars := dnfRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
+		for _, step := range config.PostInstall {
+			for _, cmd := range step.RunCommands {
+				processedCmd, err := d.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to replace runtime variables in post-install command for %s: %s", packName, cmd,
+					)
+				}
+
+				log.Println("Running post-install command:", processedCmd)
+
+				if err := d.executeCommand(ctx, processedCmd); err != nil {
+					return errors.WithMessagef(
+						err,
+						"failed to execute post-install command for %s: %s", packName, processedCmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return nil
+}
+
+func (d *extendedDNF) executeCommand(ctx context.Context, cmdStr string) error {
+	cmdStr = strings.TrimSpace(cmdStr)
+	if cmdStr == "" {
+		return nil
+	}
+
+	command := "bash"
+
+	if _, err := exec.LookPath(command); err != nil {
+		command = "sh"
+	}
+
+	args := []string{"-c", cmdStr}
+
+	return oscore.ExecCommand(ctx, command, args...)
+}
+
+type dnfRuntimeTemplateVariables struct {
+	LookupPaths map[string]string
+	Options     *installOptions
+}
+
+func (d *extendedDNF) replaceRuntimeVariablesString(
+	_ context.Context, v string, vars dnfRuntimeTemplateVariables,
+) (string, error) {
+	funcMap := template.FuncMap{
+		"configValue": func(name string) string {
+			if vars.Options == nil {
+				return ""
+			}
+
+			val, exists := vars.Options.configValues[name]
+			if !exists {
+				return ""
+			}
+
+			return val
+		},
+	}
+
+	tmpl, err := template.New("package").Funcs(runtimeTemplateFuncMap).Funcs(funcMap).Parse(v)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse template")
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(len(v) + 100) //nolint:mnd
+
+	err = tmpl.Execute(&buf, vars)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to execute template")
+	}
+
+	return buf.String(), nil
 }

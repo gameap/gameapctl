@@ -1,6 +1,7 @@
 package osinfo
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/matishsiao/goInfo"
 	"github.com/pkg/errors"
 )
@@ -32,6 +34,10 @@ const (
 
 	DistributionWindows Distribution = "windows"
 )
+
+func (d Distribution) String() string {
+	return string(d)
+}
 
 func (d Distribution) IsDebianLike() bool {
 	return d == DistributionDebian || d == DistributionUbuntu || d == DistributionRaspbian
@@ -109,10 +115,10 @@ func (info Info) IsWindows() bool {
 }
 
 func (info Info) IsLinux() bool {
-	return runtime.GOOS == "linux"
+	return runtime.GOOS == "linux" || info.OS == "GNU/Linux"
 }
 
-func GetOSInfo() (Info, error) {
+func GetOSInfo(ctx context.Context) (Info, error) {
 	gi, err := goInfo.GetInfo()
 	if err != nil {
 		return Info{}, err
@@ -129,7 +135,7 @@ func GetOSInfo() (Info, error) {
 	result.Platform = detectPlatform()
 
 	if gi.OS == "GNU/Linux" {
-		info, err := detectLinuxDist()
+		info, err := detectLinuxDist(ctx)
 		if err != nil {
 			return result, err
 		}
@@ -151,8 +157,8 @@ type distInfo struct {
 	VersionCodename string
 }
 
-//nolint:funlen,gocognit
-func detectLinuxDist() (distInfo, error) {
+//nolint:gocognit,funlen
+func detectLinuxDist(ctx context.Context) (distInfo, error) {
 	const (
 		etcLsbRelease = "/etc/lsb-release"
 		etcOsRelease  = "/etc/os-release"
@@ -177,6 +183,10 @@ func detectLinuxDist() (distInfo, error) {
 			result.Name = id
 			result.VersionCodename = versionID
 		} else {
+			if versionID == "" {
+				versionID = extractField(data, "DISTRIB_RELEASE")
+			}
+
 			// debian
 			result.Name = extractField(data, "DISTRIB_ID")
 			result.VersionCodename = extractField(data, "DISTRIB_CODENAME")
@@ -184,6 +194,8 @@ func detectLinuxDist() (distInfo, error) {
 				result.VersionCodename = extractField(data, "DISTRIB_RELEASE")
 			}
 		}
+
+		result.Version = versionID
 	} else if _, err := os.Stat(etcOsRelease); !os.IsNotExist(err) {
 		// /etc/os-release exists, read it
 		data, err := os.ReadFile(etcOsRelease)
@@ -194,6 +206,7 @@ func detectLinuxDist() (distInfo, error) {
 		// extract ID and VERSION_CODENAME from /etc/os-release
 		id := extractField(data, "ID")
 		versionCodename := extractField(data, "VERSION_CODENAME")
+		result.Version = extractField(data, "VERSION_ID")
 
 		if id == "" {
 			// fallback to /etc/lsb-release
@@ -211,27 +224,28 @@ func detectLinuxDist() (distInfo, error) {
 			}
 		}
 	} else if _, err := exec.LookPath("lsb_release"); err == nil {
-		// lsb_release exists
-		// extract dist from lsb_release -c
-		cmd := exec.Command("lsb_release", "-c")
-		cmd.Stderr = os.Stderr
-		out, err := cmd.Output()
+		out, err := oscore.ExecCommandWithOutput(ctx, "lsb_release", "-c")
 		if err != nil {
 			return distInfo{}, err
 		}
-		result.VersionCodename = strings.Split(string(out), ":")[1]
+		result.VersionCodename = strings.Split(out, ":")[1]
 		result.VersionCodename = strings.TrimSpace(result.VersionCodename)
 
-		// extract os from lsb_release -i
-		cmd = exec.Command("lsb_release", "-i")
-		cmd.Stderr = os.Stderr
-		out, err = cmd.Output()
+		out, err = oscore.ExecCommandWithOutput(ctx, "lsb_release", "-i")
 		if err != nil {
 			return distInfo{}, err
 		}
-		result.Name = strings.Split(string(out), ":")[1]
+		result.Name = strings.Split(out, ":")[1]
 		result.Name = strings.TrimSpace(result.Name)
 		result.Name = strings.ToLower(result.Name)
+
+		out, err = oscore.ExecCommandWithOutput(ctx, "lsb_release", "-r")
+		if err != nil {
+			return distInfo{}, err
+		}
+
+		result.Version = strings.Split(out, ":")[1]
+		result.Version = strings.TrimSpace(result.Version)
 	}
 
 	_, debianVersionErr := os.Stat("/etc/debian_version")
@@ -264,6 +278,7 @@ func detectLinuxDist() (distInfo, error) {
 	result.Name = strings.ReplaceAll(result.Name, " ", "")
 	result.VersionCodename = strings.ReplaceAll(result.VersionCodename, " ", "")
 	result.Name = strings.Trim(result.Name, "\"")
+	result.Version = strings.Trim(result.Version, "\"")
 	result.VersionCodename = strings.Trim(result.VersionCodename, "\"")
 
 	// lowercase

@@ -1,12 +1,18 @@
 //go:build windows
-// +build windows
 
 package gameap
 
 const DefaultWebInstallationPath = "C:\\gameap\\web"
 const DefaultWorkPath = "C:\\gameap"
 
-// Daemon
+// GameAP v4.
+
+const DefaultConfigFilePath = "C:\\gameap\\web\\config.env"
+const DefaultDataPath = "C:\\gameap\\web"
+const DefaultBinaryPath = "C:\\gameap\\web\\gameap.exe"
+
+// Daemon.
+
 const DefaultDaemonCertPath = "C:\\gameap\\daemon\\certs"
 const DefaultToolsPath = "C:\\gameap\\tools"
 const DefaultSteamCMDPath = "C:\\gameap\\steamcmd"

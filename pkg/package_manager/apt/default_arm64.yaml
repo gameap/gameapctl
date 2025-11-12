@@ -1,0 +1,9 @@
+packages:
+  - name: lib32gcc
+    replace-with: [lib32gcc-s1-amd64-cross]
+
+  - name: lib32stdc++6
+    replace-with: [lib32stdc++6-amd64-cross]
+
+  - name: lib32z1
+    replace-with: []

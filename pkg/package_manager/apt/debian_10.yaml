@@ -1,0 +1,24 @@
+packages:
+  - name: mysql-server
+    replace-with: [default-mysql-server]
+    pre-install:
+      - run-commands:
+          - debconf-set-selections <<< 'mysql-server mysql-server/root_password password {{ configValue "db-root-password" }}'
+          - debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password {{ configValue "db-root-password" }}'
+
+  - name: lib32gcc
+    replace-with: [lib32gcc1]
+
+  - name: nginx
+    pre-install:
+      - conditions:
+          - file-not-exists: /usr/share/keyrings/nginx-archive-keyring.gpg
+        run-commands:
+          - mkdir -p /usr/share/keyrings/
+          - curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+
+      - conditions:
+          - file-not-exists: /etc/apt/sources.list.d/nginx.list
+        run-commands:
+          - echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/{{distname}}/ {{codename}} nginx" > /etc/apt/sources.list.d/nginx.list
+          - apt-get update
