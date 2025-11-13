@@ -24,7 +24,11 @@ func Handle(cliCtx *cli.Context) error {
 	withData := cliCtx.Bool("with-data")
 	withServices := cliCtx.Bool("with-services")
 
-	fmt.Println("Uninstalling GameAP Panel...")
+	fmt.Println("Uninstalling GameAP...")
+
+	fmt.Println("With Daemon:", withDaemon)
+	fmt.Println("With Data:", withData)
+	fmt.Println("With Services:", withServices)
 
 	pm, err := packagemanager.Load(ctx)
 	if err != nil {

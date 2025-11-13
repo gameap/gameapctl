@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
@@ -20,12 +21,29 @@ const (
 )
 
 func Handle(cliCtx *cli.Context) error {
+	ctx := cliCtx.Context
+
 	fmt.Println("GameAP update")
 
 	currentMajorVersion, err := detectMajorVersion(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
+
+	state, err := gameapctl.LoadPanelInstallState(cliCtx.Context)
+	if err == nil && state.Version == "" {
+		// Update installation state with detected version if not set
+		state.Version = string(currentMajorVersion)
+		saveStateErr := gameapctl.SavePanelInstallState(ctx, state)
+		if saveStateErr != nil {
+			log.Println("Warning: failed to update panel installation state with detected version:", saveStateErr)
+		}
+	}
+	if err != nil {
+		log.Println("Warning: failed to load panel installation state:", err)
+	}
+
+	fmt.Printf("Detected installed GameAP version: %s\n", currentMajorVersion)
 
 	toValue := cliCtx.String("to")
 	if toValue != "" {
@@ -65,15 +83,7 @@ func detectMajorVersion(ctx context.Context) (version, error) {
 		}
 	}
 
-	// Priority 2: Check v4-specific markers (using constants from pkg/gameap)
-	// These paths are platform-specific via build tags
-	if utils.IsFileExists(gameap.DefaultConfigFilePath) ||
-		utils.IsFileExists(gameap.DefaultBinaryPath) ||
-		utils.IsFileExists(gameap.DefaultDataPath) {
-		return versionV4, nil
-	}
-
-	// Priority 3: Check v3-specific markers using installation state
+	// Priority 2: Check v3-specific markers using installation state
 	if err == nil && state.Path != "" {
 		// Check if artisan file exists (Laravel indicator)
 		artisanPath := filepath.Join(state.Path, "artisan")
@@ -86,6 +96,14 @@ func detectMajorVersion(ctx context.Context) (version, error) {
 		if utils.IsFileExists(envPath) {
 			return versionV3, nil
 		}
+	}
+
+	// Priority 3: Check v4-specific markers (using constants from pkg/gameap)
+	// These paths are platform-specific via build tags
+	if utils.IsFileExists(gameap.DefaultConfigFilePath) ||
+		utils.IsFileExists(gameap.DefaultBinaryPath) ||
+		utils.IsFileExists(gameap.DefaultDataPath) {
+		return versionV4, nil
 	}
 
 	return "", errors.New("unable to detect GameAP version: no installation markers found")

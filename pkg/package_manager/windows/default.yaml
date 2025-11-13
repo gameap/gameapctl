@@ -1,6 +1,8 @@
 packages:
   - name: nginx
     lookup-paths: [ nginx ]
+    dependencies:
+      - shawl
     pre-install:
       - grant-permissions:
           - path: C:\gameap\tools\nginx
@@ -28,8 +30,17 @@ packages:
       service-account:
         username: NT AUTHORITY\NETWORK SERVICE
         password: ""
-    dependencies:
-      - shawl
+    uninstall:
+      - conditions:
+          - service-exists: nginx
+        run-commands:
+          - sc stop nginx
+          - sc delete nginx
+      - conditions:
+          - file-exists: "{{package_install_path}}"
+        run-commands:
+          - del /F /Q {{package_install_path}}\*
+
 
   - name: mysql-server
     lookup-paths: [mysql, mysqld]
@@ -39,6 +50,19 @@ packages:
       - run-commands:
           - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
         wait-for-service: MariaDB
+      - run-commands:
+          - mv mariadb-10.6.16-winx64.msi {{package_install_path}}\
+    uninstall:
+      - conditions:
+          - file-exists: "{{package_install_path}}\\mariadb-10.6.16-winx64.msi"
+        run-commands:
+          - net stop MariaDB
+          - msiexec /x {{package_install_path}}\mariadb-10.6.16-winx64.msi /qb
+
+      - conditions:
+          - file-not-exists: "{{package_install_path}}\\mariadb-10.6.16-winx64.msi"
+        run-commands:
+          - msiexec /x {C3F4DD71-ABAE-4715-B5EF-C600DE171C69} /qb
 
   - name: mariadb-server
     lookup-paths: [ mariadb, mariadbd ]
@@ -48,9 +72,25 @@ packages:
       - run-commands:
           - start /wait msiexec /i mariadb-10.6.16-winx64.msi SERVICENAME=MariaDB PORT=9306 /qb
         wait-for-service: MariaDB
+      - run-commands:
+          - mv mariadb-10.6.16-winx64.msi {{package_install_path}}\
+    uninstall:
+      - conditions:
+          - file-exists: "{{package_install_path}}\\mariadb-10.6.16-winx64.msi"
+        run-commands:
+          - net stop MariaDB
+          - msiexec /x {{package_install_path}}\mariadb-10.6.16-winx64.msi /qb
+
+      - conditions:
+          - file-not-exists: "{{package_install_path}}\\mariadb-10.6.16-winx64.msi"
+        run-commands:
+          - msiexec /x {C3F4DD71-ABAE-4715-B5EF-C600DE171C69} /qb
+
 
   - name: postgresql
     lookup-paths: [ psql, postgres ]
+    dependencies:
+      - vcredist17
     download-urls:
       - https://get.enterprisedb.com/postgresql/postgresql-17.6-2-windows-x64-binaries.zip
     install-path: ${ProgramFiles}\PostgreSQL\17
@@ -93,6 +133,20 @@ packages:
             "bin\psql.exe"
               postgresql://postgres:{{ configValue "db-root-password" }}@127.0.0.1:5432
                 -c "CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};"
+    uninstall:
+      - conditions:
+          - service-exists: PostgreSQL
+        run-commands:
+          - sc stop PostgreSQL
+          - sc delete PostgreSQL
+      - conditions:
+          - file-exists: ${ProgramData}\PostgreSQL\17\data
+        run-commands:
+          - rmdir /S /Q ${ProgramData}\PostgreSQL\17\data
+      - conditions:
+          - file-exists: "{{package_install_path}}"
+        run-commands:
+          - rmdir /S /Q "{{package_install_path}}"
 
   - name: php
     lookup-paths: [ php, php-cgi ]
@@ -122,6 +176,17 @@ packages:
     dependencies:
       - vcredist16
       - shawl
+    uninstall:
+      - conditions:
+          - service-exists: php-fpm
+        run-commands:
+          - sc stop php-fpm
+          - sc delete php-fpm
+      - conditions:
+          - file-exists: "{{package_install_path}}"
+        run-commands:
+        - del /F /Q {{package_install_path}}\*
+        - rmdir /S /Q {{package_install_path}}
 
   - name: php-extensions
     dependencies:
@@ -133,6 +198,14 @@ packages:
     install:
       - run-commands:
           - VC_redist.x64.exe /install /quiet /norestart
+        allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
+
+  - name: vcredist17
+    download-urls:
+      - https://aka.ms/vs/17/release/vc_redist.x64.exe
+    install:
+      - run-commands:
+          - vc_redist.x64.exe /install /quiet /norestart
         allowed-install-exit-codes: [ 1638 ] # 1638 = already installed
 
   - name: vcredist17-x86

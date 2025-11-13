@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         goos: ["linux", "windows"]
-        goarch: ["amd64", "386", "arm64", "arm", "mips", "mips64"]
+        goarch: ["amd64", "386", "arm64"]
         exclude:
           - goarch: "mips"
             goos: windows

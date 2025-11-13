@@ -69,6 +69,7 @@ type Package struct {
 }
 
 type InstallStep struct {
+	Conditions              []Condition      `yaml:"conditions,omitempty"`
 	GrantPermissions        []Permission     `yaml:"grant-permissions,omitempty"`
 	RunCommands             []string         `yaml:"run-commands,omitempty"`
 	Env                     []EnvironmentVar `yaml:"env,omitempty"`
@@ -78,8 +79,9 @@ type InstallStep struct {
 }
 
 type UninstallStep struct {
-	RunCommands               []string `yaml:"run-commands,omitempty"`
-	AllowedUninstallExitCodes []int    `yaml:"allowed-uninstall-exit-codes,omitempty"`
+	Conditions                []Condition `yaml:"conditions,omitempty"`
+	RunCommands               []string    `yaml:"run-commands,omitempty"`
+	AllowedUninstallExitCodes []int       `yaml:"allowed-uninstall-exit-codes,omitempty"`
 }
 
 // Service represents a Windows service configuration.
@@ -128,6 +130,7 @@ func (e EnvironmentVar) String() string {
 
 // PreInstall represents pre-installation steps.
 type PreInstall struct {
+	Conditions       []Condition  `yaml:"conditions,omitempty"`
 	GrantPermissions []Permission `yaml:"grant-permissions,omitempty"`
 	Commands         []string     `yaml:"commands,omitempty"`
 }
@@ -137,6 +140,13 @@ type Permission struct {
 	Path   string `yaml:"path"`
 	User   string `yaml:"user"`
 	Access string `yaml:"access"`
+}
+
+type Condition struct {
+	FileExists       string `yaml:"file-exists"`
+	FileNotExists    string `yaml:"file-not-exists"`
+	ServiceExists    string `yaml:"service-exists"`
+	ServiceNotExists string `yaml:"service-not-exists"`
 }
 
 var (
@@ -238,6 +248,10 @@ func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	pkg.InstallPath = os.ExpandEnv(replaceValues(pkg.InstallPath, osinf, pkg))
 
 	for i := range pkg.PreInstall {
+		for j := range pkg.PreInstall[i].Conditions {
+			pkg.PreInstall[i].Conditions[j] = replaceValuesInCondition(pkg, pkg.PreInstall[i].Conditions[j], osinf)
+		}
+
 		pkg.PreInstall[i].Commands = normalizeCommands(
 			expandEnvSlice(replaceValuesSlice(pkg.PreInstall[i].Commands, osinf, pkg)),
 		)
@@ -252,6 +266,10 @@ func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	}
 
 	for i := range pkg.Install {
+		for j := range pkg.Install[i].Conditions {
+			pkg.Install[i].Conditions[j] = replaceValuesInCondition(pkg, pkg.Install[i].Conditions[j], osinf)
+		}
+
 		pkg.Install[i].RunCommands = normalizeCommands(
 			expandEnvSlice(replaceValuesSlice(pkg.Install[i].RunCommands, osinf, pkg)),
 		)
@@ -275,12 +293,25 @@ func replaceValuesInPackage(pkg Package, osinf osinfo.Info) Package {
 	}
 
 	for i := range pkg.Uninstall {
+		for j := range pkg.Uninstall[i].Conditions {
+			pkg.Uninstall[i].Conditions[j] = replaceValuesInCondition(pkg, pkg.Uninstall[i].Conditions[j], osinf)
+		}
+
 		pkg.Uninstall[i].RunCommands = normalizeCommands(
 			expandEnvSlice(replaceValuesSlice(pkg.Uninstall[i].RunCommands, osinf, pkg)),
 		)
 	}
 
 	return pkg
+}
+
+func replaceValuesInCondition(p Package, c Condition, osinf osinfo.Info) Condition {
+	c.FileExists = os.ExpandEnv(replaceValues(c.FileExists, osinf, p))
+	c.FileNotExists = os.ExpandEnv(replaceValues(c.FileNotExists, osinf, p))
+	c.ServiceExists = os.ExpandEnv(replaceValues(c.ServiceExists, osinf, p))
+	c.ServiceNotExists = os.ExpandEnv(replaceValues(c.ServiceNotExists, osinf, p))
+
+	return c
 }
 
 func replaceValuesSlice(slice []string, osinf osinfo.Info, pkg Package) []string {

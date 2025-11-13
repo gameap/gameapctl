@@ -859,6 +859,8 @@ func installPostgreSQL(
 		return state, errors.WithMessage(err, "failed to install PostgreSQL")
 	}
 
+	state.DatabaseWasInstalled = true
+
 	state, err = checkPostgreSQLConnectionV4(ctx, state)
 	if err != nil {
 		log.Println(err)

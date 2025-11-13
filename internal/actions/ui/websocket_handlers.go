@@ -306,6 +306,8 @@ func gameapUninstall(ctx context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to get executable path")
 	}
 
+	log.Println("Uninstalling GameAP, args:", args)
+
 	exPath := filepath.Dir(ex)
 
 	exArgs := append([]string{"--non-interactive", "panel", "uninstall"}, args...)
@@ -314,6 +316,8 @@ func gameapUninstall(ctx context.Context, w io.Writer, args []string) error {
 	cmd.Stdout = w
 	cmd.Stderr = w
 	cmd.Dir = exPath
+
+	log.Println("Executing command:", cmd.String())
 
 	err = cmd.Run()
 	if err != nil {
