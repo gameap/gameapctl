@@ -144,7 +144,7 @@ packages:
         run-commands:
           - rmdir /S /Q ${ProgramData}\PostgreSQL\17\data
       - conditions:
-          - file-exists: {{package_install_path}}
+          - file-exists: "{{package_install_path}}"
         run-commands:
           - rmdir /S /Q "{{package_install_path}}"
 
