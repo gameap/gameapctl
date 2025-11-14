@@ -1,9 +1,11 @@
 package panel
 
+import "github.com/gameap/gameapctl/pkg/gameap"
+
 const (
-	defaultConfigDir  = "C:\\gameap\\web"
-	defaultDataDir    = "C:\\gameap\\web"
-	defaultBinaryPath = "C:\\gameap\\gameap.exe"
+	defaultConfigDir  = gameap.DefaultWebInstallationPath
+	defaultDataDir    = gameap.DefaultDataPath
+	defaultBinaryPath = gameap.DefaultBinaryPath
 	defaultUser       = "gameap"
 	defaultGroup      = "gameap"
 )
