@@ -396,7 +396,7 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 			state.DBCreds.DatabaseName,
 		)
 	case sqliteDatabase:
-		databaseURL = state.DBCreds.DatabaseName
+		databaseURL = "file:" + state.DBCreds.DatabaseName + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared"
 	case postgresDatabase:
 		databaseURL = fmt.Sprintf(
 			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
