@@ -1,0 +1,3 @@
+packages:
+  - name: lib32z1
+    replace-with: [zlib-ng-compat.i686]
