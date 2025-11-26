@@ -167,7 +167,7 @@ func detectLinuxDist(ctx context.Context) (distInfo, error) {
 	result := distInfo{}
 
 	//nolint:nestif
-	if _, err := os.Stat(etcLsbRelease); !os.IsNotExist(err) {
+	if _, err := os.Stat(etcLsbRelease); err == nil {
 		// /etc/lsb-release exists, read it
 		data, err := os.ReadFile(etcLsbRelease)
 		if err != nil {
@@ -196,7 +196,7 @@ func detectLinuxDist(ctx context.Context) (distInfo, error) {
 		}
 
 		result.Version = versionID
-	} else if _, err := os.Stat(etcOsRelease); !os.IsNotExist(err) {
+	} else if _, err := os.Stat(etcOsRelease); err == nil {
 		// /etc/os-release exists, read it
 		data, err := os.ReadFile(etcOsRelease)
 		if err != nil {
@@ -223,6 +223,11 @@ func detectLinuxDist(ctx context.Context) (distInfo, error) {
 				result.VersionCodename = extractField(data, "VERSION_ID")
 			}
 		}
+
+		if result.VersionCodename == "" && result.Version != "" {
+			result.VersionCodename = result.Version
+		}
+
 	} else if _, err := exec.LookPath("lsb_release"); err == nil {
 		out, err := oscore.ExecCommandWithOutput(ctx, "lsb_release", "-c")
 		if err != nil {
