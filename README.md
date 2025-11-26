@@ -15,9 +15,11 @@ Other operating systems may work as well, if they can run the required dependenc
 
 | Version     | Supported | Notes                                    |
 |-------------|-----------|------------------------------------------|
+| Server 2025 | ✔         | Latest manual test (v0.20.4): 26.11.2024 |
 | Server 2022 | ✔         | Latest manual test (v0.9.1): 02.03.2024  |
 | Server 2019 | ✔         | Latest manual test (v0.9.3): 02.03.2024  |
 | Server 2016 | ✔         | Latest manual test (v0.9.3): 10.03.2024  |
+| 11          | ✔         | Latest manual test (v0.20.4): 26.11.2025 |
 | 10          | ✔         | Latest manual test (v0.10.0): 26.05.2024 |
 
 ### Debian

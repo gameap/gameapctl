@@ -227,7 +227,6 @@ func detectLinuxDist(ctx context.Context) (distInfo, error) {
 		if result.VersionCodename == "" && result.Version != "" {
 			result.VersionCodename = result.Version
 		}
-
 	} else if _, err := exec.LookPath("lsb_release"); err == nil {
 		out, err := oscore.ExecCommandWithOutput(ctx, "lsb_release", "-c")
 		if err != nil {
