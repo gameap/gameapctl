@@ -809,7 +809,7 @@ func postgresqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, _ string) (bool,
 
 func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	if !utils.IsFileExists(state.DBCreds.DatabaseName) {
-		err := os.MkdirAll(state.DataDirectory, 0644)
+		err := os.MkdirAll(state.DataDirectory, 0755)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create data directory for sqlite database")
 		}

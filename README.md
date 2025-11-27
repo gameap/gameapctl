@@ -68,3 +68,10 @@ Other operating systems may work as well, if they can run the required dependenc
 | Version | Supported | Notes                                                                                                                                    |
 |---------|-----------|------------------------------------------------------------------------------------------------------------------------------------------|
 | 9.3     | ⚠️        | Latest manual test (v0.10.0): 15.05.2024<br/>Web part tested with MySQL Database<br/>Rocky Linux 9.3 no longer ships any i686 user space |
+
+
+### Fedora
+
+| Version | Supported | Notes                                    |
+|---------|-----------|------------------------------------------|
+| 43      | ✔         | Latest manual test (v0.20.6): 26.11.2024 |
