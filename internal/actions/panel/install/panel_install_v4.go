@@ -396,7 +396,7 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 			state.DBCreds.DatabaseName,
 		)
 	case sqliteDatabase:
-		databaseURL = state.DBCreds.DatabaseName
+		databaseURL = "file:" + state.DBCreds.DatabaseName + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared"
 	case postgresDatabase:
 		databaseURL = fmt.Sprintf(
 			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -809,7 +809,7 @@ func postgresqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, _ string) (bool,
 
 func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	if !utils.IsFileExists(state.DBCreds.DatabaseName) {
-		err := os.MkdirAll(state.DataDirectory, 0644)
+		err := os.MkdirAll(state.DataDirectory, 0755)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to create data directory for sqlite database")
 		}

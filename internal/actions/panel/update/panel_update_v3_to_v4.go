@@ -329,7 +329,7 @@ func buildDatabaseURL(v3Config map[string]string) (string, string, error) {
 			return "", "", errors.New("sqlite database path not specified")
 		}
 
-		return dbDriverSQLite, dbPath, nil
+		return dbDriverSQLite, "file:" + dbPath + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared", nil
 
 	default:
 		return "", "", errors.Errorf("unsupported database connection: %s", dbConnection)
@@ -663,7 +663,7 @@ func handleSQLiteMigration(v3Path string, v3Config map[string]string, installCon
 		return errors.WithMessage(err, "failed to copy SQLite database")
 	}
 
-	installConfig.DatabaseURL = v4DBPath
+	installConfig.DatabaseURL = "file:" + v4DBPath + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared"
 	log.Println("SQLite database migrated successfully")
 
 	return nil

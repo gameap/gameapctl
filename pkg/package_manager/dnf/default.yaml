@@ -5,6 +5,9 @@ packages:
   - name: lib32stdc6
     replace-with: [libstdc++.i686]
 
+  - name: lib32stdc++6
+    replace-with: [libstdc++.i686]
+
   - name: lib32z1
     replace-with: [zlib.i686]
 

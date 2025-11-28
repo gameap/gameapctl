@@ -17,6 +17,9 @@ WorkingDirectory={{.WorkingDirectory}}
 
 ExecStart={{.ExecStart}}
 
+# Allow binding to privileged ports
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
 # Graceful stop
 ExecStop=/bin/kill -TERM $MAINPID
 KillMode=mixed

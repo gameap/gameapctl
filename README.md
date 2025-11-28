@@ -15,9 +15,11 @@ Other operating systems may work as well, if they can run the required dependenc
 
 | Version     | Supported | Notes                                    |
 |-------------|-----------|------------------------------------------|
+| Server 2025 | ✔         | Latest manual test (v0.20.4): 26.11.2024 |
 | Server 2022 | ✔         | Latest manual test (v0.9.1): 02.03.2024  |
 | Server 2019 | ✔         | Latest manual test (v0.9.3): 02.03.2024  |
 | Server 2016 | ✔         | Latest manual test (v0.9.3): 10.03.2024  |
+| 11          | ✔         | Latest manual test (v0.20.4): 26.11.2025 |
 | 10          | ✔         | Latest manual test (v0.10.0): 26.05.2024 |
 
 ### Debian
@@ -66,3 +68,10 @@ Other operating systems may work as well, if they can run the required dependenc
 | Version | Supported | Notes                                                                                                                                    |
 |---------|-----------|------------------------------------------------------------------------------------------------------------------------------------------|
 | 9.3     | ⚠️        | Latest manual test (v0.10.0): 15.05.2024<br/>Web part tested with MySQL Database<br/>Rocky Linux 9.3 no longer ships any i686 user space |
+
+
+### Fedora
+
+| Version | Supported | Notes                                    |
+|---------|-----------|------------------------------------------|
+| 43      | ✔         | Latest manual test (v0.20.6): 26.11.2024 |

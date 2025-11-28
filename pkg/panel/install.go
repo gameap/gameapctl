@@ -265,11 +265,11 @@ func generateRandomKey(length int) (string, error) {
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to generate random bytes")
 	}
-	if n != randomKeyLength {
+	if n != length {
 		return "", errors.New("failed to generate required number of random bytes")
 	}
 
-	encoded := base64.RawURLEncoding.EncodeToString(random)
+	encoded := base64.StdEncoding.EncodeToString(random)
 
 	return fmt.Sprintf("base64:%s", encoded), nil
 }
