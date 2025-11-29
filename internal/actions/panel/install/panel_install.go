@@ -18,12 +18,12 @@ var DatabasePasswordGenerator = lo.Must(password.NewGenerator(&password.Generato
 func Handle(cliCtx *cli.Context) error {
 	var err error
 
-	version := lo.CoalesceOrEmpty(cliCtx.String("version"), "3")
+	version := lo.CoalesceOrEmpty(cliCtx.String("version"), "4")
 
 	switch {
 	case version == "":
-		// Default to v3
-		return HandleV3(cliCtx)
+		// Default to v4
+		return HandleV4(cliCtx)
 
 	case strings.HasPrefix(version, "3"),
 		strings.HasPrefix(version, "v3"):
