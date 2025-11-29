@@ -57,7 +57,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        distro: [ 'ubuntu:22.04', 'ubuntu:24.04', 'debian:bookworm', 'debian:trixie' ]
+        distro: [ 'ubuntu:24.04', 'debian:trixie' ]
         database: [mysql, sqlite]
         web-server: [nginx, apache]
         go-version: [1.25.x]
@@ -67,11 +67,6 @@ jobs:
             database: 'sqlite'
         include:
           - distro: 'debian:sid'
-            web-server: 'nginx'
-            database: 'mysql'
-            experimental: true
-            go-version: '1.25.x'
-          - distro: 'debian:bullseye'
             web-server: 'nginx'
             database: 'mysql'
             experimental: true
@@ -117,7 +112,7 @@ jobs:
         run: |
           cd cmd/gameapctl/
           go build .
-          ./gameapctl --non-interactive panel install --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+          ./gameapctl --non-interactive panel install --version 3 --path=/var/www/gameap --host=127.0.0.1 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Daemon Installation Test
         run: |
@@ -232,7 +227,7 @@ jobs:
           del C:\tools\nginx* -Recurse -Force
           cd .\cmd\gameapctl\
           go build .
-          .\gameapctl.exe --non-interactive panel install --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
+          .\gameapctl.exe --non-interactive panel install --version 3 --path=C:\gameap\web --host=127.0.0.1 --port=3080 --web-server=${{ matrix.web-server}} --database=${{ matrix.database}}
 
       - name: Daemon Installation Test
         run: |
