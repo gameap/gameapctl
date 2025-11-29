@@ -671,10 +671,15 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 	}
 
 	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
-		pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
-		cfg.Users = map[string]string{
-			state.User: "base64:" + pw,
+		if state.User != "" {
+			pw := base64.StdEncoding.EncodeToString([]byte(state.Password))
+
+			cfg.Users = map[string]string{
+				state.User: "base64:" + pw,
+			}
 		}
+
+		cfg.UseNetworkServiceUser = true
 	}
 
 	cfgBytes, err := yaml.Marshal(cfg)
@@ -922,6 +927,13 @@ type DaemonConfig struct {
 	ProcessManager ProcessManagerConfig `yaml:"process_manager,omitempty"`
 
 	Users map[string]string `yaml:"users"`
+
+	// Windows specific settings
+
+	// If true, the daemon will run servers under the "NT AUTHORITY\NETWORK SERVICE" user.
+	// This user has limited permissions and is suitable for running game servers securely.
+	// If false, servers will run under the user specified in the "users" section of the config.
+	UseNetworkServiceUser bool `yaml:"use_network_service_user"`
 }
 
 func findDaemonReleaseURL(ctx context.Context) (string, error) {

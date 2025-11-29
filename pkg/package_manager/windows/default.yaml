@@ -254,8 +254,6 @@ packages:
       executable: gameap-daemon
       working-directory: C:\gameap\daemon
       log-directory: C:\gameap\services\logs\gameap-daemon
-      service-account:
-        username: NT AUTHORITY\NETWORK SERVICE
     dependencies:
       - shawl
       - winsw # GameAP Daemon uses WinSW as service wrapper

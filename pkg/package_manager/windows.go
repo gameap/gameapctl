@@ -885,7 +885,7 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 		serviceName = p.Service.ID
 	}
 
-	serviceAccount := defaultServiceUser
+	serviceAccount := ""
 	if p.Service.ServiceAccount != nil && p.Service.ServiceAccount.Username != "" {
 		serviceAccount = p.Service.ServiceAccount.Username
 	}
@@ -973,9 +973,13 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 		"create",
 		serviceName,
 		"start=auto",
-		fmt.Sprintf("obj=%s", serviceAccount),
-		fmt.Sprintf("binPath=%s", binPath),
 	}
+
+	if serviceAccount != "" {
+		scArgs = append(scArgs, fmt.Sprintf("obj=%s", serviceAccount))
+	}
+
+	scArgs = append(scArgs, fmt.Sprintf("binPath=%s", binPath))
 
 	log.Println("Creating service with sc command:", "sc", strings.Join(scArgs, " "))
 

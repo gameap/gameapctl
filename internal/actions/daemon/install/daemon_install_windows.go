@@ -13,10 +13,11 @@ import (
 
 const (
 	defaultUserName = "NT AUTHORITY\\NETWORK SERVICE"
+	gameapUserName  = "gameap"
 )
 
 func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
-	return state, nil
+	return state, nil // No need to create a user on Windows
 }
 
 func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
@@ -53,7 +54,7 @@ func setFirewallRules(ctx context.Context, state daemonsInstallState) (daemonsIn
 }
 
 const (
-	defaultProcessManager = "winsw"
+	defaultProcessManager = "shawl"
 )
 
 func defineProcessManager(_ context.Context, state daemonsInstallState) (daemonsInstallState, error) {
