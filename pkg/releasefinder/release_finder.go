@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,8 +21,9 @@ type Release struct {
 
 func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 	const (
-		maxRetries     = 3
-		initialBackoff = 2 * time.Second
+		maxRetries       = 5
+		initialBackoff   = 2 * time.Second
+		maxRateLimitWait = 10 * time.Minute
 	)
 
 	var lastErr error
@@ -29,12 +31,13 @@ func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2
+			waitDuration := calculateWaitDuration(lastErr, backoff, maxRateLimitWait)
+			if waitDuration > 0 {
+				if err := waitWithContext(ctx, waitDuration); err != nil {
+					return nil, err
+				}
 			}
+			backoff *= 2
 		}
 
 		release, err := fetchRelease(ctx, api, kernel, platform)
@@ -44,16 +47,44 @@ func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 
 		lastErr = err
 
-		if shouldRetry(err) {
-			log.Printf("Rate limited by GitHub API (attempt %d/%d), retrying after %v", attempt+1, maxRetries+1, backoff)
-
-			continue
+		if !shouldRetry(err) {
+			return nil, err
 		}
-
-		return nil, err
 	}
 
 	return nil, errors.WithMessage(lastErr, "failed after retries")
+}
+
+func calculateWaitDuration(lastErr error, backoff, maxWait time.Duration) time.Duration {
+	var rateLimitErr rateLimitError
+	if !errors.As(lastErr, &rateLimitErr) || rateLimitErr.resetTime.IsZero() {
+		log.Printf("Rate limited by GitHub API, retrying after %v", backoff)
+
+		return backoff
+	}
+
+	waitDuration := time.Until(rateLimitErr.resetTime) + time.Second
+	if waitDuration > maxWait {
+		waitDuration = maxWait
+	}
+	if waitDuration > 0 {
+		log.Printf(
+			"Rate limited by GitHub API. Waiting until %s (%v)...",
+			rateLimitErr.resetTime.Format("15:04:05"),
+			waitDuration.Round(time.Second),
+		)
+	}
+
+	return waitDuration
+}
+
+func waitWithContext(ctx context.Context, duration time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(duration):
+		return nil
+	}
 }
 
 func fetchRelease(_ context.Context, api, kernel, platform string) (*Release, error) {
@@ -69,7 +100,7 @@ func fetchRelease(_ context.Context, api, kernel, platform string) (*Release, er
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, handleErrorResponse(resp.StatusCode, bodyBytes)
+		return nil, handleErrorResponse(resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	return findReleaseFromBytes(bodyBytes, kernel, platform)
@@ -78,13 +109,14 @@ func fetchRelease(_ context.Context, api, kernel, platform string) (*Release, er
 type rateLimitError struct {
 	statusCode int
 	message    string
+	resetTime  time.Time
 }
 
 func (e rateLimitError) Error() string {
 	return e.message
 }
 
-func handleErrorResponse(statusCode int, bodyBytes []byte) error {
+func handleErrorResponse(statusCode int, bodyBytes []byte, headers http.Header) error {
 	var errorResponse struct {
 		Message string `json:"message"`
 	}
@@ -97,7 +129,14 @@ func handleErrorResponse(statusCode int, bodyBytes []byte) error {
 	}
 
 	if statusCode == http.StatusForbidden || statusCode == http.StatusTooManyRequests {
-		return rateLimitError{statusCode: statusCode, message: errMsg}
+		var resetTime time.Time
+		if resetHeader := headers.Get("X-RateLimit-Reset"); resetHeader != "" {
+			if resetUnix, err := strconv.ParseInt(resetHeader, 10, 64); err == nil {
+				resetTime = time.Unix(resetUnix, 0)
+			}
+		}
+
+		return rateLimitError{statusCode: statusCode, message: errMsg, resetTime: resetTime}
 	}
 
 	return errors.New(errMsg)
