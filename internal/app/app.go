@@ -204,7 +204,7 @@ func Run(args []string) {
 							&cli.StringFlag{
 								Name:  "version",
 								Usage: "Install specific version of panel (3 for PHP, 4 for Go)",
-								Value: "3",
+								Value: "4",
 							},
 							&cli.BoolFlag{
 								Name:  "github",
