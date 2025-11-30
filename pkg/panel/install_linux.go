@@ -71,5 +71,10 @@ func createSystemdUnit(ctx context.Context, config InstallConfig) error {
 		return errors.WithMessage(err, "failed to reload systemd daemon")
 	}
 
+	err = oscore.ExecCommand(ctx, "systemctl", "enable", "gameap")
+	if err != nil {
+		return errors.WithMessage(err, "failed to enable gameap service")
+	}
+
 	return nil
 }

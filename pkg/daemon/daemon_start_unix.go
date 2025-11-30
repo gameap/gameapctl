@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -96,9 +97,14 @@ func daemonConfigureSystemd(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to copy service configuration")
 	}
 
-	err = utils.ExecCommand("systemctl", "daemon-reload")
+	err = oscore.ExecCommand(ctx, "systemctl", "daemon-reload")
 	if err != nil {
 		return errors.WithMessage(err, "failed to reload systemctl")
+	}
+
+	err = oscore.ExecCommand(ctx, "systemctl", "enable", "gameap-daemon")
+	if err != nil {
+		return errors.WithMessage(err, "failed to enable gameap-daemon service")
 	}
 
 	return nil
