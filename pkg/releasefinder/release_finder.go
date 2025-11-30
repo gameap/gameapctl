@@ -23,7 +23,7 @@ func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 	const (
 		maxRetries       = 5
 		initialBackoff   = 2 * time.Second
-		maxRateLimitWait = 10 * time.Minute
+		maxRateLimitWait = 2 * time.Minute
 	)
 
 	var lastErr error
