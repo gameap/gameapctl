@@ -161,6 +161,19 @@ func Install(ctx context.Context, host, token string) error {
 		return errors.WithMessage(err, "failed to create user")
 	}
 
+	if !utils.IsFileExists(filepath.Join(state.WorkPath, "servers")) {
+		fmt.Println("Creating servers directory ...")
+
+		err = os.MkdirAll(filepath.Join(state.WorkPath, "servers"), 0755)
+		if err != nil {
+			return errors.Wrapf(
+				err,
+				"failed to create servers directory %s",
+				filepath.Join(state.WorkPath, "servers"),
+			)
+		}
+	}
+
 	if state.OSInfo.Platform.IsX86() {
 		fmt.Println("Installing steamcmd ...")
 		state, err = installSteamCMD(ctx, pm, state)
