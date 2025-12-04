@@ -83,7 +83,7 @@ func Handle(cliCtx *cli.Context) error {
 	)
 }
 
-//nolint:gocognit,funlen
+//nolint:gocognit,funlen,gocyclo
 func Install(ctx context.Context, host, token string) error {
 	fmt.Println("Install daemon")
 
