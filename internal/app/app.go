@@ -120,6 +120,10 @@ func Run(args []string) {
 								EnvVars: []string{"PANEL_HOST"},
 							},
 							&cli.StringFlag{
+								Name:    "config",
+								EnvVars: []string{"CONFIG"},
+							},
+							&cli.StringFlag{
 								Name: "work-dir",
 							},
 						},

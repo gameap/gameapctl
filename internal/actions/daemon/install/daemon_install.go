@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -56,8 +57,9 @@ func (e InvalidResponseStatusCodeError) Error() string {
 }
 
 type daemonsInstallState struct {
-	Host  string
-	Token string
+	Host   string
+	Token  string
+	Config string
 
 	WorkPath     string
 	SteamCMDPath string
@@ -80,16 +82,18 @@ func Handle(cliCtx *cli.Context) error {
 		cliCtx.Context,
 		cliCtx.String("host"),
 		cliCtx.String("token"),
+		cliCtx.String("config"),
 	)
 }
 
 //nolint:gocognit,funlen,gocyclo
-func Install(ctx context.Context, host, token string) error {
+func Install(ctx context.Context, host, token, config string) error {
 	fmt.Println("Install daemon")
 
 	state := daemonsInstallState{
 		Host:         host,
 		Token:        token,
+		Config:       config,
 		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
@@ -695,6 +699,11 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		cfg.UseNetworkServiceUser = true
 	}
 
+	if state.Config != "" {
+		overrides := parseConfigOverrides(state.Config)
+		applyConfigOverrides(&cfg, overrides)
+	}
+
 	cfgBytes, err := yaml.Marshal(cfg)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to marshal daemon config")
@@ -703,6 +712,89 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 	err = os.WriteFile(gameap.DefaultDaemonConfigFilePath, cfgBytes, 0600)
 
 	return state, err
+}
+
+func parseConfigOverrides(configEnv string) map[string]string {
+	if configEnv == "" {
+		return make(map[string]string)
+	}
+
+	configStr := configEnv
+
+	decoded, err := base64.StdEncoding.DecodeString(configEnv)
+	if err == nil && strings.Contains(string(decoded), "=") {
+		configStr = string(decoded)
+	}
+
+	overrides := make(map[string]string)
+	pairs := strings.Split(configStr, ";")
+
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			log.Printf("Warning: skipping malformed config override: %s", pair)
+
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		overrides[key] = value
+	}
+
+	return overrides
+}
+
+func applyConfigOverrides(cfg *DaemonConfig, overrides map[string]string) {
+	for key, value := range overrides {
+		switch {
+		case key == "process_manager.name":
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.ProcessManager.Name = value
+
+		case strings.HasPrefix(key, "process_manager.config."):
+			configKey := strings.TrimPrefix(key, "process_manager.config.")
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			if cfg.ProcessManager.Config == nil {
+				cfg.ProcessManager.Config = make(map[string]string)
+			}
+			cfg.ProcessManager.Config[configKey] = value
+
+		case key == "listen_ip":
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.ListenIP = value
+
+		case key == "listen_port":
+			port, err := strconv.Atoi(value)
+			if err != nil {
+				log.Printf("Warning: invalid listen_port value '%s', skipping", value)
+
+				continue
+			}
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.ListenPort = port
+
+		case key == "log_level":
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.LogLevel = value
+
+		case key == "work_path":
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.WorkPath = value
+
+		case key == "steamcmd_path":
+			fmt.Printf("Applying config override: %s=%s\n", key, value)
+			cfg.SteamCMDPath = value
+
+		default:
+			log.Printf("Warning: unknown config override key '%s', skipping", key)
+		}
+	}
 }
 
 func detectLocation() string {
