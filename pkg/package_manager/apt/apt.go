@@ -39,7 +39,6 @@ type PackageConfig struct {
 	Name         string            `yaml:"name"`
 	Dependencies []string          `yaml:"dependencies"`
 	ReplaceWith  []string          `yaml:"replace-with"`
-	Virtual      bool              `yaml:"virtual"`
 	LookupPaths  []string          `yaml:"lookup-paths"`
 	PreInstall   []PreInstallStep  `yaml:"pre-install"`
 	Install      []InstallStep     `yaml:"install"`

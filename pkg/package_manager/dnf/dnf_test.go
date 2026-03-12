@@ -18,7 +18,6 @@ func TestLoadPackages_Default(t *testing.T) {
 		require.True(t, exists, "lib32gcc should exist in default.yaml")
 		assert.Equal(t, "lib32gcc", pkg.Name)
 		assert.Equal(t, []string{"libgcc.i686"}, pkg.ReplaceWith)
-		assert.False(t, pkg.Virtual)
 		assert.Empty(t, pkg.PreInstall)
 		assert.Empty(t, pkg.PostInstall)
 	})
@@ -37,11 +36,10 @@ func TestLoadPackages_Default(t *testing.T) {
 		assert.Equal(t, []string{"xz"}, pkg.ReplaceWith)
 	})
 
-	t.Run("php-extensions virtual package", func(t *testing.T) {
+	t.Run("php-extensions package", func(t *testing.T) {
 		pkg, exists := packages["php-extensions"]
 		require.True(t, exists, "php-extensions should exist in default.yaml")
 		assert.Equal(t, "php-extensions", pkg.Name)
-		assert.True(t, pkg.Virtual)
 		assert.Contains(t, pkg.ReplaceWith, "php-bcmath")
 		assert.Contains(t, pkg.ReplaceWith, "php-gd")
 		assert.Contains(t, pkg.ReplaceWith, "php-xml")

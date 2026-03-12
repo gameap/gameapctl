@@ -120,6 +120,11 @@ func (d *extendedDNF) Install(ctx context.Context, pack string, opts ...InstallO
 
 	packs = d.replaceAliases(ctx, packs)
 
+	packs, err = d.executeInstallSteps(ctx, packs, options)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run install steps")
+	}
+
 	for _, p := range packs {
 		err = d.underlined.Install(ctx, p, opts...)
 		if err != nil {
@@ -280,6 +285,60 @@ func (d *extendedDNF) preInstallationSteps(
 	}
 
 	return packs, nil
+}
+
+func (d *extendedDNF) executeInstallSteps(
+	ctx context.Context, packs []string, options *installOptions,
+) ([]string, error) {
+	executedPackages := make(map[string]bool)
+	packsToInstall := make([]string, 0, len(packs))
+
+	for _, packName := range packs {
+		config, exists := d.packages[packName]
+		if !exists || len(config.Install) == 0 {
+			packsToInstall = append(packsToInstall, packName)
+
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		runtimeVars := dnfRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
+		for _, step := range config.Install {
+			for _, cmd := range step.RunCommands {
+				processedCmd, err := d.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
+					return nil, errors.WithMessagef(
+						err,
+						"failed to replace runtime variables in install command for %s: %s", packName, cmd,
+					)
+				}
+
+				if err := d.executeCommand(ctx, processedCmd); err != nil {
+					return nil, errors.WithMessagef(
+						err,
+						"failed to execute install command for %s: %s", packName, processedCmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return packsToInstall, nil
 }
 
 func (d *extendedDNF) postInstallationSteps(ctx context.Context, packs []string, options *installOptions) error {

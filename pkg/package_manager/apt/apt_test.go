@@ -18,7 +18,6 @@ func TestLoadPackages_Default(t *testing.T) {
 		require.True(t, exists, "postgresql should exist in default.yaml")
 		assert.Equal(t, "postgresql", pkg.Name)
 		assert.Equal(t, []string{"postgresql", "postgresql-contrib"}, pkg.ReplaceWith)
-		assert.False(t, pkg.Virtual)
 		assert.Empty(t, pkg.PreInstall)
 		require.Len(t, pkg.PostInstall, 2)
 		assert.Empty(t, pkg.Install)
@@ -31,11 +30,10 @@ func TestLoadPackages_Default(t *testing.T) {
 		assert.Empty(t, pkg.ReplaceWith)
 	})
 
-	t.Run("composer virtual package with install", func(t *testing.T) {
+	t.Run("composer package with install", func(t *testing.T) {
 		pkg, exists := packages["composer"]
 		require.True(t, exists, "composer should exist in default.yaml")
 		assert.Equal(t, "composer", pkg.Name)
-		assert.True(t, pkg.Virtual)
 		require.Len(t, pkg.Install, 1)
 		require.Len(t, pkg.Install[0].RunCommands, 1)
 		assert.Contains(t, pkg.Install[0].RunCommands[0], "curl -sS https://getcomposer.org/installer")

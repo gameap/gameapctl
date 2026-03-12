@@ -15,7 +15,6 @@ packages:
     replace-with: [xz]
 
   - name: php-extensions
-    virtual: true
     replace-with: [php-bcmath, php-gd, php-gmp, php-intl,
       php-json, php-mbstring, php-mysqlnd, php-opcache,
       php-openssl, php-pdo, php-pecl-zip,
@@ -42,7 +41,6 @@ packages:
           - systemctl start redis
 
   - name: docker
-    virtual: true
     lookup-paths: [ docker ]
     install:
       - run-commands:

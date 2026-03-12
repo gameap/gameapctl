@@ -256,6 +256,11 @@ func (e *extendedAPT) Install(ctx context.Context, pack string, opts ...InstallO
 
 	packs = e.replaceAliases(ctx, packs)
 
+	packs, err = e.executeInstallSteps(ctx, packs, options)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run install steps")
+	}
+
 	for _, p := range packs {
 		err = e.apt.Install(ctx, p, opts...)
 		if err != nil {
@@ -510,6 +515,60 @@ func (e *extendedAPT) executePreInstallationSteps(ctx context.Context, packs []s
 	}
 
 	return nil
+}
+
+func (e *extendedAPT) executeInstallSteps(
+	ctx context.Context, packs []string, options *installOptions,
+) ([]string, error) {
+	executedPackages := make(map[string]bool)
+	packsToInstall := make([]string, 0, len(packs))
+
+	for _, packName := range packs {
+		config, exists := e.packages[packName]
+		if !exists || len(config.Install) == 0 {
+			packsToInstall = append(packsToInstall, packName)
+
+			continue
+		}
+
+		if executedPackages[packName] {
+			continue
+		}
+
+		runtimeVars := aptRuntimeTemplateVariables{
+			LookupPaths: make(map[string]string, len(config.LookupPaths)),
+			Options:     options,
+		}
+
+		for _, lookupPath := range config.LookupPaths {
+			if resolvedPath, err := exec.LookPath(lookupPath); err == nil {
+				runtimeVars.LookupPaths[lookupPath] = resolvedPath
+			}
+		}
+
+		for _, step := range config.Install {
+			for _, cmd := range step.RunCommands {
+				processedCmd, err := e.replaceRuntimeVariablesString(ctx, cmd, runtimeVars)
+				if err != nil {
+					return nil, errors.WithMessagef(
+						err,
+						"failed to replace runtime variables in install command for %s: %s", packName, cmd,
+					)
+				}
+
+				if err := e.executeCommand(ctx, processedCmd); err != nil {
+					return nil, errors.WithMessagef(
+						err,
+						"failed to execute install command for %s: %s", packName, processedCmd,
+					)
+				}
+			}
+		}
+
+		executedPackages[packName] = true
+	}
+
+	return packsToInstall, nil
 }
 
 func (e *extendedAPT) checkConditions(conditions []pmapt.Condition) bool {

@@ -19,7 +19,6 @@ packages:
           - su - postgres -c "psql -c \"CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};\""
 
   - name: composer
-    virtual: true
     lookup-paths: [ composer ]
     install:
       - run-commands:
@@ -47,7 +46,6 @@ packages:
           - apt-get update
 
   - name: docker
-    virtual: true
     lookup-paths: [ docker ]
     install:
       - run-commands:
