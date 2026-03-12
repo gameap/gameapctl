@@ -47,6 +47,7 @@ packages:
           - apt-get update
 
   - name: docker
+    virtual: true
     lookup-paths: [ docker ]
     install:
       - run-commands:
