@@ -10,15 +10,6 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 )
 
-const (
-	processManagerDefault = processManagerTmux
-	processManagerSystemD = "systemd"
-	processManagerDocker  = "docker"
-	processManagerPodman  = "podman"
-	processManagerSimple  = "simple"
-	processManagerTmux    = "tmux"
-)
-
 func defineProcessManager(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	if state.Config != "" {
 		overrides := parseConfigOverrides(state.Config)

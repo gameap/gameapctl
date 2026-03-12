@@ -42,6 +42,15 @@ const (
 	defaultDaemonPort = 31717
 )
 
+const (
+	processManagerDefault = processManagerTmux
+	processManagerSystemD = "systemd"
+	processManagerDocker  = "docker"
+	processManagerPodman  = "podman"
+	processManagerSimple  = "simple"
+	processManagerTmux    = "tmux"
+)
+
 var errEmptyToken = errors.New("empty token")
 
 type UnableToSetupNodeError string
