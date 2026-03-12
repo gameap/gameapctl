@@ -40,3 +40,11 @@ packages:
       - run-commands:
           - systemctl enable redis
           - systemctl start redis
+
+  - name: docker
+    virtual: true
+    lookup-paths: [ docker ]
+    install:
+      - run-commands:
+          - >
+            curl -sSL https://get.docker.com/ | CHANNEL=stable sh
