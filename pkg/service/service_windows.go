@@ -3,19 +3,17 @@
 package service
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"log"
-	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/shellquote"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 type Windows struct{}
@@ -176,18 +174,18 @@ func (s *Windows) Restart(_ context.Context, _ string) error {
 	return errors.New("use stop and start instead of restart")
 }
 
-func (s *Windows) Status(ctx context.Context, serviceName string) error {
-	svc, err := findService(ctx, serviceName)
+func (s *Windows) Status(_ context.Context, serviceName string) error {
+	state, err := findService(serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
 
 		return NewNotFoundError(serviceName)
 	}
-	if svc == nil {
+	if state == 0 {
 		return NewNotFoundError(serviceName)
 	}
 
-	if svc.State != windowsServiceStateRunning && svc.State != windowsServiceStateStartPending {
+	if state != svc.Running && state != svc.StartPending {
 		return ErrInactiveService
 	}
 
@@ -195,23 +193,23 @@ func (s *Windows) Status(ctx context.Context, serviceName string) error {
 }
 
 func (s *Windows) start(ctx context.Context, serviceName string) error {
-	svc, err := findService(ctx, serviceName)
+	state, err := findService(serviceName)
 	if err != nil {
 		fmt.Println(errors.WithMessage(err, "failed to find service"))
 
 		return NewNotFoundError(serviceName)
 	}
-	if svc == nil {
+	if state == 0 {
 		return NewNotFoundError(serviceName)
 	}
 
-	switch svc.State {
-	case windowsServiceStateRunning:
+	switch state {
+	case svc.Running:
 		log.Printf("Service '%s' is already running\n", serviceName)
-	case windowsServiceStateStartPending:
+	case svc.StartPending:
 		log.Printf("Service '%s' is starting\n", serviceName)
 
-		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
+		return s.waitStatus(ctx, serviceName, svc.Running)
 	default:
 		err = oscore.ExecCommand(ctx, "sc", "start", serviceName)
 	}
@@ -219,55 +217,55 @@ func (s *Windows) start(ctx context.Context, serviceName string) error {
 		return err
 	}
 
-	svc, err = findService(ctx, serviceName)
+	state, err = findService(serviceName)
 	if err != nil {
 		return err
 	}
 
-	if svc.State != windowsServiceStateStartPending {
+	if state != svc.StartPending {
 		log.Printf("Service '%s' status is starting\n", serviceName)
 
-		return s.waitStatus(ctx, serviceName, windowsServiceStateRunning)
+		return s.waitStatus(ctx, serviceName, svc.Running)
 	}
 
 	return nil
 }
 
 func (s *Windows) stop(ctx context.Context, serviceName string) error {
-	svc, err := findService(ctx, serviceName)
-	if err != nil || svc == nil {
+	state, err := findService(serviceName)
+	if err != nil || state == 0 {
 		return NewNotFoundError(serviceName)
 	}
 
-	switch svc.State {
-	case windowsServiceStateRunning, windowsServiceStateStartPending:
+	switch state {
+	case svc.Running, svc.StartPending:
 		err = oscore.ExecCommand(ctx, "sc", "stop", serviceName)
-	case windowsServiceStateStopped:
+	case svc.Stopped:
 		log.Printf("Service '%s' is already stopped\n", serviceName)
-	case windowsServiceStateStopPending:
+	case svc.StopPending:
 		log.Printf("Service '%s' is stopping\n", serviceName)
 
-		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
+		return s.waitStatus(ctx, serviceName, svc.Stopped)
 	}
 	if err != nil {
 		return err
 	}
 
-	svc, err = findService(ctx, serviceName)
+	state, err = findService(serviceName)
 	if err != nil {
 		return err
 	}
 
-	if svc.State != windowsServiceStateStartPending {
+	if state != svc.StartPending {
 		log.Printf("Service status '%s' is starting\n", serviceName)
 
-		return s.waitStatus(ctx, serviceName, windowsServiceStateStopped)
+		return s.waitStatus(ctx, serviceName, svc.Stopped)
 	}
 
 	return nil
 }
 
-func (s *Windows) waitStatus(ctx context.Context, serviceName string, status windowsServiceState) error {
+func (s *Windows) waitStatus(ctx context.Context, serviceName string, status svc.State) error {
 	log.Println("Waiting for service status")
 
 	t := time.NewTicker(5 * time.Second) //nolint:mnd
@@ -284,22 +282,22 @@ func (s *Windows) waitStatus(ctx context.Context, serviceName string, status win
 			return ctx.Err()
 		}
 
-		svc, err := findService(ctx, serviceName)
-		if err != nil || svc == nil {
+		state, err := findService(serviceName)
+		if err != nil || state == 0 {
 			return NewNotFoundError(serviceName)
 		}
 
-		if svc.State == status {
+		if state == status {
 			return nil
 		}
 
-		if svc.State != windowsServiceStateStartPending &&
-			svc.State != windowsServiceStateStopPending &&
-			svc.State != windowsServiceStateContinuePending &&
-			svc.State != windowsServiceStatePausePending {
+		if state != svc.StartPending &&
+			state != svc.StopPending &&
+			state != svc.ContinuePending &&
+			state != svc.PausePending {
 			return errors.WithMessagef(
 				errors.New("failed to wait service status, service state is not pending"),
-				"current service state: %d", svc.State,
+				"current service state: %d", state,
 			)
 		}
 
@@ -309,130 +307,39 @@ func (s *Windows) waitStatus(ctx context.Context, serviceName string, status win
 	return errors.New("failed to wait service status")
 }
 
-func IsExists(ctx context.Context, serviceName string) bool {
-	s, err := findService(ctx, serviceName)
+func IsExists(_ context.Context, serviceName string) bool {
+	m, err := mgr.Connect()
 	if err != nil {
 		return false
 	}
+	defer m.Disconnect()
 
-	return s != nil
-}
-
-func findService(_ context.Context, serviceName string) (*windowsService, error) {
-	cmd := exec.Command("sc", "queryex", "type=service", "state=all")
-	buf := &bytes.Buffer{}
-	buf.Grow(10240) //nolint:mnd
-	cmd.Stdout = buf
-	cmd.Stderr = log.Writer()
-
-	err := cmd.Run()
+	s, err := m.OpenService(serviceName)
 	if err != nil {
-		return nil, errors.WithMessage(err, "service query command failed")
+		return false
 	}
+	s.Close()
 
-	log.Println("\n", cmd.String())
+	return true
+}
 
-	services, err := parseScQueryex(buf.Bytes())
+func findService(serviceName string) (svc.State, error) {
+	m, err := mgr.Connect()
 	if err != nil {
-		log.Println(buf.String())
-
-		return nil, err
+		return 0, errors.WithMessage(err, "failed to connect to service manager")
 	}
+	defer m.Disconnect()
 
-	serviceNames := make([]string, 0, len(services))
-	for _, winservice := range services {
-		serviceNames = append(serviceNames, winservice.ServiceName)
-	}
-	log.Println("Services: ", strings.Join(serviceNames, ", "))
-
-	for _, winservice := range services {
-		if strings.EqualFold(winservice.ServiceName, serviceName) {
-			return &winservice, nil
-		}
-	}
-
-	return nil, NewNotFoundError(serviceName)
-}
-
-type windowsServiceState int
-
-const (
-	windowsServiceStateUnknown         windowsServiceState = 0
-	windowsServiceStateStopped         windowsServiceState = 1
-	windowsServiceStateStartPending    windowsServiceState = 2
-	windowsServiceStateStopPending     windowsServiceState = 3
-	windowsServiceStateRunning         windowsServiceState = 4
-	windowsServiceStateContinuePending windowsServiceState = 5
-	windowsServiceStatePausePending    windowsServiceState = 6
-	windowsServiceStatePause           windowsServiceState = 7
-)
-
-func parseWindowsServiceState(s string) windowsServiceState {
-	statusString := string(s[0])
-	result, err := strconv.Atoi(statusString)
+	s, err := m.OpenService(serviceName)
 	if err != nil {
-		log.Println("Failed to parse windows service state")
-		log.Println(s)
-		log.Println(err)
+		return 0, nil
+	}
+	defer s.Close()
+
+	status, err := s.Query()
+	if err != nil {
+		return 0, errors.WithMessage(err, "failed to query service status")
 	}
 
-	return windowsServiceState(result)
-}
-
-type windowsService struct {
-	ServiceName   string
-	DisplayName   string
-	Type          string
-	State         windowsServiceState
-	Win32ExitCode string
-	ExitCode      string
-	Checkpoint    string
-	WaitHint      string
-	PID           string
-	Flags         string
-}
-
-//nolint:unparam
-func parseScQueryex(buf []byte) ([]windowsService, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(buf))
-	services := make([]windowsService, 0)
-	var s windowsService
-
-	for scanner.Scan() {
-		parts := strings.SplitN(scanner.Text(), ":", 2)
-		if len(parts) < 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		switch key {
-		case "SERVICE_NAME":
-			s.ServiceName = value
-		case "DISPLAY_NAME":
-			s.DisplayName = value
-		case "TYPE":
-			s.Type = value
-		case "STATE":
-			s.State = parseWindowsServiceState(value)
-		case "WIN32_EXIT_CODE":
-			s.Win32ExitCode = value
-		case "SERVICE_EXIT_CODE":
-			s.ExitCode = value
-		case "CHECKPOINT":
-			s.Checkpoint = value
-		case "WAIT_HINT":
-			s.WaitHint = value
-		case "PID":
-			s.PID = value
-		case "FLAGS":
-			s.Flags = value
-
-			services = append(services, s)
-			s = windowsService{}
-		}
-	}
-
-	return services, nil
+	return status.State, nil
 }
