@@ -149,12 +149,25 @@ func Install(ctx context.Context, host, token, config string) error {
 			}
 		}
 
-		if state.ProcessManager == "tmux" {
+		if state.ProcessManager == processManagerDefault {
 			fmt.Println("Checking for tmux ...")
+
 			if !utils.IsCommandAvailable("tmux") {
 				fmt.Println("Installing tmux ...")
 				if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
 					return errors.WithMessage(err, "failed to install tmux")
+				}
+			}
+		}
+
+		if state.ProcessManager == processManagerDocker {
+			fmt.Println("Checking for docker ...")
+
+			if !utils.IsCommandAvailable("docker") {
+				fmt.Println("Installing docker ...")
+
+				if err = pm.Install(ctx, packagemanager.DockerPackage); err != nil {
+					return errors.WithMessage(err, "failed to install docker")
 				}
 			}
 		}

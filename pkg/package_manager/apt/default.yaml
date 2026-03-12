@@ -45,3 +45,10 @@ packages:
             echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >
             /etc/apt/sources.list.d/nodesource.list
           - apt-get update
+
+  - name: docker
+    lookup-paths: [ docker ]
+    install:
+      - run-commands:
+          - >
+            curl -sSL https://get.docker.com/ | CHANNEL=stable sh
