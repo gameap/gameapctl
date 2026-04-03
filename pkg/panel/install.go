@@ -78,11 +78,76 @@ type ConfigEnvData struct {
 	GlobalAPIURL       string
 }
 
-// Install installs GameAP v4.
-//
-//nolint:gocognit
+// Configure sets up GameAP v4 configuration: creates user/group, directories, config.env,
+// and platform-specific setup (e.g. systemd unit). Does not download binaries.
+func Configure(ctx context.Context, config InstallConfig) error {
+	config = applyConfigDefaults(config)
+
+	var err error
+
+	if config.EncryptionKey == "" {
+		config.EncryptionKey, err = generateRandomKey(randomKeyLength)
+		if err != nil {
+			return errors.WithMessage(err, "failed to generate encryption key")
+		}
+	}
+	if config.AuthSecret == "" {
+		config.AuthSecret, err = generateRandomKey(randomAuthKeyLength)
+		if err != nil {
+			return errors.WithMessage(err, "failed to generate auth secret")
+		}
+	}
+
+	//nolint:nestif
+	if runtime.GOOS != "windows" {
+		fmt.Println("Creating GameAP user and group ...")
+
+		if err := oscore.CreateGroup(ctx, config.Group); err != nil {
+			var existsErr *oscore.GroupAlreadyExistsError
+			if !errors.As(err, &existsErr) {
+				return errors.WithMessage(err, "failed to create group")
+			}
+
+			fmt.Println("Group already exists")
+		}
+
+		if err := oscore.CreateUser(ctx, config.User, oscore.WithWorkDir(config.DataDirectory)); err != nil {
+			var existsErr *oscore.UserAlreadyExistsError
+			if !errors.As(err, &existsErr) {
+				return errors.WithMessage(err, "failed to create user")
+			}
+
+			fmt.Println("User already exists")
+		}
+	}
+
+	fmt.Println("Creating directories ...")
+	if err := createDirectories(ctx, config); err != nil {
+		return errors.WithMessage(err, "failed to create directories")
+	}
+
+	fmt.Println("Creating configuration file ...")
+	if err := createConfigEnv(ctx, config); err != nil {
+		return errors.WithMessage(err, "failed to create config.env")
+	}
+
+	return install(ctx, config)
+}
+
+// Install installs GameAP v4: configures and downloads binaries.
 func Install(ctx context.Context, config InstallConfig) error {
-	// Set defaults if not provided
+	if err := Configure(ctx, config); err != nil {
+		return err
+	}
+
+	if err := downloadBinaries(ctx, config); err != nil {
+		return errors.WithMessage(err, "failed to download binaries")
+	}
+
+	return nil
+}
+
+func applyConfigDefaults(config InstallConfig) InstallConfig {
 	if config.ConfigDirectory == "" {
 		config.ConfigDirectory = defaultConfigDir
 	}
@@ -108,18 +173,6 @@ func Install(ctx context.Context, config InstallConfig) error {
 		config.AuthService = "paseto"
 	}
 	if config.CacheDriver == "" {
-		// Determine cache driver based on database driver
-		// Now we will always use inmemory as default. In most cases of default installation it is the best choice.
-		// Another cache drivers should be used in case of more than one panel instance or more complex setups.
-		//	switch config.DatabaseDriver {
-		//	case "sqlite", "sqlite3":
-		//		config.CacheDriver = "inmemory"
-		//	case "mysql":
-		//		config.CacheDriver = "mysql"
-		//	default:
-		//		config.CacheDriver = "inmemory"
-		//	}
-
 		config.CacheDriver = "inmemory"
 	}
 	if config.FilesDriver == "" {
@@ -132,65 +185,7 @@ func Install(ctx context.Context, config InstallConfig) error {
 		config.GlobalAPIURL = "https://api.gameap.com"
 	}
 
-	// Generate encryption key and auth secret if not provided
-	if config.EncryptionKey == "" {
-		key, err := generateRandomKey(randomKeyLength)
-		if err != nil {
-			return errors.WithMessage(err, "failed to generate encryption key")
-		}
-		config.EncryptionKey = key
-	}
-	if config.AuthSecret == "" {
-		secret, err := generateRandomKey(randomAuthKeyLength)
-		if err != nil {
-			return errors.WithMessage(err, "failed to generate auth secret")
-		}
-		config.AuthSecret = secret
-	}
-
-	// Create user and group
-	//nolint:nestif
-	if runtime.GOOS != "windows" {
-		fmt.Println("Creating GameAP user and group ...")
-
-		if err := oscore.CreateGroup(ctx, config.Group); err != nil {
-			var existsErr *oscore.GroupAlreadyExistsError
-			if !errors.As(err, &existsErr) {
-				return errors.WithMessage(err, "failed to create group")
-			}
-
-			fmt.Println("Group already exists")
-		}
-
-		if err := oscore.CreateUser(ctx, config.User, oscore.WithWorkDir(config.DataDirectory)); err != nil {
-			var existsErr *oscore.UserAlreadyExistsError
-			if !errors.As(err, &existsErr) {
-				return errors.WithMessage(err, "failed to create user")
-			}
-
-			fmt.Println("User already exists")
-		}
-	}
-
-	// Create directories
-	fmt.Println("Creating directories ...")
-	if err := createDirectories(ctx, config); err != nil {
-		return errors.WithMessage(err, "failed to create directories")
-	}
-
-	// Create config.env file
-	fmt.Println("Creating configuration file ...")
-	if err := createConfigEnv(ctx, config); err != nil {
-		return errors.WithMessage(err, "failed to create config.env")
-	}
-
-	// Download binaries
-	if err := downloadBinaries(ctx, config); err != nil {
-		return errors.WithMessage(err, "failed to download binaries")
-	}
-
-	// Perform platform-specific installation steps
-	return install(ctx, config)
+	return config
 }
 
 // createConfigEnv creates the config.env file.

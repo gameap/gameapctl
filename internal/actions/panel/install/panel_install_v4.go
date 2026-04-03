@@ -408,43 +408,7 @@ func HandleV4(cliCtx *cli.Context) error {
 }
 
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
-	// Build database URL
-	var databaseURL string
-
-	switch state.Database {
-	case mysqlDatabase:
-		databaseURL = fmt.Sprintf(
-			"%s:%s@tcp(%s:%s)/%s?parseTime=true",
-			state.DBCreds.Username,
-			state.DBCreds.Password,
-			state.DBCreds.Host,
-			state.DBCreds.Port,
-			state.DBCreds.DatabaseName,
-		)
-	case sqliteDatabase:
-		databaseURL = "file:" + state.DBCreds.DatabaseName + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared"
-	case postgresDatabase:
-		databaseURL = fmt.Sprintf(
-			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-			state.DBCreds.Username,
-			state.DBCreds.Password,
-			state.DBCreds.Host,
-			state.DBCreds.Port,
-			state.DBCreds.DatabaseName,
-		)
-	}
-
-	// Install GameAP v4
-	err := panel.Install(ctx, panel.InstallConfig{
-		ConfigDirectory: state.ConfigDirectory,
-		DataDirectory:   state.DataDirectory,
-		HTTPHost:        state.Host,
-		HTTPPort:        state.Port,
-		DatabaseDriver:  state.Database,
-		DatabaseURL:     databaseURL,
-		CacheDriver:     "inmemory",
-		FilesDriver:     "local",
-	})
+	err := panel.Install(ctx, buildPanelInstallConfigV4(state))
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install GameAP v4")
 	}
@@ -457,7 +421,55 @@ func installGameAPFromGithubV4(
 	pm packagemanager.PackageManager,
 	state panelInstallStateV4,
 ) (panelInstallStateV4, error) {
-	return state, panelpkg.SetupGameAPFromGithubV4(ctx, pm, state.Branch)
+	if err := panelpkg.SetupGameAPFromGithubV4(ctx, pm, state.Branch); err != nil {
+		return state, errors.WithMessage(err, "failed to setup GameAP from github")
+	}
+
+	if err := panel.Configure(ctx, buildPanelInstallConfigV4(state)); err != nil {
+		return state, errors.WithMessage(err, "failed to configure GameAP v4")
+	}
+
+	return state, nil
+}
+
+func buildDatabaseURLV4(state panelInstallStateV4) string {
+	switch state.Database {
+	case mysqlDatabase:
+		return fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s?parseTime=true",
+			state.DBCreds.Username,
+			state.DBCreds.Password,
+			state.DBCreds.Host,
+			state.DBCreds.Port,
+			state.DBCreds.DatabaseName,
+		)
+	case sqliteDatabase:
+		return "file:" + state.DBCreds.DatabaseName + "?_busy_timeout=5000&_journal_mode=WAL&cache=shared"
+	case postgresDatabase:
+		return fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			state.DBCreds.Username,
+			state.DBCreds.Password,
+			state.DBCreds.Host,
+			state.DBCreds.Port,
+			state.DBCreds.DatabaseName,
+		)
+	default:
+		return ""
+	}
+}
+
+func buildPanelInstallConfigV4(state panelInstallStateV4) panel.InstallConfig {
+	return panel.InstallConfig{
+		ConfigDirectory: state.ConfigDirectory,
+		DataDirectory:   state.DataDirectory,
+		HTTPHost:        state.Host,
+		HTTPPort:        state.Port,
+		DatabaseDriver:  state.Database,
+		DatabaseURL:     buildDatabaseURLV4(state),
+		CacheDriver:     "inmemory",
+		FilesDriver:     "local",
+	}
 }
 
 func installMySQLOrMariaDBV4(
