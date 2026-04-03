@@ -7,22 +7,35 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
 	"github.com/gameap/gameapctl/pkg/service"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
 const (
 	daemonSystemdConfigPath = "/etc/systemd/system/gameap-daemon.service"
+
+	gameapDaemonServiceContent = `[Unit]
+Description=GameAP Daemon
+
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+User=root
+WorkingDirectory=/srv/gameap
+ExecStart=/bin/bash -c '/usr/bin/gameap-daemon'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+`
 )
 
 func Start(ctx context.Context) error {
@@ -66,35 +79,12 @@ func startDaemonSystemd(ctx context.Context) error {
 }
 
 func daemonConfigureSystemd(ctx context.Context) error {
-	tempDir, err := os.MkdirTemp("", "gameap-daemon-service")
-	if err != nil {
-		return errors.WithMessage(err, "failed to create temp dir")
-	}
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			log.Println(err)
-		}
-	}(tempDir)
+	log.Println("Writing systemd service configuration")
 
-	downloadURL, err := url.JoinPath(gameap.Repository(), "gameap-daemon/systemd-service.tar.gz")
+	//nolint:gosec // systemd unit files must be world-readable
+	err := os.WriteFile(daemonSystemdConfigPath, []byte(gameapDaemonServiceContent), 0644)
 	if err != nil {
-		return errors.WithMessage(err, "failed to create download url")
-	}
-
-	log.Println("Downloading systemctl service configuration")
-	err = utils.Download(
-		ctx,
-		downloadURL,
-		tempDir,
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to download service configuration")
-	}
-
-	err = utils.Copy(filepath.Join(tempDir, "gameap-daemon.service"), "/etc/systemd/system/gameap-daemon.service")
-	if err != nil {
-		return errors.WithMessage(err, "failed to copy service configuration")
+		return errors.WithMessage(err, "failed to write service configuration")
 	}
 
 	err = oscore.ExecCommand(ctx, "systemctl", "daemon-reload")
