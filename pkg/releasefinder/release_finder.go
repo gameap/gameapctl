@@ -21,9 +21,8 @@ type Release struct {
 
 func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 	const (
-		maxRetries       = 5
-		initialBackoff   = 2 * time.Second
-		maxRateLimitWait = 2 * time.Minute
+		maxRetries     = 5
+		initialBackoff = 2 * time.Second
 	)
 
 	var lastErr error
@@ -31,7 +30,7 @@ func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			waitDuration := calculateWaitDuration(lastErr, backoff, maxRateLimitWait)
+			waitDuration := calculateWaitDuration(lastErr, backoff)
 			if waitDuration > 0 {
 				if err := waitWithContext(ctx, waitDuration); err != nil {
 					return nil, err
@@ -55,7 +54,9 @@ func Find(ctx context.Context, api, kernel, platform string) (*Release, error) {
 	return nil, errors.WithMessage(lastErr, "failed after retries")
 }
 
-func calculateWaitDuration(lastErr error, backoff, maxWait time.Duration) time.Duration {
+func calculateWaitDuration(lastErr error, backoff time.Duration) time.Duration {
+	const maxWait = 2 * time.Minute
+
 	var rateLimitErr rateLimitError
 	if !errors.As(lastErr, &rateLimitErr) || rateLimitErr.resetTime.IsZero() {
 		log.Printf("Rate limited by GitHub API, retrying after %v", backoff)

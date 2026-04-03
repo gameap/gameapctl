@@ -299,27 +299,27 @@ func Test_shouldRetry(t *testing.T) {
 
 func Test_calculateWaitDuration(t *testing.T) {
 	t.Run("non_rate_limit_error_returns_backoff", func(t *testing.T) {
-		result := calculateWaitDuration(errors.New("generic"), 4*time.Second, 2*time.Minute)
+		result := calculateWaitDuration(errors.New("generic"), 4*time.Second)
 		assert.Equal(t, 4*time.Second, result)
 	})
 
 	t.Run("rate_limit_with_zero_reset_returns_backoff", func(t *testing.T) {
 		err := rateLimitError{resetTime: time.Time{}}
-		result := calculateWaitDuration(err, 4*time.Second, 2*time.Minute)
+		result := calculateWaitDuration(err, 4*time.Second)
 		assert.Equal(t, 4*time.Second, result)
 	})
 
 	t.Run("rate_limit_with_future_reset", func(t *testing.T) {
 		resetTime := time.Now().Add(30 * time.Second)
 		err := rateLimitError{resetTime: resetTime}
-		result := calculateWaitDuration(err, 4*time.Second, 2*time.Minute)
+		result := calculateWaitDuration(err, 4*time.Second)
 		assert.InDelta(t, 31.0, result.Seconds(), 2.0)
 	})
 
 	t.Run("rate_limit_reset_capped_at_max_wait", func(t *testing.T) {
 		resetTime := time.Now().Add(5 * time.Minute)
 		err := rateLimitError{resetTime: resetTime}
-		result := calculateWaitDuration(err, 4*time.Second, 2*time.Minute)
+		result := calculateWaitDuration(err, 4*time.Second)
 		assert.Equal(t, 2*time.Minute, result)
 	})
 }
