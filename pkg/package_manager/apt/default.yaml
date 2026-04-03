@@ -41,7 +41,7 @@ packages:
           - file-not-exists: /etc/apt/sources.list.d/nodesource.list
         run-commands:
           - >
-            echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >
+            echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" >
             /etc/apt/sources.list.d/nodesource.list
           - apt-get update
 
@@ -51,3 +51,12 @@ packages:
       - run-commands:
           - >
             curl -sSL https://get.docker.com/ | CHANNEL=stable sh
+
+  - name: go
+    lookup-paths: [ go ]
+    install:
+      - run-commands:
+          - >
+            curl -sSL https://go.dev/dl/go1.26.1.linux-amd64.tar.gz |
+            tar -C /usr/local -xzvf -
+            echo "export PATH=\$PATH:/usr/local/go/bin" >> /etc/profile

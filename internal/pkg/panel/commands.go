@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -170,7 +172,7 @@ func SetDaemonCreateToken(_ context.Context, path, token string) error {
 	return nil
 }
 
-func UpgradeGames(_ context.Context, path string) error {
+func UpgradeGames(ctx context.Context, path string) error {
 	cmdName, args, err := packagemanager.DefinePHPCommandAndArgs(
 		filepath.Join(path, "artisan"), "games:upgrade",
 	)
@@ -178,7 +180,7 @@ func UpgradeGames(_ context.Context, path string) error {
 		return errors.WithMessage(err, "failed to define php command and args")
 	}
 
-	err = utils.ExecCommand(cmdName, args...)
+	err = oscore.ExecCommand(ctx, cmdName, args...)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute artisan command")
 	}
@@ -189,9 +191,11 @@ func UpgradeGames(_ context.Context, path string) error {
 func BuildStyles(_ context.Context, path string) error {
 	log.Println("Installing npm dependencies ...")
 
+	frontendPath := filepath.Join(path, "web", "frontend")
+
 	cmd := exec.Command("npm", "install")
 	log.Println('\n', cmd.String())
-	cmd.Dir = path
+	cmd.Dir = frontendPath
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 
@@ -201,15 +205,34 @@ func BuildStyles(_ context.Context, path string) error {
 	}
 
 	log.Println("Running building ...")
-	cmd = exec.Command("npm", "run", "prod")
+	cmd = exec.Command("npm", "run", "build", "--if-present")
 	log.Println('\n', cmd.String())
-	cmd.Dir = path
+	cmd.Dir = frontendPath
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 
 	err = cmd.Run()
 	if err != nil {
 		return errors.WithMessage(err, "failed to build nodejs application")
+	}
+
+	return nil
+}
+
+func BuildGoPanel(_ context.Context, path string) error {
+	log.Println("Building go app...")
+
+	cmdPath := filepath.Join(path, "cmd", "gameap")
+
+	cmd := exec.Command("go", "build", ".", "-o", gameap.DefaultBinaryPath)
+	log.Println('\n', cmd.String())
+	cmd.Dir = cmdPath
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err := cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to build go app")
 	}
 
 	return nil

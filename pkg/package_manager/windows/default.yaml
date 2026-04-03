@@ -317,3 +317,13 @@ packages:
     uninstall:
       - run-commands:
         - \"${ProgramFiles}\Servy\unins000.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES
+
+  - name: go
+    lookup-paths: [ go ]
+    download-urls:
+      - https://go.dev/dl/go1.26.1.windows-amd64.msi
+    install:
+      - run-commands:
+          - start /wait msiexec /i go1.26.1.windows-amd64.msi /qb
+    path-env:
+      - ${ProgramFiles}\Go\bin

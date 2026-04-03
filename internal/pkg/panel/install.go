@@ -30,42 +30,34 @@ func SetupGameAPFromGithub(
 		return errors.WithMessage(err, "failed to install git")
 	}
 
-	fmt.Println("Installing composer ...")
-	if err = pm.Install(ctx, packagemanager.ComposerPackage); err != nil {
-		return errors.WithMessage(err, "failed to install composer")
-	}
-
 	fmt.Println("Installing nodejs ...")
 	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
 		return errors.WithMessage(err, "failed to install nodejs")
 	}
 
+	fmt.Println("Installing golang ...")
+	if err = pm.Install(ctx, packagemanager.GOPackage); err != nil {
+		return errors.WithMessage(err, "failed to install nodejs")
+	}
+
 	fmt.Println("Cloning gameap ...")
 	err = oscore.ExecCommand(
-		ctx, "git", "clone", "-b", branch, "https://github.com/et-nik/gameap.git", path,
+		ctx, "git", "clone", "-b", branch, "https://github.com/gameap/gameap.git", path,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to clone gameap from github")
-	}
-
-	fmt.Println("Installing composer dependencies ...")
-
-	cmdName, args, err := packagemanager.DefinePHPComposerCommandAndArgs(
-		"update", "--no-dev", "--optimize-autoloader", "--no-interaction", "--working-dir", path,
-	)
-	if err != nil {
-		return errors.WithMessage(err, "failed to define php composer command and args")
-	}
-
-	err = oscore.ExecCommand(ctx, cmdName, args...)
-	if err != nil {
-		return errors.WithMessage(err, "failed to run composer update")
 	}
 
 	fmt.Println("Building styles ...")
 	err = BuildStyles(ctx, path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to build styles")
+	}
+
+	fmt.Println("Building gameap ...")
+	err = BuildGoPanel(ctx, path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to build game ap")
 	}
 
 	return nil

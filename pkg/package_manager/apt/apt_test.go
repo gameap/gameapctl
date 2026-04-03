@@ -51,7 +51,7 @@ func TestLoadPackages_Default(t *testing.T) {
 		assert.Contains(t, pkg.PreInstall[0].RunCommands[1], "curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key")
 		assert.Contains(t, pkg.PreInstall[0].RunCommands[1], "gpg --dearmor -o /usr/share/keyrings/nodesource.gpg")
 		assert.Contains(t, pkg.PreInstall[1].RunCommands[0], "deb [signed-by=/usr/share/keyrings/nodesource.gpg]")
-		assert.Contains(t, pkg.PreInstall[1].RunCommands[0], "https://deb.nodesource.com/node_20.x")
+		assert.Contains(t, pkg.PreInstall[1].RunCommands[0], "https://deb.nodesource.com/node_24.x")
 	})
 }
 

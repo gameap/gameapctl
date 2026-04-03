@@ -177,7 +177,7 @@ func findReleaseFromBytes(bodyBytes []byte, os string, arch string) (*Release, e
 
 	for _, release := range r {
 		for _, asset := range release.Assets {
-			if strings.Contains(asset.Name, release.TagName+"-"+os+"-"+arch) {
+			if strings.Contains(asset.Name, release.TagName+"-"+os+"-"+arch+".") {
 				return &Release{
 					URL: asset.BrowserDownloadURL,
 					Tag: release.TagName,
