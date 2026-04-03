@@ -92,6 +92,7 @@ func SetupGameAPFromGithubV4(
 	if err = pm.Install(ctx, packagemanager.GOPackage); err != nil {
 		return errors.WithMessage(err, "failed to install golang")
 	}
+	packagemanager.UpdateEnvPath(ctx)
 
 	path, err := os.MkdirTemp("", "gameapctl")
 	if err != nil {

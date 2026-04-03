@@ -39,6 +39,7 @@ type PackageConfig struct {
 	Name        string            `yaml:"name"`
 	ReplaceWith []string          `yaml:"replace-with"`
 	LookupPaths []string          `yaml:"lookup-paths"`
+	PathEnv     []string          `yaml:"path-env"`
 	PreInstall  []PreInstallStep  `yaml:"pre-install"`
 	Install     []InstallStep     `yaml:"install"`
 	PostInstall []PostInstallStep `yaml:"post-install"`

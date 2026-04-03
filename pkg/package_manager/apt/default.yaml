@@ -54,6 +54,8 @@ packages:
 
   - name: go
     lookup-paths: [ go ]
+    path-env:
+      - /usr/local/go/bin
     install:
       - run-commands:
           - curl -OL https://go.dev/dl/go1.26.1.linux-amd64.tar.gz
