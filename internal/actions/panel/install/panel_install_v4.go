@@ -85,7 +85,7 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	}
 
 	if state.Branch == "" {
-		state.Branch = "master"
+		state.Branch = "main"
 	}
 
 	// Set default directories
