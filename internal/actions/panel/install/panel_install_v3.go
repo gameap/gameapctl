@@ -949,7 +949,7 @@ func installGameAPFromGithub(
 	pm packagemanager.PackageManager,
 	state panelInstallStateV3,
 ) (panelInstallStateV3, error) {
-	return state, panel.SetupGameAPFromGithub(ctx, pm, state.Path, state.Branch)
+	return state, panel.SetupGameAPFromGithubV3(ctx, pm, state.Path, state.Branch)
 }
 
 func updateDotEnv(ctx context.Context, state panelInstallStateV3) (panelInstallStateV3, error) {

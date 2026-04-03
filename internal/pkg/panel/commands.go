@@ -188,7 +188,36 @@ func UpgradeGames(ctx context.Context, path string) error {
 	return nil
 }
 
-func BuildStyles(_ context.Context, path string) error {
+func BuildStylesV3(_ context.Context, path string) error {
+	log.Println("Installing npm dependencies ...")
+
+	cmd := exec.Command("npm", "install")
+	log.Println('\n', cmd.String())
+	cmd.Dir = path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err := cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to install dependencies")
+	}
+
+	log.Println("Running building ...")
+	cmd = exec.Command("npm", "run", "prod")
+	log.Println('\n', cmd.String())
+	cmd.Dir = path
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = log.Writer()
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.WithMessage(err, "failed to build nodejs application")
+	}
+
+	return nil
+}
+
+func BuildStylesV4(_ context.Context, path string) error {
 	log.Println("Installing npm dependencies ...")
 
 	frontendPath := filepath.Join(path, "web", "frontend")

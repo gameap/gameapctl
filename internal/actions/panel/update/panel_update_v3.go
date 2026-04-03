@@ -44,7 +44,7 @@ func handleV3(cliCtx *cli.Context) error {
 
 	if state.FromGithub {
 		fmt.Println("Setup GameAP from github ...")
-		err = panel.SetupGameAPFromGithub(ctx, pm, tmpPanelDir, state.Branch)
+		err = panel.SetupGameAPFromGithubV3(ctx, pm, tmpPanelDir, state.Branch)
 	} else {
 		fmt.Println("Setup GameAP ...")
 		err = panel.SetupGameAPFromRepo(ctx, tmpPanelDir)

@@ -16,6 +16,7 @@ import (
 	"github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/daemon"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -46,6 +47,9 @@ type panelInstallStateV4 struct {
 	WithDaemon      bool
 	OSInfo          osinfo.Info
 
+	FromGithub bool
+	Branch     string
+
 	// Installation variables
 	DatabaseWasInstalled     bool
 	DatabaseDirExistedBefore bool
@@ -71,6 +75,18 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	}
 	state.WithDaemon = cliCtx.Bool("with-daemon")
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
+
+	state.FromGithub = cliCtx.Bool("github")
+	developBranch := cliCtx.Bool("develop")
+	if developBranch {
+		state.Branch = "develop"
+	} else {
+		state.Branch = cliCtx.String("branch")
+	}
+
+	if state.Branch == "" {
+		state.Branch = "master"
+	}
 
 	// Set default directories
 	state.ConfigDirectory = filepath.Dir(gameap.DefaultConfigFilePath)
@@ -151,6 +167,10 @@ func HandleV4(cliCtx *cli.Context) error {
 	fmt.Println("Host:", state.Host)
 	fmt.Println("Port:", state.Port)
 	fmt.Println("Database:", state.Database)
+	if state.FromGithub {
+		fmt.Println("Installation from GitHub: yes")
+		fmt.Println("Branch:", state.Branch)
+	}
 	fmt.Println()
 
 	pm, err := packagemanager.Load(ctx)
@@ -279,6 +299,14 @@ func HandleV4(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Installing GameAP ...")
+
+	if state.FromGithub {
+		fmt.Println("Installing GameAP from github ...")
+		state, err = installGameAPFromGithubV4(cliCtx.Context, pm, state)
+	} else {
+		state, err = installGameAPV4(cliCtx.Context, state)
+	}
+
 	state, err = installGameAPV4(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to install gameap")
@@ -424,6 +452,14 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 	}
 
 	return state, nil
+}
+
+func installGameAPFromGithubV4(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallStateV4,
+) (panelInstallStateV4, error) {
+	return state, panelpkg.SetupGameAPFromGithubV4(ctx, pm, state.Branch)
 }
 
 func installMySQLOrMariaDBV4(

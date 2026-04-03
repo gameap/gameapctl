@@ -17,10 +17,63 @@ import (
 	"github.com/pkg/errors"
 )
 
-func SetupGameAPFromGithub(
+func SetupGameAPFromGithubV3(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
 	path string,
+	branch string,
+) error {
+	var err error
+
+	fmt.Println("Installing git ...")
+	if err = pm.Install(ctx, packagemanager.GitPackage); err != nil {
+		return errors.WithMessage(err, "failed to install git")
+	}
+
+	fmt.Println("Installing composer ...")
+	if err = pm.Install(ctx, packagemanager.ComposerPackage); err != nil {
+		return errors.WithMessage(err, "failed to install composer")
+	}
+
+	fmt.Println("Installing nodejs ...")
+	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
+		return errors.WithMessage(err, "failed to install nodejs")
+	}
+
+	fmt.Println("Cloning gameap ...")
+	err = oscore.ExecCommand(
+		ctx, "git", "clone", "-b", branch, "https://github.com/et-nik/gameap.git", path,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to clone gameap from github")
+	}
+
+	fmt.Println("Installing composer dependencies ...")
+
+	cmdName, args, err := packagemanager.DefinePHPComposerCommandAndArgs(
+		"update", "--no-dev", "--optimize-autoloader", "--no-interaction", "--working-dir", path,
+	)
+	if err != nil {
+		return errors.WithMessage(err, "failed to define php composer command and args")
+	}
+
+	err = oscore.ExecCommand(ctx, cmdName, args...)
+	if err != nil {
+		return errors.WithMessage(err, "failed to run composer update")
+	}
+
+	fmt.Println("Building styles ...")
+	err = BuildStylesV3(ctx, path)
+	if err != nil {
+		return errors.WithMessage(err, "failed to build styles")
+	}
+
+	return nil
+}
+
+func SetupGameAPFromGithubV4(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
 	branch string,
 ) error {
 	var err error
@@ -40,6 +93,11 @@ func SetupGameAPFromGithub(
 		return errors.WithMessage(err, "failed to install nodejs")
 	}
 
+	path, err := os.MkdirTemp("", "gameapctl")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temp dir")
+	}
+
 	fmt.Println("Cloning gameap ...")
 	err = oscore.ExecCommand(
 		ctx, "git", "clone", "-b", branch, "https://github.com/gameap/gameap.git", path,
@@ -49,7 +107,7 @@ func SetupGameAPFromGithub(
 	}
 
 	fmt.Println("Building styles ...")
-	err = BuildStyles(ctx, path)
+	err = BuildStylesV4(ctx, path)
 	if err != nil {
 		return errors.WithMessage(err, "failed to build styles")
 	}
