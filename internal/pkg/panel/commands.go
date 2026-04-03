@@ -254,7 +254,7 @@ func BuildGoPanel(_ context.Context, path string) error {
 	cmdPath := filepath.Join(path, "cmd", "gameap")
 
 	//nolint:gosec // DefaultBinaryPath is a compile-time constant
-	cmd := exec.Command("go", "build", ".", "-o", filepath.Base(gameap.DefaultBinaryPath))
+	cmd := exec.Command("go", "build", "-o", filepath.Base(gameap.DefaultBinaryPath), ".")
 	log.Println('\n', cmd.String())
 	cmd.Dir = cmdPath
 	cmd.Stdout = log.Writer()
