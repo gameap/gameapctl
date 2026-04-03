@@ -306,10 +306,8 @@ func HandleV4(cliCtx *cli.Context) error {
 	} else {
 		state, err = installGameAPV4(cliCtx.Context, state)
 	}
-
-	state, err = installGameAPV4(ctx, state)
 	if err != nil {
-		return errors.WithMessage(err, "failed to install gameap")
+		return errors.WithMessage(err, "failed to install GameAP")
 	}
 
 	var daemonInstalled bool
