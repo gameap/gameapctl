@@ -16,6 +16,7 @@ type askedParamsV4 struct {
 	database string
 }
 
+//nolint:gocognit
 func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV4, error) {
 	var err error
 	result := askedParamsV4{}
@@ -31,6 +32,16 @@ func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV
 			exampleHost, err = chooseIPFromHost(exampleHost)
 			if err != nil {
 				return result, err
+			}
+		}
+
+		ips := utils.RemoveLocalIPs(utils.DetectIPs())
+		if len(ips) > 0 {
+			fmt.Println("Available addresses:")
+			for _, ip := range ips {
+				if utils.IsIPv4(ip) {
+					fmt.Printf("  * %s\n", ip)
+				}
 			}
 		}
 

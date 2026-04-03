@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +59,7 @@ func Test_removeLocalIPs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := removeLocalIPs(test.ips)
+			result := utils.RemoveLocalIPs(test.ips)
 			assert.Equal(t, test.want, result)
 		})
 	}

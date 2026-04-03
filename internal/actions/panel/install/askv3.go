@@ -77,6 +77,16 @@ func askUserV3(ctx context.Context, state panelInstallStateV3, needToAsk map[str
 			}
 		}
 
+		ips := utils.RemoveLocalIPs(utils.DetectIPs())
+		if len(ips) > 0 {
+			fmt.Println("Available addresses:")
+			for _, ip := range ips {
+				if utils.IsIPv4(ip) {
+					fmt.Printf("  * %s\n", ip)
+				}
+			}
+		}
+
 		result.host, err = utils.Ask(
 			ctx,
 			fmt.Sprintf("Enter gameap host (Examples: %s, example.com): ", exampleHost),

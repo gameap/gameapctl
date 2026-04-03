@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"log"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -506,13 +505,13 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	fw, _ = w.CreateFormField("os")
 	_, _ = fw.Write([]byte(runtime.GOOS))
 
-	ips := detectIPs()
+	ips := utils.DetectIPs()
 	state.ListenIP, err = chooseBestIP(ips)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to choose best IP")
 	}
 
-	ips = removeLocalIPs(ips)
+	ips = utils.RemoveLocalIPs(ips)
 
 	for _, ip := range ips {
 		fw, _ = w.CreateFormField("ip[]")
@@ -868,33 +867,6 @@ func detectLocation() string {
 	return location
 }
 
-func detectIPs() []string {
-	ips := make([]string, 0)
-
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return ips
-	}
-
-	for _, i := range ifaces {
-		addrs, err := i.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, a := range addrs {
-			switch v := a.(type) {
-			case *net.IPNet:
-				ips = append(ips, v.IP.String())
-			case *net.IPAddr:
-				ips = append(ips, v.IP.String())
-			}
-		}
-	}
-
-	return ips
-}
-
 type WeightStruct struct {
 	V any
 	W int
@@ -958,28 +930,6 @@ func chooseBestIP(ips []string) (string, error) {
 	}
 
 	return result, nil
-}
-
-func removeLocalIPs(ips []string) []string {
-	result := make([]string, 0, len(ips))
-
-	for _, ip := range ips {
-		if utils.IsIPv4(ip) {
-			if ip[:4] == "127." {
-				continue
-			}
-		}
-
-		if utils.IsIPv6(ip) {
-			if ip == "::1" || ip[:2] == "fc" || ip[:2] == "fd" || ip[:2] == "fe" {
-				continue
-			}
-		}
-
-		result = append(result, ip)
-	}
-
-	return result
 }
 
 type DaemonConfigScripts struct {
