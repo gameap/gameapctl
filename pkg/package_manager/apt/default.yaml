@@ -56,7 +56,7 @@ packages:
     lookup-paths: [ go ]
     install:
       - run-commands:
-          - >
-            curl -sSL https://go.dev/dl/go1.26.1.linux-amd64.tar.gz |
-            tar -C /usr/local -xzvf -
-            echo "export PATH=\$PATH:/usr/local/go/bin" >> /etc/profile
+          - curl -OL https://go.dev/dl/go1.26.1.linux-amd64.tar.gz
+          - tar -C /usr/local -xzvf go1.26.1.linux-amd64.tar.gz
+          - echo "export PATH=\$PATH:/usr/local/go/bin" >> /etc/profile
+          - source /etc/profile

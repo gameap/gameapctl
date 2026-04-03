@@ -90,7 +90,7 @@ func SetupGameAPFromGithubV4(
 
 	fmt.Println("Installing golang ...")
 	if err = pm.Install(ctx, packagemanager.GOPackage); err != nil {
-		return errors.WithMessage(err, "failed to install nodejs")
+		return errors.WithMessage(err, "failed to install golang")
 	}
 
 	path, err := os.MkdirTemp("", "gameapctl")
