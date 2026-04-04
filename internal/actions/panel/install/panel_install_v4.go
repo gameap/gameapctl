@@ -1092,7 +1092,7 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 			}
 		}
 
-		_ = os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600) //nolint:gosec
+		_ = os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600)
 	}
 
 	// Append DAEMON_SETUP_TOKEN to config.env
