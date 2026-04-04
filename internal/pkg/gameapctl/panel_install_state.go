@@ -27,6 +27,14 @@ type PanelInstallState struct {
 	Develop              bool   `json:"develop"`
 	FromGithub           bool   `json:"fromGithub"`
 	Branch               string `json:"branch"`
+
+	DBHost         string `json:"dbHost,omitempty"`
+	DBPort         string `json:"dbPort,omitempty"`
+	DBName         string `json:"dbName,omitempty"`
+	DBUsername     string `json:"dbUsername,omitempty"`
+	DBPassword     string `json:"dbPassword,omitempty"`
+	DBRootPassword string `json:"dbRootPassword,omitempty"`
+	AdminPassword  string `json:"adminPassword,omitempty"`
 }
 
 func SavePanelInstallState(_ context.Context, state PanelInstallState) error {
@@ -40,13 +48,21 @@ func SavePanelInstallState(_ context.Context, state PanelInstallState) error {
 		return errors.WithMessage(err, "failed to get state directory")
 	}
 
-	err = os.WriteFile(
-		filepath.Join(dir, panelInstallStateFile),
-		b,
-		0600,
-	)
+	finalPath := filepath.Join(dir, panelInstallStateFile)
+	tmpPath := finalPath + ".tmp"
+
+	err = os.WriteFile(tmpPath, b, 0600)
 	if err != nil {
-		return errors.WithMessage(err, "failed to write file")
+		return errors.WithMessage(err, "failed to write temp file")
+	}
+
+	if err = os.Rename(tmpPath, finalPath); err != nil {
+		// Fallback to direct write if rename fails (e.g. file locked on Windows)
+		if writeErr := os.WriteFile(finalPath, b, 0600); writeErr != nil {
+			return errors.WithMessage(writeErr, "failed to write file")
+		}
+
+		_ = os.Remove(tmpPath)
 	}
 
 	return nil

@@ -52,6 +52,24 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 		state.Port = "80"
 	}
 
+	// Check if an existing GameAP panel is already running on this port.
+	// This is common during re-installation.
+	client := &http.Client{Timeout: 2 * time.Second}
+	healthURL := fmt.Sprintf("http://%s:%s/health", state.Host, state.Port)
+	healthReq, healthErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if healthErr == nil {
+		resp, doErr := client.Do(healthReq)
+		if doErr == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			fmt.Println("Existing GameAP panel detected on port", state.Port)
+
+			return state, nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+	}
+
 	listener, err := net.Listen("tcp", net.JoinHostPort(state.Host, state.Port))
 	if err != nil {
 		warningErr := warningV4(ctx, state,

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"text/template"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
@@ -82,6 +83,7 @@ type ConfigEnvData struct {
 // and platform-specific setup (e.g. systemd unit). Does not download binaries.
 func Configure(ctx context.Context, config InstallConfig) error {
 	config = applyConfigDefaults(config)
+	config = preserveExistingSecrets(config)
 
 	var err error
 
@@ -325,4 +327,44 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 	}
 
 	return nil
+}
+
+// preserveExistingSecrets reads ENCRYPTION_KEY and AUTH_SECRET from an existing
+// config.env to avoid breaking already encrypted data in the database on re-installation.
+func preserveExistingSecrets(config InstallConfig) InstallConfig {
+	if config.EncryptionKey != "" && config.AuthSecret != "" {
+		return config
+	}
+
+	configPath := filepath.Join(config.ConfigDirectory, "config.env")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return config
+	}
+
+	existing := parseConfigEnvValues(data)
+	if config.EncryptionKey == "" {
+		config.EncryptionKey = existing["ENCRYPTION_KEY"]
+	}
+	if config.AuthSecret == "" {
+		config.AuthSecret = existing["AUTH_SECRET"]
+	}
+
+	return config
+}
+
+func parseConfigEnvValues(data []byte) map[string]string {
+	result := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			result[strings.TrimSpace(parts[0])] = parts[1]
+		}
+	}
+
+	return result
 }

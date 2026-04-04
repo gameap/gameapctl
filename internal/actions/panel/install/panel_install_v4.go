@@ -57,6 +57,49 @@ type panelInstallStateV4 struct {
 	DatabaseIsNotEmpty       bool
 }
 
+func restorePreviousStateV4(ctx context.Context, state panelInstallStateV4) panelInstallStateV4 {
+	prevState, err := gameapctl.LoadPanelInstallState(ctx)
+	if err != nil {
+		return state
+	}
+
+	if prevState.Version != "v4" {
+		return state
+	}
+
+	fmt.Println("Previous installation state found, reusing credentials ...")
+
+	if prevState.Database != "" && prevState.Database != state.Database {
+		if state.NonInteractive {
+			fmt.Printf(
+				"Database type changed from %s to %s — generating new credentials\n",
+				prevState.Database, state.Database,
+			)
+		} else {
+			fmt.Printf(
+				"Warning: previous installation used %s, now using %s. "+
+					"Previous database credentials will not be reused.\n",
+				prevState.Database, state.Database,
+			)
+		}
+	} else if !state.ExistingDatabase && state.DBCreds.Password == "" && prevState.DBPassword != "" {
+		state.DBCreds.Password = prevState.DBPassword
+		state.DBCreds.RootPassword = prevState.DBRootPassword
+		state.DBCreds.Username = prevState.DBUsername
+		state.DBCreds.DatabaseName = prevState.DBName
+		state.DBCreds.Host = prevState.DBHost
+		state.DBCreds.Port = prevState.DBPort
+	}
+
+	if state.AdminPassword == "" && prevState.AdminPassword != "" {
+		state.AdminPassword = prevState.AdminPassword
+	}
+
+	state.DatabaseWasInstalled = prevState.DatabaseWasInstalled
+
+	return state
+}
+
 //nolint:unparam
 func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	state := panelInstallStateV4{}
@@ -141,6 +184,8 @@ func HandleV4(cliCtx *cli.Context) error {
 			}
 		}
 	}
+
+	state = restorePreviousStateV4(ctx, state)
 
 	if state.Host == "" {
 		return errEmptyHost
@@ -286,6 +331,8 @@ func HandleV4(cliCtx *cli.Context) error {
 		if err != nil {
 			return errors.WithMessage(err, "failed to preconfigure database")
 		}
+
+		saveStateCheckpointV4(cliCtx.Context, state)
 	}
 
 	switch {
@@ -316,6 +363,8 @@ func HandleV4(cliCtx *cli.Context) error {
 		}
 	}
 
+	saveStateCheckpointV4(cliCtx.Context, state)
+
 	fmt.Println("Installing GameAP ...")
 
 	if state.FromGithub {
@@ -327,6 +376,8 @@ func HandleV4(cliCtx *cli.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to install GameAP")
 	}
+
+	saveStateCheckpointV4(cliCtx.Context, state)
 
 	var daemonInstalled bool
 
@@ -401,6 +452,8 @@ func HandleV4(cliCtx *cli.Context) error {
 	if err != nil {
 		return errors.WithMessage(err, "failed to update admin password")
 	}
+
+	saveStateCheckpointV4(cliCtx.Context, state)
 
 	if daemonInstalled {
 		err = daemon.Start(ctx)
@@ -908,14 +961,21 @@ func postgresqlIsDatabaseEmpty(ctx context.Context, db *sql.DB, _ string) (bool,
 }
 
 func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
-	if !utils.IsFileExists(state.DBCreds.DatabaseName) {
-		err := os.MkdirAll(state.DataDirectory, 0755)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to create data directory for sqlite database")
-		}
+	dbPath := filepath.Join(state.DataDirectory, "database.sqlite")
+
+	if utils.IsFileExists(dbPath) {
+		fmt.Println("SQLite database already exists, skipping creation ...")
+		state.DBCreds.DatabaseName = dbPath
+		state.DatabaseWasInstalled = true
+
+		return state, nil
 	}
 
-	dbPath := filepath.Join(state.DataDirectory, "database.sqlite")
+	err := os.MkdirAll(state.DataDirectory, 0755)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to create data directory for sqlite database")
+	}
+
 	f, err := os.Create(dbPath)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to create database.sqlite")
@@ -970,11 +1030,12 @@ func installPostgreSQL(
 
 	var err error
 
-	if state.DBCreds.Port == "" && state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		state.DBCreds.Port = "5432"
-	} else {
-		// Default port for windows
-		state.DBCreds.Port = "9543"
+	if state.DBCreds.Port == "" {
+		if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+			state.DBCreds.Port = "5432"
+		} else {
+			state.DBCreds.Port = "9543"
+		}
 	}
 
 	err = pm.Install(
@@ -1015,11 +1076,24 @@ func installPostgreSQL(
 	return state, err
 }
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
 
 	configPath := filepath.Join(state.ConfigDirectory, "config.env")
+
+	// Clean up stale DAEMON_SETUP_TOKEN lines from previous failed runs
+	if content, readErr := os.ReadFile(configPath); readErr == nil {
+		lines := strings.Split(string(content), "\n")
+		var filtered []string
+		for _, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), "DAEMON_SETUP_TOKEN=") {
+				filtered = append(filtered, line)
+			}
+		}
+
+		_ = os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600) //nolint:gosec
+	}
 
 	// Append DAEMON_SETUP_TOKEN to config.env
 	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0600)
@@ -1243,6 +1317,12 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 	return sb.String()
 }
 
+func saveStateCheckpointV4(ctx context.Context, state panelInstallStateV4) {
+	if err := savePanelInstallationDetailsV4(ctx, state); err != nil {
+		log.Println("Warning: failed to save state checkpoint:", err)
+	}
+}
+
 func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallStateV4) error {
 	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
 		Version:              "v4",
@@ -1253,5 +1333,12 @@ func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallState
 		DataDirectory:        state.DataDirectory,
 		Database:             state.Database,
 		DatabaseWasInstalled: state.DatabaseWasInstalled,
+		DBHost:               state.DBCreds.Host,
+		DBPort:               state.DBCreds.Port,
+		DBName:               state.DBCreds.DatabaseName,
+		DBUsername:           state.DBCreds.Username,
+		DBPassword:           state.DBCreds.Password,
+		DBRootPassword:       state.DBCreds.RootPassword,
+		AdminPassword:        state.AdminPassword,
 	})
 }

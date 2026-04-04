@@ -33,6 +33,17 @@ func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsI
 }
 
 func setFirewallRules(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	// Check if rule already exists to avoid duplicates on re-installation
+	showErr := oscore.ExecCommand(
+		ctx,
+		"netsh", "advfirewall", "firewall", "show", "rule", "name=GameAP_Daemon",
+	)
+	if showErr == nil {
+		fmt.Println("Firewall rule GameAP_Daemon already exists, skipping ...")
+
+		return state, nil
+	}
+
 	err := oscore.ExecCommand(
 		ctx,
 		"netsh",

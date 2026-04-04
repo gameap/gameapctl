@@ -271,26 +271,34 @@ func installSteamCMD(
 	pm packagemanager.PackageManager,
 	state daemonsInstallState,
 ) (daemonsInstallState, error) {
-	if runtime.GOOS == "linux" {
-		err := utils.Download(
-			ctx,
-			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
-			state.SteamCMDPath,
-		)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to download steamcmd")
-		}
+	steamcmdBinary := filepath.Join(state.SteamCMDPath, "steamcmd.sh")
+	if runtime.GOOS == "windows" {
+		steamcmdBinary = filepath.Join(state.SteamCMDPath, "steamcmd.exe")
 	}
 
-	if runtime.GOOS == "windows" {
-		err := utils.Download(
-			ctx,
-			"https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
-			state.SteamCMDPath,
-		)
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to download steamcmd")
+	if !utils.IsFileExists(steamcmdBinary) {
+		switch runtime.GOOS {
+		case "linux":
+			err := utils.Download(
+				ctx,
+				"https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
+				state.SteamCMDPath,
+			)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to download steamcmd")
+			}
+		case "windows":
+			err := utils.Download(
+				ctx,
+				"https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
+				state.SteamCMDPath,
+			)
+			if err != nil {
+				return state, errors.WithMessage(err, "failed to download steamcmd")
+			}
 		}
+	} else {
+		fmt.Println("SteamCMD already installed, skipping download ...")
 	}
 
 	if runtime.GOOS == "linux" && strconv.IntSize == 64 {
