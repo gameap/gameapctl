@@ -199,14 +199,14 @@ func HandleV4(cliCtx *cli.Context) error {
 		state.Port = "80"
 	}
 
-	state, err = checkPortAvailabilityV4(ctx, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to check port availability")
-	}
-
 	state, err = filterAndCheckHostV4(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check host")
+	}
+
+	state, err = checkPortAvailabilityV4(ctx, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check port availability")
 	}
 
 	state, err = checkHTTPHostAvailabilityV4(ctx, state)

@@ -199,14 +199,14 @@ func HandleV3(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check path")
 	}
 
-	state, err = checkPortAvailabilityV3(cliCtx.Context, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to check port availability")
-	}
-
 	state, err = filterAndCheckHost(state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check host")
+	}
+
+	state, err = checkPortAvailabilityV3(cliCtx.Context, state)
+	if err != nil {
+		return errors.WithMessage(err, "failed to check port availability")
 	}
 
 	state, err = checkWebServers(cliCtx.Context, state)
@@ -962,6 +962,9 @@ func updateDotEnv(ctx context.Context, state panelInstallStateV3) (panelInstallS
 	u := "http://" + state.Host
 	if state.HTTPS {
 		u = "https://" + state.Host
+	}
+	if (state.HTTPS && state.Port != "443") || (!state.HTTPS && state.Port != "80") {
+		u += ":" + state.Port
 	}
 
 	if !utils.IsFileExists(envPath) {

@@ -19,6 +19,7 @@ import (
 )
 
 func filterAndCheckHost(state panelInstallStateV3) (panelInstallStateV3, error) {
+	state.Host = strings.TrimSpace(state.Host)
 	state.Host = strings.TrimPrefix(state.Host, "http://")
 	state.Host = strings.TrimPrefix(state.Host, "https://")
 	state.Host = strings.TrimRight(state.Host, "/?&")
@@ -74,6 +75,86 @@ func chooseIPFromHost(host string) (string, error) {
 	}
 
 	return result, nil
+}
+
+const natDetectTimeout = 2 * time.Second
+
+// resolveListenAddress determines which local address to bind to when checking port availability.
+// For IPs: returns the IP directly.
+// For domains: resolves to IP, checks if it's local, tries NAT detection, or falls back to "".
+func resolveListenAddress(host, port string) string {
+	if utils.IsIPv4(host) || utils.IsIPv6(host) {
+		return host
+	}
+
+	resolvedIPs, err := net.LookupIP(host)
+	if err != nil || len(resolvedIPs) == 0 {
+		return ""
+	}
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+
+	var localIPs []net.IP
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+
+		for _, rip := range resolvedIPs {
+			if rip.Equal(ipnet.IP) {
+				return rip.String()
+			}
+		}
+
+		localIPs = append(localIPs, ipnet.IP)
+	}
+
+	externalIP := preferIPv4(resolvedIPs)
+	isV4 := externalIP.To4() != nil
+
+	for _, lip := range localIPs {
+		if lip.IsLoopback() {
+			continue
+		}
+		if isV4 != (lip.To4() != nil) {
+			continue
+		}
+		if detectNATMapping(lip, externalIP, port) {
+			return lip.String()
+		}
+	}
+
+	return ""
+}
+
+func preferIPv4(ips []net.IP) net.IP {
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			return ip
+		}
+	}
+
+	return ips[0]
+}
+
+func detectNATMapping(localIP, externalIP net.IP, port string) bool {
+	listener, err := net.Listen("tcp", net.JoinHostPort(localIP.String(), port))
+	if err != nil {
+		return false
+	}
+	defer listener.Close()
+
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(externalIP.String(), port), natDetectTimeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+
+	return true
 }
 
 func checkPath(ctx context.Context, state panelInstallStateV3) (panelInstallStateV3, error) {
@@ -199,7 +280,8 @@ func checkPortAvailabilityV3(ctx context.Context, state panelInstallStateV3) (pa
 		state.Port = "80"
 	}
 
-	listener, err := net.Listen("tcp", net.JoinHostPort(state.Host, state.Port))
+	listenAddr := resolveListenAddress(state.Host, state.Port)
+	listener, err := net.Listen("tcp", net.JoinHostPort(listenAddr, state.Port))
 	if err != nil {
 		warningErr := warning(ctx, state,
 			fmt.Sprintf(
@@ -222,7 +304,8 @@ func checkPortAvailabilityV3(ctx context.Context, state panelInstallStateV3) (pa
 }
 
 func checkHTTPHostAvailability(ctx context.Context, state panelInstallStateV3) (panelInstallStateV3, error) {
-	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") {
+	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") ||
+		state.Host == "::1" || state.Host == "[::1]" || state.Host == "0.0.0.0" {
 		return state, nil
 	}
 

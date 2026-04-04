@@ -62,6 +62,18 @@ func Test_checkHost(t *testing.T) {
 			host:          "http://gameap.ru/en",
 			expectedError: "invalid host",
 		},
+		{
+			name:         "whitespace",
+			host:         "  example.com  ",
+			expectedHost: "example.com",
+			expectedPort: "80",
+		},
+		{
+			name:         "whitespace_with_http",
+			host:         "  http://gameap.ru  ",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -70,6 +82,94 @@ func Test_checkHost(t *testing.T) {
 			}
 
 			resultState, err := filterAndCheckHost(initState)
+
+			if test.expectedError == "" {
+				require.NoError(t, err)
+				assert.Equal(t, test.expectedHost, resultState.Host)
+				assert.Equal(t, test.expectedPort, resultState.Port)
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.expectedError)
+			}
+		})
+	}
+}
+
+func Test_filterAndCheckHostV4(t *testing.T) {
+	tests := []struct {
+		name          string
+		host          string
+		expectedHost  string
+		expectedError string
+		expectedPort  string
+	}{
+		{
+			name:         "with_http",
+			host:         "http://gameap.ru",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "with_https",
+			host:         "https://gameap.ru",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "without_http",
+			host:         "gameap.ru",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "other_port",
+			host:         "https://gameap.ru:9000",
+			expectedHost: "gameap.ru",
+			expectedPort: "9000",
+		},
+		{
+			name:         "with_slash",
+			host:         "https://www.gameap.ru/",
+			expectedHost: "www.gameap.ru",
+			expectedPort: "80",
+		},
+		{
+			name:         "ip",
+			host:         "127.0.0.1",
+			expectedHost: "127.0.0.1",
+			expectedPort: "80",
+		},
+		{
+			name:         "unknown_host",
+			host:         "unknown_host",
+			expectedHost: "unknown_host",
+			expectedPort: "80",
+		},
+		{
+			name:          "url_address",
+			host:          "http://gameap.ru/en",
+			expectedError: "invalid host",
+		},
+		{
+			name:         "whitespace",
+			host:         "  example.com  ",
+			expectedHost: "example.com",
+			expectedPort: "80",
+		},
+		{
+			name:         "whitespace_with_http",
+			host:         "  http://gameap.ru  ",
+			expectedHost: "gameap.ru",
+			expectedPort: "80",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			initState := panelInstallStateV4{
+				Host: test.host,
+			}
+
+			resultState, err := filterAndCheckHostV4(initState)
 
 			if test.expectedError == "" {
 				require.NoError(t, err)

@@ -17,6 +17,7 @@ import (
 )
 
 func filterAndCheckHostV4(state panelInstallStateV4) (panelInstallStateV4, error) {
+	state.Host = strings.TrimSpace(state.Host)
 	state.Host = strings.TrimPrefix(state.Host, "http://")
 	state.Host = strings.TrimPrefix(state.Host, "https://")
 	state.Host = strings.TrimRight(state.Host, "/?&")
@@ -55,7 +56,7 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 	// Check if an existing GameAP panel is already running on this port.
 	// This is common during re-installation.
 	client := &http.Client{Timeout: 2 * time.Second}
-	healthURL := fmt.Sprintf("http://%s:%s/health", state.Host, state.Port)
+	healthURL := fmt.Sprintf("http://127.0.0.1:%s/health", state.Port)
 	healthReq, healthErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if healthErr == nil {
 		resp, doErr := client.Do(healthReq)
@@ -70,7 +71,8 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 		}
 	}
 
-	listener, err := net.Listen("tcp", net.JoinHostPort(state.Host, state.Port))
+	listenAddr := resolveListenAddress(state.Host, state.Port)
+	listener, err := net.Listen("tcp", net.JoinHostPort(listenAddr, state.Port))
 	if err != nil {
 		warningErr := warningV4(ctx, state,
 			fmt.Sprintf(
@@ -93,7 +95,8 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 }
 
 func checkHTTPHostAvailabilityV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
-	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") {
+	if state.Host == "localhost" || strings.HasPrefix(state.Host, "127.") ||
+		state.Host == "::1" || state.Host == "[::1]" || state.Host == "0.0.0.0" {
 		return state, nil
 	}
 

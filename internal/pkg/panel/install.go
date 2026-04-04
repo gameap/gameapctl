@@ -164,7 +164,7 @@ func CheckInstallationV4(ctx context.Context, host, port string, https bool) err
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
 	hostPort := host
-	if port != "80" && port != "433" {
+	if port != "80" && port != "443" {
 		hostPort = host + ":" + port
 	}
 
