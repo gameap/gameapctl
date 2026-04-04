@@ -4,6 +4,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
