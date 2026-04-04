@@ -46,6 +46,9 @@ func Ask(ctx context.Context, question string, allowEmpty bool, validate Validat
 		fmt.Print(question) //nolint:forbidigo
 
 		result := readStdin(ctx)
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 
 		result = strings.TrimSpace(result)
 

@@ -134,6 +134,7 @@ func askDatabaseInstallationType(ctx context.Context, database string) (bool, er
 
 	fmt.Println("")
 	fmt.Printf("%s installation type:\n", dbName)
+	fmt.Println("")
 	fmt.Printf("1) Install new %s server\n", dbName)
 	fmt.Printf("2) Use existing %s server\n", dbName)
 
@@ -170,6 +171,12 @@ func askDatabaseInstallationType(ctx context.Context, database string) (bool, er
 //nolint:cyclop
 func askDatabaseCredentials(ctx context.Context, database string) (databaseCredentials, error) {
 	for {
+		select {
+		case <-ctx.Done():
+			return databaseCredentials{}, ctx.Err()
+		default:
+		}
+
 		creds, err := promptDatabaseCredentials(ctx, database)
 		if err != nil {
 			return creds, err
@@ -250,7 +257,7 @@ func promptDatabaseCredentials(ctx context.Context, database string) (databaseCr
 		creds.Username = defaultDBUsername
 	}
 
-	creds.Password, err = promptDatabasePassword()
+	creds.Password, err = promptDatabasePassword(ctx)
 	if err != nil {
 		return creds, err
 	}
@@ -258,29 +265,48 @@ func promptDatabaseCredentials(ctx context.Context, database string) (databaseCr
 	return creds, nil
 }
 
-func promptDatabasePassword() (string, error) {
+func promptDatabasePassword(ctx context.Context) (string, error) {
 	fmt.Print("\nEnter database password: ")
+
+	type result struct {
+		value string
+		err   error
+	}
+
+	ch := make(chan result, 1)
 
 	stdinFd := int(os.Stdin.Fd())
 	if !term.IsTerminal(stdinFd) {
-		reader := bufio.NewReader(os.Stdin)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			pw, err := reader.ReadString('\n')
+			ch <- result{strings.TrimSpace(pw), err}
+		}()
 
-		pw, err := reader.ReadString('\n')
-		if err != nil {
-			return "", err
+		select {
+		case res := <-ch:
+			return res.value, res.err
+		case <-ctx.Done():
+			return "", ctx.Err()
 		}
-
-		return strings.TrimSpace(pw), nil
 	}
 
-	passwordBytes, err := term.ReadPassword(stdinFd)
-	if err != nil {
-		return "", err
+	go func() {
+		passwordBytes, err := term.ReadPassword(stdinFd)
+		ch <- result{string(passwordBytes), err}
+	}()
+
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return "", res.err
+		}
+		fmt.Println()
+
+		return res.value, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
-
-	fmt.Println()
-
-	return string(passwordBytes), nil
 }
 
 func warningAskForActionV4(
