@@ -275,9 +275,11 @@ func HandleV4(cliCtx *cli.Context) error {
 		}
 	}
 
-	state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
-	if err != nil {
-		return errors.WithMessage(err, "failed to preconfigure database")
+	if state.Database != noneDatabase {
+		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
+		if err != nil {
+			return errors.WithMessage(err, "failed to preconfigure database")
+		}
 	}
 
 	switch state.Database {
@@ -325,6 +327,42 @@ func HandleV4(cliCtx *cli.Context) error {
 	if err = savePanelInstallationDetailsV4(cliCtx.Context, state); err != nil {
 		fmt.Println("Failed to save installation details: ", err.Error())
 		log.Println("Failed to save installation details: ", err)
+	}
+
+	if state.Database == noneDatabase {
+		fmt.Println()
+		log.Println("GameAP files installed successfully")
+
+		fmt.Println("---------------------------------")
+		fmt.Println("DONE!")
+		fmt.Println()
+		fmt.Println("GameAP configuration path:", state.ConfigDirectory)
+		fmt.Println("GameAP data path:", state.DataDirectory)
+		fmt.Println()
+		fmt.Println("Database was not installed.")
+		fmt.Println("To complete the setup, edit config.env and set DATABASE_DRIVER and DATABASE_URL.")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println()
+		fmt.Println("# MySQL")
+		fmt.Println("DATABASE_DRIVER=mysql")
+		fmt.Println("DATABASE_URL=gameap:password@tcp(localhost:3306)/gameap?parseTime=true")
+		fmt.Println()
+		fmt.Println("# PostgreSQL")
+		fmt.Println("DATABASE_DRIVER=postgres")
+		fmt.Println("DATABASE_URL=postgres://username:password@host:port/database?sslmode=disable")
+		fmt.Println()
+		fmt.Println("# SQLite")
+		fmt.Println("DATABASE_DRIVER=sqlite")
+		fmt.Println("DATABASE_URL=file:path/to/database.db?_busy_timeout=5000&_journal_mode=WAL&cache=shared")
+		fmt.Println()
+		fmt.Println("After configuring the database, start the panel and change the admin password:")
+		fmt.Println("  gameapctl panel start")
+		fmt.Println("  gameapctl panel change-password")
+		fmt.Println()
+		fmt.Println("---------------------------------")
+
+		return nil
 	}
 
 	fmt.Println("Starting GameAP ...")
