@@ -1,3 +1,5 @@
+//go:generate go run github.com/tc-hib/go-winres@latest make
+
 package main
 
 import (
