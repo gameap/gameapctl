@@ -112,12 +112,13 @@ func nodeInfo(ctx context.Context, w io.Writer, _ []string) error {
 }
 
 var serviceReplaceMap = map[string]string{
-	"daemon":       gameapDaemonService,
-	"gameap":       gameapServiceName,
-	"gameapdaemon": gameapDaemonService,
-	"mysql":        "mariadb",
-	"php":          "php-fpm",
-	"postgresql":   postgreSQLServiceName,
+	"daemon":        gameapDaemonService,
+	"gameap":        gameapServiceName,
+	"gameap-daemon": gameapDaemonService,
+	"gameapdaemon":  gameapDaemonService,
+	"mysql":         "mariadb",
+	"php":           "php-fpm",
+	"postgresql":    postgreSQLServiceName,
 }
 
 func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
@@ -131,11 +132,11 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 		serviceName = replace
 	}
 
-	if serviceName == gameapServiceName {
+	if strings.EqualFold(serviceName, gameapServiceName) {
 		return gameapStatus(ctx, w, args)
 	}
 
-	if serviceName == gameapDaemonService {
+	if strings.EqualFold(serviceName, gameapDaemonService) {
 		return daemonStatus(ctx, w, args)
 	}
 
