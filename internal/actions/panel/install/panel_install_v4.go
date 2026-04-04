@@ -35,17 +35,18 @@ type panelInstallStateV4 struct {
 	NonInteractive bool
 	SkipWarnings   bool
 
-	HTTPS           bool
-	Host            string
-	HostIP          string
-	Port            string
-	ConfigDirectory string
-	DataDirectory   string
-	AdminPassword   string
-	Database        string
-	DBCreds         databaseCredentials
-	WithDaemon      bool
-	OSInfo          osinfo.Info
+	HTTPS            bool
+	Host             string
+	HostIP           string
+	Port             string
+	ConfigDirectory  string
+	DataDirectory    string
+	AdminPassword    string
+	Database         string
+	ExistingDatabase bool
+	DBCreds          databaseCredentials
+	WithDaemon       bool
+	OSInfo           osinfo.Info
 
 	FromGithub bool
 	Branch     string
@@ -73,6 +74,7 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 		Username:     cliCtx.String("database-username"),
 		Password:     cliCtx.String("database-password"),
 	}
+	state.ExistingDatabase = state.DBCreds.Host != "" && state.DBCreds.Password != ""
 	state.WithDaemon = cliCtx.Bool("with-daemon")
 	state.OSInfo = contextInternal.OSInfoFromContext(cliCtx.Context)
 
@@ -133,6 +135,10 @@ func HandleV4(cliCtx *cli.Context) error {
 
 		if _, ok := needToAsk["database"]; ok {
 			state.Database = answers.database
+			if answers.existingDatabase {
+				state.ExistingDatabase = true
+				state.DBCreds = answers.dbCreds
+			}
 		}
 	}
 
@@ -275,25 +281,35 @@ func HandleV4(cliCtx *cli.Context) error {
 		}
 	}
 
-	if state.Database != noneDatabase {
+	if state.Database != noneDatabase && !state.ExistingDatabase {
 		state.DBCreds, err = preconfigureDatabase(ctx, state.DBCreds)
 		if err != nil {
 			return errors.WithMessage(err, "failed to preconfigure database")
 		}
 	}
 
-	switch state.Database {
-	case postgresDatabase:
+	switch {
+	case state.ExistingDatabase && state.Database == postgresDatabase:
+		state, err = connectExistingPostgreSQL(ctx, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed to connect to existing PostgreSQL")
+		}
+	case state.ExistingDatabase && state.Database == mysqlDatabase:
+		state, err = connectExistingMySQL(ctx, state)
+		if err != nil {
+			return errors.WithMessage(err, "failed to connect to existing MySQL")
+		}
+	case state.Database == postgresDatabase:
 		state, err = installPostgreSQL(ctx, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install postgres")
 		}
-	case mysqlDatabase:
+	case state.Database == mysqlDatabase:
 		state, err = installMySQLOrMariaDBV4(ctx, pm, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install mysql")
 		}
-	case sqliteDatabase:
+	case state.Database == sqliteDatabase:
 		state, err = installSqliteV4(ctx, state)
 		if err != nil {
 			return errors.WithMessage(err, "failed to install sqlite")
@@ -915,6 +931,36 @@ func installSqliteV4(_ context.Context, state panelInstallStateV4) (panelInstall
 	return state, nil
 }
 
+func connectExistingPostgreSQL(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	if state.DBCreds.Port == "" {
+		state.DBCreds.Port = "5432"
+	}
+
+	fmt.Println("Connecting to existing PostgreSQL database ...")
+
+	state, err := checkPostgreSQLConnectionV4(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to connect to existing PostgreSQL database")
+	}
+
+	return state, nil
+}
+
+func connectExistingMySQL(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	if state.DBCreds.Port == "" {
+		state.DBCreds.Port = "3306"
+	}
+
+	fmt.Println("Connecting to existing MySQL database ...")
+
+	state, err := checkMySQLConnectionV4(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to connect to existing MySQL database")
+	}
+
+	return state, nil
+}
+
 func installPostgreSQL(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
@@ -1176,6 +1222,19 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 	sb.WriteString(state.Port)
 	sb.WriteString(" --database=")
 	sb.WriteString(state.Database)
+
+	if state.ExistingDatabase {
+		sb.WriteString(" --database-host=")
+		sb.WriteString(state.DBCreds.Host)
+		sb.WriteString(" --database-port=")
+		sb.WriteString(state.DBCreds.Port)
+		sb.WriteString(" --database-name=")
+		sb.WriteString(state.DBCreds.DatabaseName)
+		sb.WriteString(" --database-username=")
+		sb.WriteString(state.DBCreds.Username)
+		sb.WriteString(" --database-password=")
+		sb.WriteString(state.DBCreds.Password)
+	}
 
 	if state.WithDaemon {
 		sb.WriteString(" --with-daemon")

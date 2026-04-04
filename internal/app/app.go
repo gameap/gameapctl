@@ -221,7 +221,7 @@ func Run(args []string) {
 							},
 							&cli.StringFlag{
 								Name:  "database",
-								Usage: "Database type. Available: mysql, sqlite. ",
+								Usage: "Database type. Available: postgres, mysql, sqlite, none.",
 							},
 							&cli.StringFlag{
 								Name: "database-host",
