@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // https://gist.github.com/mimoo/25fc9716e0f1353791f5908f94d6e726
@@ -30,23 +29,25 @@ func compress(src string, buf io.Writer) error {
 			return err
 		}
 
-		// must provide real name
-		// (see https://golang.org/src/archive/tar/common.go?#L626)
-		header.Name = strings.TrimPrefix(header.Name, src)
-		header.Name = filepath.ToSlash(file)
+		relPath, err := filepath.Rel(src, file)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relPath)
 
 		// write header
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
-		// if not a dir, write file content
 		if !fi.IsDir() {
 			data, err := os.Open(file)
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(tw, data); err != nil {
-				return err
+			_, copyErr := io.Copy(tw, data)
+			data.Close()
+			if copyErr != nil {
+				return copyErr
 			}
 		}
 

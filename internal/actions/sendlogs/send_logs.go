@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -30,38 +32,20 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}()
 
-	err = collectGameapCTLLogs(ctx, tmpDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to collect gameapctl logs")
-	}
+	collectAllLogs(ctx, tmpDir, cliCtx.StringSlice("include-logs"))
 
-	err = collectDaemonLogs(ctx, tmpDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to collect daemon logs")
-	}
-
-	err = collectPanelLogs(ctx, tmpDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to collect panel logs")
-	}
-
-	err = collectSystemInfo(ctx, tmpDir)
-	if err != nil {
-		return errors.WithMessage(err, "failed to collect system info")
-	}
-
-	additionalLogs := cliCtx.StringSlice("include-logs")
-	if len(additionalLogs) > 0 {
-		err = collectAdditionalLogs(ctx, additionalLogs, tmpDir)
-		if err != nil {
-			return errors.WithMessage(err, "failed to collect additional logs")
-		}
-	}
-
+	fmt.Println("Compressing logs...")
 	f, err := os.CreateTemp("", "gameapctl-send-logs")
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err := os.Remove(f.Name())
+		if err != nil {
+			log.Println(errors.WithMessage(err, "failed to remove temporary archive file"))
+		}
+	}()
+
 	err = compress(tmpDir, f)
 	if err != nil {
 		return errors.WithMessage(err, "failed to compress logs")
@@ -71,8 +55,8 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to seek file")
 	}
 
-	var id string
-	id, err = sendFile(ctx, f)
+	fmt.Println("Sending logs...")
+	id, err := sendFile(ctx, f)
 	if err != nil {
 		return errors.WithMessage(err, "failed to send file")
 	}
@@ -89,6 +73,35 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Telegram: https://t.me/gameap")
 
 	return nil
+}
+
+func collectAllLogs(ctx context.Context, tmpDir string, additionalLogs []string) {
+	collectors := []struct {
+		name string
+		fn   func() error
+	}{
+		{"gameapctl logs", func() error { return collectGameapCTLLogs(ctx, tmpDir) }},
+		{"daemon logs", func() error { return collectDaemonLogs(ctx, tmpDir) }},
+		{"journal logs", func() error { return collectJournalLogs(ctx, tmpDir) }},
+		{"panel logs", func() error { return collectPanelLogs(ctx, tmpDir) }},
+		{"web server logs", func() error { return collectWebServerLogs(ctx, tmpDir) }},
+		{"database logs", func() error { return collectDatabaseLogs(ctx, tmpDir) }},
+		{"system information", func() error { return collectSystemInfo(ctx, tmpDir) }},
+	}
+
+	for _, c := range collectors {
+		fmt.Printf("Collecting %s...\n", c.name)
+		if err := c.fn(); err != nil {
+			log.Println(errors.WithMessagef(err, "failed to collect %s", c.name))
+		}
+	}
+
+	if len(additionalLogs) > 0 {
+		fmt.Println("Collecting additional logs...")
+		if err := collectAdditionalLogs(ctx, additionalLogs, tmpDir); err != nil {
+			log.Println(errors.WithMessage(err, "failed to collect additional logs"))
+		}
+	}
 }
 
 func collectGameapCTLLogs(_ context.Context, destinationDir string) error {
@@ -208,12 +221,11 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
-	_, err = f.WriteString("Kernel: " + osInfo.Kernel + "\n")
-	if err != nil {
-		return errors.WithMessage(err, "failed to write to file")
-	}
+	_, _ = f.WriteString("GameAPCtl Version: " + gameap.Version + "\n")
+	_, _ = f.WriteString("GameAPCtl Build Date: " + gameap.BuildDate + "\n")
+	_, _ = f.WriteString("Kernel: " + osInfo.Kernel + "\n")
 	_, _ = f.WriteString("Core: " + osInfo.Core + "\n")
-	_, _ = f.WriteString(string("Distribution: " + osInfo.Distribution + "\n"))
+	_, _ = f.WriteString("Distribution: " + string(osInfo.Distribution) + "\n")
 	_, _ = f.WriteString("DistributionVersion: " + osInfo.DistributionVersion + "\n")
 	_, _ = f.WriteString("DistributionCodename: " + osInfo.DistributionCodename + "\n")
 	_, _ = f.WriteString("Platform: " + osInfo.Platform.String() + "\n")
@@ -290,13 +302,19 @@ func sendFile(ctx context.Context, buf io.Reader) (string, error) {
 	req.Header.Set("Content-Type", "application/tar+gzip")
 	req = req.WithContext(ctx)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Minute, //nolint:mnd
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to send logs")
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("failed to send logs")
+		body, _ := io.ReadAll(resp.Body)
+
+		return "", errors.Errorf("failed to send logs: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var result struct {
@@ -306,10 +324,6 @@ func sendFile(ctx context.Context, buf io.Reader) (string, error) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to decode response")
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		log.Println("failed to close body", err)
 	}
 
 	return result.ID, nil
