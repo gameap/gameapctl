@@ -21,14 +21,17 @@ func collectJournalLogs(ctx context.Context, destinationDir string) error {
 	initSystem, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to detect init system"))
+
 		return nil
 	}
 	if initSystem != runhelper.InitSystemd {
+
 		return nil
 	}
 
 	if _, err := exec.LookPath("journalctl"); err != nil {
-		return nil
+
+		return err
 	}
 
 	destinationDir = filepath.Join(destinationDir, "journal")
@@ -41,13 +44,15 @@ func collectJournalLogs(ctx context.Context, destinationDir string) error {
 		output, err := oscore.ExecCommandWithOutput(ctx, "journalctl", "-u", unit, "--no-pager", "-n", "1000")
 		if err != nil {
 			log.Println(errors.WithMessagef(err, "failed to get journal for %s", unit))
+
 			continue
 		}
 
 		filePath := filepath.Join(destinationDir, unit+".log")
-		err = os.WriteFile(filePath, []byte(output), 0644)
+		err = os.WriteFile(filePath, []byte(output), 0600)
 		if err != nil {
 			log.Println(errors.WithMessagef(err, "failed to write journal log for %s", unit))
+
 			continue
 		}
 	}
