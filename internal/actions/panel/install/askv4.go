@@ -261,7 +261,7 @@ func promptDatabaseCredentials(ctx context.Context, database string) (databaseCr
 func promptDatabasePassword() (string, error) {
 	fmt.Print("\nEnter database password: ")
 
-	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+	stdinFd := int(os.Stdin.Fd())
 	if !term.IsTerminal(stdinFd) {
 		reader := bufio.NewReader(os.Stdin)
 

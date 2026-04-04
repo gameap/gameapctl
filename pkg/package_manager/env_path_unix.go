@@ -34,7 +34,7 @@ func UpdateEnvPath(ctx context.Context) {
 		string(filepath.ListSeparator) +
 		strings.Join(appendPath, string(filepath.ListSeparator))
 
-	log.Println("New PATH:", newPath) //nolint:gosec
+	log.Println("New PATH:", newPath)
 	err := os.Setenv("PATH", newPath)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to set PATH"))
