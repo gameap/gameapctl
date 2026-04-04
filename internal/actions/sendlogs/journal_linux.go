@@ -25,12 +25,10 @@ func collectJournalLogs(ctx context.Context, destinationDir string) error {
 		return nil
 	}
 	if initSystem != runhelper.InitSystemd {
-
 		return nil
 	}
 
 	if _, err := exec.LookPath("journalctl"); err != nil {
-
 		return err
 	}
 
