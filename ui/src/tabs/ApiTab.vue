@@ -6,16 +6,9 @@ import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon} from 
 import { runAction, runActionWithoutDialog } from "../action.js";
 
 import {useServicesStore} from "../store/services.js"
-import {useNodeStore} from "../store/node.js";
-
 const services = useServicesStore()
 
 const { getServiceByName } = storeToRefs(services)
-const { getNodeInfo } = useNodeStore()
-
-const nodeOS = computed(() => {
-  return getNodeInfo("os")
-})
 
 const gameapActive = computed(() => {
   return getServiceByName.value("gameap").status === "active"
@@ -26,11 +19,6 @@ const gameapAvailable = computed(() => {
       getServiceByName.value("gameap").status === "inactive"
 })
 
-const defaultPath = computed(() => {
-  return nodeOS.value === "windows"
-      ? "C:\\gameap\\web"
-      : "/var/www/gameap"
-})
 
 const servicePanelsCols = computed(() => {
   return window.innerWidth < 1000 ? 1 : 3
@@ -41,13 +29,8 @@ const showUninstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
-  version: "v4",
-  path: defaultPath,
   host: "127.0.0.1",
   port: 80,
-  source: "repo",
-  branch: "master",
-  webServer: "nginx",
   database: "postgres",
   withDaemon: false,
 })
@@ -58,19 +41,6 @@ const uninstallationForm = ref({
   withServices: false,
 })
 
-const githubBranchOptions = [
-  {label: "develop", value: "develop"},
-  {label: "master", value: "master"},
-]
-const webServerOptions = [
-  {label: "Nginx", value: "nginx"},
-  {label: "None", value: "none"},
-]
-const databaseOptions = [
-  {label: "MySQL", value: "mysql"},
-  {label: "SQLite", value: "sqlite"},
-  {label: "None", value: "none"},
-]
 const databaseOptionsV4 = [
   {label: "PostgreSQL", value: "postgres"},
   {label: "MySQL", value: "mysql"},
@@ -106,28 +76,10 @@ function onClickGameAPUninstallationButton() {
 function handleInstallButtonClick(e) {
   showInstallationAskModal.value = false
 
-  let params = ""
-
-  if (installationForm.value.version === "v4") {
-    params = "--version=v4" +
-        " --host=" + installationForm.value.host +
-        " --port=" + installationForm.value.port +
-        " --database=" + installationForm.value.database
-  }
-
-  if (installationForm.value.version === "v3") {
-    params = "--version=v3" +
-        " --path=" + installationForm.value.path +
-        " --host=" + installationForm.value.host +
-        " --port=" + installationForm.value.port +
-        " --web-server=" + installationForm.value.webServer +
-        " --database=" + installationForm.value.database
-
-    if (installationForm.value.source === "github") {
-      params += " --github"
-      params += " --branch=" + installationForm.value.branch
-    }
-  }
+  let params = "--version=v4" +
+      " --host=" + installationForm.value.host +
+      " --port=" + installationForm.value.port +
+      " --database=" + installationForm.value.database
 
   if (installationForm.value.withDaemon) {
     params += " --with-daemon"
@@ -139,13 +91,6 @@ function handleInstallButtonClick(e) {
   )
 }
 
-function handleChangeVersionTab(tabName) {
-  if (tabName === "v3" && installationForm.value.database === "postgres") {
-    installationForm.value.database = "mysql"
-  }
-
-  installationForm.value.version = tabName
-}
 
 function handleUninstallButtonClick() {
   showUninstallationAskModal.value = false
@@ -228,87 +173,29 @@ function handleUninstallButtonClick() {
         role="dialog"
         aria-modal="true"
     >
-      <n-tabs :bar-width="28" size="large" type="line" justify-content="space-evenly" @update:value="handleChangeVersionTab">
-        <n-tab-pane name="v4" tab="version 4 (latest)">
-          <p class="mb-5">GameAP v4 is the latest stable release series. It is recommended for most users.
-            It written in Go and Vue.js and provides better performance and stability.</p>
-
-          <n-form
-              ref="formRef"
-              :model="installationFormRef"
-              size="medium"
-              label-placement="left"
-              label-width="auto"
-              :rules="installationFormRules"
-          >
-            <n-form-item label="Host" path="host">
-              <n-input-group>
-                <n-input v-model:value="installationForm.host" placeholder="Host" />
-                <n-input-number v-model:value="installationForm.port" placeholder="Port" />
-              </n-input-group>
-            </n-form-item>
-            <n-form-item label="Database" path="database">
-              <n-select v-model:value="installationForm.database" :options="databaseOptionsV4" />
-            </n-form-item>
-            <n-form-item label="&nbsp;" path="withDaemon">
-              <n-checkbox v-model:checked="installationForm.withDaemon">
-                Install Daemon
-              </n-checkbox>
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-
-        <n-tab-pane name="v3" tab="version 3">
-          <p class="mb-5">GameAP v3 is the legacy release series. It is written in PHP and Vue.js.</p>
-
-          <n-form
-              ref="formRef"
-              :model="installationFormRef"
-              size="medium"
-              label-placement="left"
-              label-width="auto"
-              :rules="installationFormRules"
-          >
-            <n-form-item label="Path" path="path">
-              <n-input
-                  v-model:value="installationForm.path"
-                  :disabled="nodeOS === 'windows'"
-                  placeholder="Path"
-              />
-            </n-form-item>
-            <n-form-item label="Source" path="source">
-              <n-radio-group v-model:value="installationForm.source">
-                <n-radio value="repo">
-                  Official Release Repo
-                </n-radio>
-                <n-radio value="github">
-                  GitHub
-                </n-radio>
-              </n-radio-group>
-            </n-form-item>
-            <n-form-item v-if="installationForm.source === 'github'" label="Branch" path="branch">
-              <n-select v-model:value="installationForm.branch" :options="githubBranchOptions" />
-            </n-form-item>
-            <n-form-item label="Host" path="host">
-              <n-input-group>
-                <n-input v-model:value="installationForm.host" placeholder="Host" />
-                <n-input-number v-model:value="installationForm.port" placeholder="Port" />
-              </n-input-group>
-            </n-form-item>
-            <n-form-item label="Web Server" path="webServer">
-              <n-select v-model:value="installationForm.webServer" :options="webServerOptions" />
-            </n-form-item>
-            <n-form-item label="Database" path="database">
-              <n-select v-model:value="installationForm.database" :options="databaseOptions" />
-            </n-form-item>
-            <n-form-item label="&nbsp;" path="withDaemon">
-              <n-checkbox v-model:checked="installationForm.withDaemon">
-                Install Daemon
-              </n-checkbox>
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-      </n-tabs>
+      <n-form
+          ref="formRef"
+          :model="installationFormRef"
+          size="medium"
+          label-placement="left"
+          label-width="auto"
+          :rules="installationFormRules"
+      >
+        <n-form-item label="Host" path="host">
+          <n-input-group>
+            <n-input v-model:value="installationForm.host" placeholder="Host" />
+            <n-input-number v-model:value="installationForm.port" placeholder="Port" />
+          </n-input-group>
+        </n-form-item>
+        <n-form-item label="Database" path="database">
+          <n-select v-model:value="installationForm.database" :options="databaseOptionsV4" />
+        </n-form-item>
+        <n-form-item label="&nbsp;" path="withDaemon">
+          <n-checkbox v-model:checked="installationForm.withDaemon">
+            Install Daemon
+          </n-checkbox>
+        </n-form-item>
+      </n-form>
 
       <n-button type="primary" @click="handleInstallButtonClick">
         Install
