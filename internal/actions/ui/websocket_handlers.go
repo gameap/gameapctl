@@ -75,6 +75,10 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 		duplicateLogWriter(ctx, w)
 
 		return serviceCommand(ctx, w, args)
+	case "send-logs":
+		duplicateLogWriter(ctx, w)
+
+		return sendLogs(ctx, w, args)
 	}
 
 	return errors.New("unknown command")
@@ -533,6 +537,25 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 	}
 
 	packagemanager.UpdateEnvPath(ctx)
+
+	return nil
+}
+
+func sendLogs(_ context.Context, w io.Writer, _ []string) error {
+	ex, err := os.Executable()
+	if err != nil {
+		return errors.Wrap(err, "failed to get executable path")
+	}
+
+	cmd := exec.Command(ex, "--non-interactive", "send-logs")
+	cmd.Stdout = w
+	cmd.Stderr = w
+	cmd.Dir = filepath.Dir(ex)
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.Wrap(err, "failed to execute command")
+	}
 
 	return nil
 }

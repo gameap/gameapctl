@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useMessage, useDialog } from "naive-ui";
-import {XMarkIcon} from "@heroicons/vue/24/outline/index.js";
+import {XMarkIcon, PaperAirplaneIcon} from "@heroicons/vue/24/outline/index.js";
 import {send, subscribe, unsubscribe} from "../websocket.js";
 import {subscribeAction} from "../action.js";
 import {reloadServices} from "../global.js";
@@ -30,12 +30,18 @@ subscribeAction((dialogTitle, dialogContent, topic, message) => {
     showModal.value = true
     log.value = ""
     complete.value = false
+    hasError.value = false
+    sendingLogs.value = false
+    logsSent.value = false
     run()
   }
 })
 
 const log = ref("")
 const complete = ref(false)
+const hasError = ref(false)
+const sendingLogs = ref(false)
+const logsSent = ref(false)
 const showModal = ref(false)
 
 function showDialog() {
@@ -54,6 +60,9 @@ function showDialog() {
 
       log.value = ""
       complete.value = false
+      hasError.value = false
+      sendingLogs.value = false
+      logsSent.value = false
       showModal.value = true
       run()
     },
@@ -77,6 +86,7 @@ function run() {
     if (code === "error") {
       unsubscribe(id)
       complete.value = true
+      hasError.value = true
       log.value += "\nError:\n" + message + "\n"
       reloadServices()
     }
@@ -86,6 +96,35 @@ function run() {
       log.value += "\n" + "Completed" + "\n"
       complete.value = true
       reloadServices()
+    }
+  })
+}
+
+function sendLogs() {
+  sendingLogs.value = true
+  log.value += "\n--- Sending logs ---\n"
+
+  send("send-logs", "send-logs")
+  subscribe("send-logs", (id, code, message) => {
+    const element = document.getElementById("log");
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "end", inline: "nearest" });
+    }
+
+    if (code === "payload") {
+      log.value += message
+    }
+
+    if (code === "error") {
+      unsubscribe(id)
+      log.value += "\nFailed to send logs:\n" + message + "\n"
+      sendingLogs.value = false
+    }
+
+    if (code === "end") {
+      unsubscribe(id)
+      sendingLogs.value = false
+      logsSent.value = true
     }
   })
 }
@@ -111,12 +150,24 @@ function run() {
         </div>
       </template>
       <template #footer>
-        <n-button type="error" v-if="complete" @click="showModal=false">
-          <template #icon>
-            <XMarkIcon />
-          </template>
-          Close
-        </n-button>
+        <n-space v-if="complete">
+          <n-button
+              v-if="hasError && !sendingLogs && !logsSent"
+              type="warning"
+              @click="sendLogs"
+          >
+            <template #icon>
+              <PaperAirplaneIcon />
+            </template>
+            Send Logs
+          </n-button>
+          <n-button type="error" @click="showModal=false">
+            <template #icon>
+              <XMarkIcon />
+            </template>
+            Close
+          </n-button>
+        </n-space>
       </template>
     </n-card>
   </n-modal>
