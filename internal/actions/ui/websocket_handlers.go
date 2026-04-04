@@ -119,6 +119,11 @@ var serviceReplaceMap = map[string]string{
 	"mysql":         "mariadb",
 	"php":           "php-fpm",
 	"postgresql":    postgreSQLServiceName,
+	"apache":        "apache2",
+}
+
+var serviceFallbackNames = map[string][]string{
+	"apache2": {"httpd"},
 }
 
 func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
@@ -140,26 +145,53 @@ func serviceStatus(ctx context.Context, w io.Writer, args []string) error {
 		return daemonStatus(ctx, w, args)
 	}
 
-	var errNotFound *service.NotFoundError
-	err := service.Status(ctx, serviceName)
-	if err != nil && errors.Is(err, service.ErrInactiveService) {
-		_, _ = w.Write([]byte(serviceStatusInactive))
-
-		return nil
-	}
-	if err != nil && !errors.As(err, &errNotFound) {
-		return errors.WithMessage(err, "failed to get service status")
-	}
-	if errNotFound != nil {
-		_, _ = w.Write([]byte(serviceStatusNotFound))
-
-		//nolint:nilerr
-		return nil
+	status, err := resolveServiceStatusWithFallbacks(ctx, serviceName)
+	if err != nil {
+		return err
 	}
 
-	_, _ = w.Write([]byte(serviceStatusActive))
+	_, _ = w.Write([]byte(status))
 
 	return nil
+}
+
+func resolveServiceStatusWithFallbacks(ctx context.Context, serviceName string) (string, error) {
+	status, err := resolveServiceStatus(ctx, serviceName)
+	if err != nil {
+		return "", err
+	}
+
+	if status != serviceStatusNotFound {
+		return status, nil
+	}
+
+	for _, fb := range serviceFallbackNames[serviceName] {
+		status, err = resolveServiceStatus(ctx, fb)
+		if err != nil {
+			return "", err
+		}
+		if status != serviceStatusNotFound {
+			return status, nil
+		}
+	}
+
+	return serviceStatusNotFound, nil
+}
+
+func resolveServiceStatus(ctx context.Context, serviceName string) (string, error) {
+	var errNotFound *service.NotFoundError
+	err := service.Status(ctx, serviceName)
+	if err == nil {
+		return serviceStatusActive, nil
+	}
+	if errors.Is(err, service.ErrInactiveService) {
+		return serviceStatusInactive, nil
+	}
+	if errors.As(err, &errNotFound) {
+		return serviceStatusNotFound, nil
+	}
+
+	return "", errors.WithMessage(err, "failed to get service status")
 }
 
 func gameapStatus(ctx context.Context, w io.Writer, _ []string) error {
@@ -356,13 +388,15 @@ func serviceCommand(ctx context.Context, w io.Writer, args []string) error {
 		serviceName = replace
 	}
 
-	if serviceName == gameapServiceName {
+	if strings.EqualFold(serviceName, gameapServiceName) {
 		return errors.New("gameap service command is not supported")
 	}
 
-	if serviceName == gameapDaemonService {
+	if strings.EqualFold(serviceName, gameapDaemonService) {
 		return daemonCommand(ctx, w, []string{command})
 	}
+
+	serviceName = resolveServiceName(ctx, serviceName)
 
 	log.Printf("Service command: %s %s", command, serviceName)
 
@@ -379,10 +413,28 @@ func serviceCommand(ctx context.Context, w io.Writer, args []string) error {
 	}
 
 	if err != nil {
-		return errors.WithMessage(err, "failed to start service")
+		return errors.WithMessage(err, "failed to execute service command")
 	}
 
 	return nil
+}
+
+func resolveServiceName(ctx context.Context, serviceName string) string {
+	err := service.Status(ctx, serviceName)
+	if err == nil || errors.Is(err, service.ErrInactiveService) {
+		return serviceName
+	}
+
+	if fallbacks, ok := serviceFallbackNames[serviceName]; ok {
+		for _, fb := range fallbacks {
+			err = service.Status(ctx, fb)
+			if err == nil || errors.Is(err, service.ErrInactiveService) {
+				return fb
+			}
+		}
+	}
+
+	return serviceName
 }
 
 func daemonCommand(ctx context.Context, _ io.Writer, args []string) error {

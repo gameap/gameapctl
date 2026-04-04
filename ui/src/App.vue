@@ -54,12 +54,13 @@
         </div>
       </div>
 
-      <div class="service-panels mt-6">
+      <div class="service-panels mt-6" v-if="hasVisibleServices">
         <div class="grid lg:grid-cols-2 gap-y-10 lg:gap-x-12">
-          <service-panel name="PostgreSQL" service-id="postgresql" />
-          <service-panel name="MySQL/MariaDB" service-id="mysql" />
-          <service-panel name="Nginx" service-id="nginx" />
-          <service-panel name="PHP" service-id="php-fpm"/>
+          <service-panel v-if="isServicePresent('nginx')" name="Nginx" service-id="nginx" />
+          <service-panel v-if="isServicePresent('apache')" name="Apache" service-id="apache" />
+          <service-panel v-if="isServicePresent('php-fpm')" name="PHP" service-id="php-fpm" />
+          <service-panel v-if="isServicePresent('postgresql')" name="PostgreSQL" service-id="postgresql" />
+          <service-panel v-if="isServicePresent('mysql')" name="MySQL/MariaDB" service-id="mysql" />
         </div>
       </div>
 
@@ -68,7 +69,7 @@
 </template>
 
 <script setup>
-import { ref, onBeforeMount } from 'vue'
+import { ref, computed, onBeforeMount } from 'vue'
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 
@@ -80,8 +81,21 @@ import {unarySend} from "./websocket.js"
 import {useNodeStore} from "./store/node.js"
 import {runAction} from "./action.js";
 import ServicePanel from "./components/ServicePanel.vue";
+import {useServicesStore} from "./store/services.js";
 
 const nodeStore = useNodeStore()
+const servicesStore = useServicesStore()
+
+const infraServices = ['nginx', 'apache', 'php-fpm', 'postgresql', 'mysql']
+
+function isServicePresent(serviceId) {
+  const svc = servicesStore.getServiceByName(serviceId)
+  return svc.status === 'active' || svc.status === 'inactive'
+}
+
+const hasVisibleServices = computed(() => {
+  return infraServices.some(id => isServicePresent(id))
+})
 
 onBeforeMount(() => {
   unarySend("node-info", "node-info", (code, message) => {

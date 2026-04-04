@@ -29,6 +29,11 @@ function reloadServices() {
             servicesStore.updateService("php-fpm", {status: message})
         }
     })
+    unarySend("service-apache-status", "service-status apache", (code, message) => {
+        if (code === "payload") {
+            servicesStore.updateService("apache", {status: message})
+        }
+    })
     unarySend("service-postgresql-status", "service-status postgresql", (code, message) => {
         if (code === "payload") {
             servicesStore.updateService("postgresql", {status: message})
