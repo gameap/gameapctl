@@ -45,6 +45,8 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 	}
 
 	switch cmd[0] {
+	case "detect-ips":
+		return detectIPs(w)
 	case "node-info":
 		return nodeInfo(ctx, w, args)
 	case "service-status":
@@ -87,6 +89,14 @@ func duplicateLogWriter(ctx context.Context, w io.Writer) {
 		<-ctx.Done()
 		log.SetOutput(oldLogWriter)
 	}()
+}
+
+//nolint:unparam
+func detectIPs(w io.Writer) error {
+	ips := utils.DetectIPs()
+	_, _ = w.Write([]byte(strings.Join(ips, ",")))
+
+	return nil
 }
 
 //nolint:unparam

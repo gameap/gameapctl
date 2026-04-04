@@ -4,6 +4,7 @@ import {storeToRefs} from "pinia"
 import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon} from "@heroicons/vue/24/outline/index.js";
 
 import { runAction, runActionWithoutDialog } from "../action.js";
+import { unarySend } from "../websocket.js";
 
 import {useServicesStore} from "../store/services.js"
 const services = useServicesStore()
@@ -23,6 +24,10 @@ const gameapAvailable = computed(() => {
 const servicePanelsCols = computed(() => {
   return window.innerWidth < 1000 ? 1 : 3
 })
+
+const hostOptions = ref([
+  { label: "127.0.0.1", value: "127.0.0.1" }
+])
 
 const showInstallationAskModal = ref(false)
 const showUninstallationAskModal = ref(false)
@@ -56,8 +61,17 @@ const uninstallationFormRules = {
 
 }
 
+function loadHostIPs() {
+  unarySend("detect-ips", "detect-ips", (code, value) => {
+    if (code === "payload" && value) {
+      hostOptions.value = value.split(",").map(ip => ({ label: ip, value: ip }))
+    }
+  })
+}
+
 function onClickGameAPInstallationButton() {
   showInstallationAskModal.value = true
+  loadHostIPs()
 }
 
 function onClickGameAPUpgradingButton() {
@@ -183,7 +197,13 @@ function handleUninstallButtonClick() {
       >
         <n-form-item label="Host" path="host">
           <n-input-group>
-            <n-input v-model:value="installationForm.host" placeholder="Host" />
+            <n-select
+                v-model:value="installationForm.host"
+                :options="hostOptions"
+                filterable
+                tag
+                placeholder="Select or enter IP"
+            />
             <n-input-number v-model:value="installationForm.port" placeholder="Port" />
           </n-input-group>
         </n-form-item>
