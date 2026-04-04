@@ -79,6 +79,10 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 		duplicateLogWriter(ctx, w)
 
 		return sendLogs(ctx, w, args)
+	case "change-password":
+		duplicateLogWriter(ctx, w)
+
+		return changePassword(ctx, w, args)
 	}
 
 	return errors.New("unknown command")
@@ -604,6 +608,44 @@ func sendLogs(_ context.Context, w io.Writer, _ []string) error {
 	cmd.Stdout = w
 	cmd.Stderr = w
 	cmd.Dir = filepath.Dir(ex)
+
+	err = cmd.Run()
+	if err != nil {
+		return errors.Wrap(err, "failed to execute command")
+	}
+
+	return nil
+}
+
+func changePassword(_ context.Context, w io.Writer, args []string) error {
+	ex, err := os.Executable()
+	if err != nil {
+		return errors.Wrap(err, "failed to get executable path")
+	}
+
+	username := ""
+	password := ""
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--username=") {
+			username = strings.TrimPrefix(arg, "--username=")
+		}
+
+		if strings.HasPrefix(arg, "--password=") {
+			password = strings.TrimPrefix(arg, "--password=")
+		}
+	}
+
+	if username == "" || password == "" {
+		return errors.New("username and password should be provided")
+	}
+
+	exPath := filepath.Dir(ex)
+
+	cmd := exec.Command(ex, "--non-interactive", "panel", "change-password", username, password)
+	cmd.Stdout = w
+	cmd.Stderr = w
+	cmd.Dir = exPath
 
 	err = cmd.Run()
 	if err != nil {

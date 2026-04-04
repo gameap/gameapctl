@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import {storeToRefs} from "pinia"
-import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon} from "@heroicons/vue/24/outline/index.js";
+import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon, KeyIcon} from "@heroicons/vue/24/outline/index.js";
 
 import { runAction, runActionWithoutDialog } from "../action.js";
 import { unarySend } from "../websocket.js";
@@ -44,6 +44,12 @@ const uninstallationForm = ref({
   withDaemon: false,
   withData: false,
   withServices: false,
+})
+
+const showChangePasswordModal = ref(false)
+const changePasswordForm = ref({
+  username: "",
+  password: "",
 })
 
 const databaseOptionsV4 = [
@@ -129,6 +135,29 @@ function handleUninstallButtonClick() {
   )
 }
 
+function onClickChangePasswordButton() {
+  showChangePasswordModal.value = true
+}
+
+function handleChangePasswordButtonClick() {
+  if (!changePasswordForm.value.username || !changePasswordForm.value.password) {
+    return
+  }
+
+  showChangePasswordModal.value = false
+
+  let params = "--username=" + changePasswordForm.value.username +
+      " --password=" + changePasswordForm.value.password
+
+  runActionWithoutDialog(
+      "change-password",
+      "change-password " + params,
+  )
+
+  changePasswordForm.value.username = ""
+  changePasswordForm.value.password = ""
+}
+
 </script>
 
 <template>
@@ -156,6 +185,16 @@ function handleUninstallButtonClick() {
                 <ChevronDoubleUpIcon />
               </template>
               Upgrade
+            </n-button>
+
+            <n-button
+                :disabled="!gameapAvailable"
+                @click="onClickChangePasswordButton()"
+            >
+              <template #icon>
+                <KeyIcon />
+              </template>
+              Change Password
             </n-button>
 
             <n-button
@@ -267,6 +306,49 @@ function handleUninstallButtonClick() {
 
       <n-button type="primary" @click="handleUninstallButtonClick">
         Uninstall
+      </n-button>
+    </n-card>
+  </n-modal>
+
+  <n-modal
+      v-model:show="showChangePasswordModal"
+      :mask-closable="true"
+  >
+    <n-card
+        class="card"
+        :bordered="false"
+        title="Change Password"
+        size="small"
+        role="dialog"
+        aria-modal="true"
+    >
+      <n-form
+          size="medium"
+          label-placement="left"
+          label-width="auto"
+      >
+        <n-form-item label="Username" path="username">
+          <n-input
+              v-model:value="changePasswordForm.username"
+              placeholder="Enter username"
+          />
+        </n-form-item>
+        <n-form-item label="Password" path="password">
+          <n-input
+              v-model:value="changePasswordForm.password"
+              type="password"
+              show-password-on="click"
+              placeholder="Enter new password"
+          />
+        </n-form-item>
+      </n-form>
+
+      <n-button
+          type="primary"
+          :disabled="!changePasswordForm.username || !changePasswordForm.password"
+          @click="handleChangePasswordButtonClick"
+      >
+        Change Password
       </n-button>
     </n-card>
   </n-modal>
