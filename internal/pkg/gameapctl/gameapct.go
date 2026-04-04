@@ -16,7 +16,7 @@ func stateDirectory() (string, error) {
 
 	dir := filepath.Join(homeDir, ".gameapctl")
 	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
-		err = os.Mkdir(dir, 0600)
+		err = os.Mkdir(dir, 0700) //nolint:mnd
 		if err != nil {
 			return "", errors.WithMessage(err, "failed to create state directory")
 		}

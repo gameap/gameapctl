@@ -1302,6 +1302,8 @@ func daemonInstall(ctx context.Context, state panelInstallStateV3) (panelInstall
 		host,
 		token,
 		"",
+		false,
+		"",
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")

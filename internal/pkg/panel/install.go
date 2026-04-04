@@ -42,7 +42,7 @@ func SetupGameAPFromGithubV3(
 
 	fmt.Println("Cloning gameap ...")
 	err = oscore.ExecCommand(
-		ctx, "git", "clone", "-b", branch, "https://github.com/et-nik/gameap.git", path,
+		ctx, "git", "clone", "-b", branch, gameap.GithubRepositoryPanelV3, path,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to clone gameap from github")
@@ -98,10 +98,15 @@ func SetupGameAPFromGithubV4(
 	if err != nil {
 		return errors.WithMessage(err, "failed to create temp dir")
 	}
+	defer func() {
+		if removeErr := os.RemoveAll(path); removeErr != nil {
+			log.Printf("Failed to remove temp dir %s: %v\n", path, removeErr)
+		}
+	}()
 
 	fmt.Println("Cloning gameap ...")
 	err = oscore.ExecCommand(
-		ctx, "git", "clone", "-b", branch, "https://github.com/gameap/gameap.git", path,
+		ctx, "git", "clone", "-b", branch, gameap.GithubRepositoryPanelV4, path,
 	)
 	if err != nil {
 		return errors.WithMessage(err, "failed to clone gameap from github")

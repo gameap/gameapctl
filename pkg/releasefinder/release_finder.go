@@ -88,8 +88,13 @@ func waitWithContext(ctx context.Context, duration time.Duration) error {
 	}
 }
 
-func fetchRelease(_ context.Context, api, kernel, platform string) (*Release, error) {
-	resp, err := http.Get(api) //nolint:noctx,gosec
+func fetchRelease(ctx context.Context, api, kernel, platform string) (*Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create request")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to get releases")
 	}

@@ -1,8 +1,6 @@
 package gameap
 
 import (
-	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -16,26 +14,23 @@ func Repository() string {
 		repos := []string{
 			"https://packages.gameap.com",
 			"https://packages.gameap.ru",
-			"http://packages.hz1.gameap.io",
+			"https://packages.hz1.gameap.io",
 		}
 
 		for _, cr := range repos {
 			client := http.DefaultClient
 			client.Timeout = 5 * time.Second //nolint:mnd
 
-			//nolint:bodyclose,noctx
+			//nolint:noctx
 			r, err := client.Get(cr)
 			if err != nil {
 				continue
 			}
-			defer func(body io.ReadCloser) {
-				err := body.Close()
-				if err != nil {
-					log.Println(err)
-				}
-			}(r.Body)
 
-			if r.StatusCode == http.StatusOK {
+			statusOK := r.StatusCode == http.StatusOK
+			r.Body.Close()
+
+			if statusOK {
 				repo = cr
 
 				break

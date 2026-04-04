@@ -75,7 +75,7 @@ func handleV3(cliCtx *cli.Context) error {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 		}
 
 		return errors.WithMessage(err, "failed to upgrade")
@@ -86,18 +86,7 @@ func handleV3(cliCtx *cli.Context) error {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
-		}
-
-		return errors.WithMessage(err, "failed to upgrade")
-	}
-
-	err = utils.Copy(filepath.Join(backupPanelDir, ".env"), filepath.Join(state.Path, ".env"))
-	if err != nil {
-		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
-		if backupErr != nil {
-			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 		}
 
 		return errors.WithMessage(err, "failed to upgrade")
@@ -108,7 +97,7 @@ func handleV3(cliCtx *cli.Context) error {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 		}
 
 		return errors.WithMessage(err, "failed to upgrade")
@@ -120,7 +109,7 @@ func handleV3(cliCtx *cli.Context) error {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 		}
 
 		return errors.WithMessage(err, "failed to set privileges")
@@ -132,7 +121,7 @@ func handleV3(cliCtx *cli.Context) error {
 		backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 		if backupErr != nil {
 			fmt.Println("Failed to restore backup: ", backupErr)
-			log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+			log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 		}
 
 		return errors.WithMessage(err, "failed to set privileges")
@@ -152,7 +141,7 @@ func handleV3(cliCtx *cli.Context) error {
 			backupErr := restoreBackup(ctx, backupPanelDir, state.Path)
 			if backupErr != nil {
 				fmt.Println("Failed to restore backup: ", backupErr)
-				log.Println(errors.WithMessagef(err, "failed to restore backup directory"))
+				log.Println(errors.WithMessagef(backupErr, "failed to restore backup directory"))
 			}
 
 			return errors.WithMessage(err, "failed to check installation")

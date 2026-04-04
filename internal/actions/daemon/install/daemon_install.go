@@ -26,6 +26,8 @@ import (
 	"time"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	daemonpkg "github.com/gameap/gameapctl/internal/pkg/daemon"
+	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/daemon"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
@@ -81,6 +83,9 @@ type daemonsInstallState struct {
 
 	ProcessManager string
 
+	FromGithub bool
+	Branch     string
+
 	User     string
 	Password string // Password for user (Windows only)
 }
@@ -91,17 +96,25 @@ func Handle(cliCtx *cli.Context) error {
 		cliCtx.String("host"),
 		cliCtx.String("token"),
 		cliCtx.String("config"),
+		cliCtx.Bool("github"),
+		cliCtx.String("branch"),
 	)
 }
 
 //nolint:gocognit,funlen,gocyclo
-func Install(ctx context.Context, host, token, config string) error {
+func Install(ctx context.Context, host, token, config string, fromGithub bool, branch string) error {
 	fmt.Println("Install daemon")
+
+	if branch == "" {
+		branch = "master"
+	}
 
 	state := daemonsInstallState{
 		Host:         host,
 		Token:        token,
 		Config:       config,
+		FromGithub:   fromGithub,
+		Branch:       branch,
 		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
@@ -240,8 +253,13 @@ func Install(ctx context.Context, host, token, config string) error {
 		return errors.WithMessage(err, "failed to set firewall rules")
 	}
 
-	fmt.Println("Downloading gameap-daemon binaries ...")
-	state, err = installDaemonBinaries(ctx, pm, state)
+	if state.FromGithub {
+		fmt.Println("Building gameap-daemon from GitHub source ...")
+		state, err = installDaemonFromGithub(ctx, pm, state)
+	} else {
+		fmt.Println("Downloading gameap-daemon binaries ...")
+		state, err = installDaemonBinaries(ctx, pm, state)
+	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
@@ -255,6 +273,18 @@ func Install(ctx context.Context, host, token, config string) error {
 	state, err = saveDaemonConfig(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to save daemon config")
+	}
+
+	if saveErr := gameapctl.SaveDaemonInstallState(ctx, gameapctl.DaemonInstallState{
+		Host:           state.Host,
+		WorkPath:       state.WorkPath,
+		SteamCMDPath:   state.SteamCMDPath,
+		CertsPath:      state.CertsPath,
+		FromGithub:     state.FromGithub,
+		Branch:         state.Branch,
+		ProcessManager: state.ProcessManager,
+	}); saveErr != nil {
+		log.Println("Warning: failed to save daemon install state:", saveErr)
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
@@ -441,6 +471,11 @@ func installDaemonBinaries(
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to make temp dir")
 	}
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			log.Printf("Failed to remove temp dir %s: %v\n", tmpDir, removeErr)
+		}
+	}()
 
 	daemonBinariesTmpDir := filepath.Join(tmpDir, "daemon")
 
@@ -488,6 +523,18 @@ func installDaemonBinaries(
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to install gameap-daemon")
 		}
+	}
+
+	return state, nil
+}
+
+func installDaemonFromGithub(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state daemonsInstallState,
+) (daemonsInstallState, error) {
+	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, state.Branch); err != nil {
+		return state, errors.WithMessage(err, "failed to build daemon from github")
 	}
 
 	return state, nil
@@ -840,32 +887,27 @@ func detectLocation() string {
 	}
 
 	for _, d := range detectors {
-		//nolint:bodyclose,noctx
+		//nolint:noctx
 		r, err := client.Get(d)
 		if err != nil {
 			continue
 		}
-		if r.StatusCode != http.StatusOK {
-			continue
-		}
-		defer func(body io.ReadCloser) {
-			err := body.Close()
-			if err != nil {
-				log.Println(errors.WithMessage(err, "failed to close response body"))
+
+		b, err := func() ([]byte, error) {
+			defer r.Body.Close()
+
+			if r.StatusCode != http.StatusOK {
+				return nil, nil
 			}
-		}(r.Body)
 
-		//nolint:mnd
-		if r.ContentLength > 20 {
-			continue
-		}
+			//nolint:mnd
+			if r.ContentLength > 20 {
+				return nil, nil
+			}
 
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			continue
-		}
-
-		if len(b) == 0 {
+			return io.ReadAll(r.Body)
+		}()
+		if err != nil || len(b) == 0 {
 			continue
 		}
 

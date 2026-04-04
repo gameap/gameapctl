@@ -126,6 +126,15 @@ func Run(args []string) {
 							&cli.StringFlag{
 								Name: "work-dir",
 							},
+							&cli.BoolFlag{
+								Name:  "github",
+								Usage: "Install daemon from GitHub source.",
+							},
+							&cli.StringFlag{
+								Name:   "branch",
+								Usage:  "Set specific GitHub branch for daemon.",
+								Hidden: true,
+							},
 						},
 					},
 					{
@@ -139,6 +148,17 @@ func Run(args []string) {
 							return nil
 						},
 						Action: daemonupdate.Handle,
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "github",
+								Usage: "Upgrade daemon from GitHub source.",
+							},
+							&cli.StringFlag{
+								Name:   "branch",
+								Usage:  "Set specific GitHub branch for daemon.",
+								Hidden: true,
+							},
+						},
 					},
 					{
 						Name:        "start",
@@ -274,6 +294,15 @@ func Run(args []string) {
 								Usage: "Update to specific version. " +
 									"The version must be greater than the current one, " +
 									"for example: --to=v4, --to=4",
+							},
+							&cli.BoolFlag{
+								Name:  "github",
+								Usage: "Upgrade GameAP from GitHub source.",
+							},
+							&cli.StringFlag{
+								Name:   "branch",
+								Usage:  "Set specific GitHub branch.",
+								Hidden: true,
 							},
 						},
 						Before: func(cliCtx *cli.Context) error {

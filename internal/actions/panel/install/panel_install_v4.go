@@ -1217,6 +1217,8 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 		host,
 		createToken,
 		"",
+		false,
+		"",
 	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")
@@ -1333,6 +1335,8 @@ func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallState
 		DataDirectory:        state.DataDirectory,
 		Database:             state.Database,
 		DatabaseWasInstalled: state.DatabaseWasInstalled,
+		FromGithub:           state.FromGithub,
+		Branch:               state.Branch,
 		DBHost:               state.DBCreds.Host,
 		DBPort:               state.DBCreds.Port,
 		DBName:               state.DBCreds.DatabaseName,

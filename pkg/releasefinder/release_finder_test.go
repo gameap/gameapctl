@@ -114,9 +114,7 @@ func Test_findReleaseFromBytes(t *testing.T) {
 			wantTag: "v3.2.0",
 		},
 		{
-			// BUG: strings.Contains("mips64", "mips") == true, and mips64 asset
-			// comes before mips in the API response, so mips returns the mips64 URL.
-			name:    "mips_matches_mips64_bug",
+			name:    "mips_not_confused_with_mips64",
 			json:    daemonReleasesJSON,
 			os:      "linux",
 			arch:    "mips",

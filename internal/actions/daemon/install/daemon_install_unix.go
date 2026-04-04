@@ -21,7 +21,7 @@ func createUser(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 		fmt.Println("Creating group...")
 		err = oscore.CreateGroup(ctx, "gameap")
 		if err != nil {
-			return daemonsInstallState{}, errors.WithMessage(err, "failed to create group")
+			return state, errors.WithMessage(err, "failed to create group")
 		}
 	}
 
@@ -35,7 +35,7 @@ func createUser(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 			err = oscore.CreateUser(ctx, "gameap", oscore.WithWorkDir(state.WorkPath))
 
 			if err != nil {
-				return daemonsInstallState{}, errors.WithMessage(err, "failed to create user")
+				return state, errors.WithMessage(err, "failed to create user")
 			}
 		default:
 			return state, errors.WithMessage(err, "failed to lookup user")
@@ -63,7 +63,7 @@ func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsI
 
 	err = oscore.ChownR(ctx, state.WorkPath, uid, gid)
 	if err != nil {
-		return daemonsInstallState{}, err
+		return state, errors.WithMessage(err, "failed to set ownership")
 	}
 
 	return state, nil

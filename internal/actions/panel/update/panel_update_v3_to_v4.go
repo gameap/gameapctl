@@ -627,7 +627,7 @@ func checkHealthV4(ctx context.Context, host, port string) error {
 		}
 		bodyCloseErr := resp.Body.Close()
 		if bodyCloseErr != nil {
-			log.Println(errors.WithMessage(err, "failed to close response body"))
+			log.Println(errors.WithMessage(bodyCloseErr, "failed to close response body"))
 		}
 
 		if resp.StatusCode == http.StatusOK {
