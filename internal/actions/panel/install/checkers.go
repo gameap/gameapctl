@@ -97,7 +97,7 @@ func resolveListenAddress(host, port string) string {
 		return ""
 	}
 
-	localIPs := make([]net.IP, len(addrs))
+	localIPs := make([]net.IP, 0, len(addrs))
 	for _, addr := range addrs {
 		ipnet, ok := addr.(*net.IPNet)
 		if !ok {
