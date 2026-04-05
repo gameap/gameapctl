@@ -160,17 +160,6 @@ func checkHTTPHostAvailabilityV4(ctx context.Context, state panelInstallStateV4)
 		if err != nil {
 			fmt.Println("Failed to close a response body: ", err)
 		}
-
-		err = warningV4(ctx, state,
-			fmt.Sprintf(
-				"Host %s:%s is already in use. "+
-					"You can specify other available port. "+
-					"Further installation may fail.", state.Host, state.Port,
-			),
-		)
-		if err != nil {
-			return state, err
-		}
 	}
 
 	return state, nil
