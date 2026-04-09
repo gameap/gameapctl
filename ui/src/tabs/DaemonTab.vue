@@ -27,12 +27,21 @@ const showInstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
+  connectURL: "",
   host: "",
   installationToken: "",
 })
 const installationFormRules = {
 
 }
+
+const isConnectMode = computed(() => {
+  return installationForm.value.connectURL !== ""
+})
+
+const isLegacyMode = computed(() => {
+  return installationForm.value.host !== "" || installationForm.value.installationToken !== ""
+})
 
 function onClickDaemonInstallationButton() {
   showInstallationAskModal.value = true
@@ -41,8 +50,13 @@ function onClickDaemonInstallationButton() {
 function handleInstallButtonClick(e) {
   showInstallationAskModal.value = false
 
-  let params = "--host=" + installationForm.value.host +
-      " --installation-token=" + installationForm.value.installationToken
+  let params
+  if (installationForm.value.connectURL) {
+    params = "--connect-url=" + installationForm.value.connectURL
+  } else {
+    params = "--host=" + installationForm.value.host +
+        " --installation-token=" + installationForm.value.installationToken
+  }
 
   runActionWithoutDialog(
       "daemon-install",
@@ -113,8 +127,29 @@ function onClickDaemonUpgradingButton() {
           label-placement="left"
           label-width="auto"
           >
+        <n-form-item label="Connect URL" prop="connectURL">
+          <n-input
+              v-model:value="installationForm.connectURL"
+              placeholder="grpc://host:port/key"
+              :disabled="isLegacyMode"
+          />
+
+          <n-tooltip placement="top-start" trigger="hover">
+            <template #trigger>
+              <QuestionMarkCircleIcon class="ml-1 h-5 w-5 text-gray-400" />
+            </template>
+            Paste the connect URL from the GameAP panel (grpc://host:port/key). This is the recommended way to connect.
+          </n-tooltip>
+        </n-form-item>
+
+        <n-divider>or</n-divider>
+
         <n-form-item label="Host" prop="host">
-          <n-input v-model:value="installationForm.host" placeholder="http://<your host / IP>" />
+          <n-input
+              v-model:value="installationForm.host"
+              placeholder="http://<your host / IP>"
+              :disabled="isConnectMode"
+          />
 
           <n-tooltip placement="top-start" trigger="hover">
             <template #trigger>
@@ -125,7 +160,11 @@ function onClickDaemonUpgradingButton() {
 
         </n-form-item>
         <n-form-item label="Installation token" prop="installationToken">
-          <n-input v-model:value="installationForm.installationToken" placeholder="Token" />
+          <n-input
+              v-model:value="installationForm.installationToken"
+              placeholder="Token"
+              :disabled="isConnectMode"
+          />
 
           <n-tooltip placement="top-start" trigger="hover">
             <template #trigger>

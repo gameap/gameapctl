@@ -1297,14 +1297,10 @@ func daemonInstall(ctx context.Context, state panelInstallStateV3) (panelInstall
 
 	host := "http://" + state.Host + ":" + state.Port
 
-	err = daemoninstall.Install(
-		ctx,
-		host,
-		token,
-		"",
-		false,
-		"",
-	)
+	err = daemoninstall.Install(ctx, daemoninstall.InstallOptions{
+		Host:  host,
+		Token: token,
+	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")
 	}

@@ -112,6 +112,11 @@ func Run(args []string) {
 						Action: daemoninstall.Handle,
 						Flags: []cli.Flag{
 							&cli.StringFlag{
+								Name:    "connect",
+								EnvVars: []string{"CONNECT_URL"},
+								Usage:   "Connect URL for gRPC enrollment (grpc://host:port/key)",
+							},
+							&cli.StringFlag{
 								Name:    "token",
 								EnvVars: []string{"CREATE_TOKEN"},
 							},

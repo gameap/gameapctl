@@ -1212,14 +1212,10 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 		return state, errors.New("failed to extract create token from daemon setup response")
 	}
 
-	err = daemoninstall.Install(
-		ctx,
-		host,
-		createToken,
-		"",
-		false,
-		"",
-	)
+	err = daemoninstall.Install(ctx, daemoninstall.InstallOptions{
+		Host:  host,
+		Token: createToken,
+	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")
 	}

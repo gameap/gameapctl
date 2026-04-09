@@ -19,6 +19,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -67,9 +68,10 @@ func (e InvalidResponseStatusCodeError) Error() string {
 }
 
 type daemonsInstallState struct {
-	Host   string
-	Token  string
-	Config string
+	Host       string
+	Token      string
+	ConnectURL string
+	Config     string
 
 	WorkPath     string
 	SteamCMDPath string
@@ -90,40 +92,60 @@ type daemonsInstallState struct {
 	Password string // Password for user (Windows only)
 }
 
+type InstallOptions struct {
+	Host       string
+	Token      string
+	ConnectURL string
+	Config     string
+	FromGithub bool
+	Branch     string
+}
+
 func Handle(cliCtx *cli.Context) error {
-	return Install(
-		cliCtx.Context,
-		cliCtx.String("host"),
-		cliCtx.String("token"),
-		cliCtx.String("config"),
-		cliCtx.Bool("github"),
-		cliCtx.String("branch"),
-	)
+	return Install(cliCtx.Context, InstallOptions{
+		Host:       cliCtx.String("host"),
+		Token:      cliCtx.String("token"),
+		ConnectURL: cliCtx.String("connect"),
+		Config:     cliCtx.String("config"),
+		FromGithub: cliCtx.Bool("github"),
+		Branch:     cliCtx.String("branch"),
+	})
 }
 
 //nolint:gocognit,funlen,gocyclo
-func Install(ctx context.Context, host, token, config string, fromGithub bool, branch string) error {
+func Install(ctx context.Context, opts InstallOptions) error {
 	fmt.Println("Install daemon")
 
-	if branch == "" {
-		branch = "master"
+	if opts.Branch == "" {
+		opts.Branch = "master"
 	}
 
-	state := daemonsInstallState{
-		Host:         host,
-		Token:        token,
-		Config:       config,
-		FromGithub:   fromGithub,
-		Branch:       branch,
-		SteamCMDPath: gameap.DefaultSteamCMDPath,
+	if opts.ConnectURL != "" && (opts.Host != "" || opts.Token != "") {
+		return errors.New("--connect and --host/--token are mutually exclusive")
 	}
 
-	if state.Host == "" {
+	if opts.ConnectURL != "" {
+		if _, err := ParseConnectURL(opts.ConnectURL); err != nil {
+			return errors.WithMessage(err, "invalid connect URL")
+		}
+	}
+
+	if opts.ConnectURL == "" && opts.Host == "" {
 		return errEmptyHost
 	}
 
-	if state.Token == "" {
+	if opts.ConnectURL == "" && opts.Token == "" {
 		return errEmptyToken
+	}
+
+	state := daemonsInstallState{
+		Host:         opts.Host,
+		Token:        opts.Token,
+		ConnectURL:   opts.ConnectURL,
+		Config:       opts.Config,
+		FromGithub:   opts.FromGithub,
+		Branch:       opts.Branch,
+		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
 	if state.WorkPath == "" {
@@ -241,12 +263,6 @@ func Install(ctx context.Context, host, token, config string, fromGithub bool, b
 		return errors.WithMessage(err, "failed to set user privileges")
 	}
 
-	fmt.Println("Generating GameAP Daemon certificates ...")
-	state, err = generateCertificates(ctx, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to generate certificates")
-	}
-
 	fmt.Println("Setting firewall rules ...")
 	state, err = setFirewallRules(ctx, state)
 	if err != nil {
@@ -264,19 +280,18 @@ func Install(ctx context.Context, host, token, config string, fromGithub bool, b
 		return errors.WithMessage(err, "failed to install daemon binaries")
 	}
 
-	fmt.Println("Configuring gameap-daemon ...")
-	state, err = configureDaemon(ctx, state)
-	if err != nil {
-		return errors.WithMessage(err, "failed to configure daemon")
+	if state.ConnectURL != "" {
+		state, err = enrollFlow(ctx, state)
+	} else {
+		state, err = legacyConfigureFlow(ctx, state)
 	}
-
-	state, err = saveDaemonConfig(ctx, state)
 	if err != nil {
-		return errors.WithMessage(err, "failed to save daemon config")
+		return err
 	}
 
 	if saveErr := gameapctl.SaveDaemonInstallState(ctx, gameapctl.DaemonInstallState{
 		Host:           state.Host,
+		ConnectURL:     state.ConnectURL,
 		WorkPath:       state.WorkPath,
 		SteamCMDPath:   state.SteamCMDPath,
 		CertsPath:      state.CertsPath,
@@ -719,6 +734,73 @@ func configureDaemon(ctx context.Context, state daemonsInstallState) (daemonsIns
 	}
 
 	return state, nil
+}
+
+func enrollFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	if _, statErr := os.Stat(state.CertsPath); os.IsNotExist(statErr) {
+		if mkErr := os.MkdirAll(state.CertsPath, 0700); mkErr != nil { //nolint:mnd
+			return state, errors.WithMessage(mkErr, "failed to create certificates directory")
+		}
+	}
+
+	fmt.Println("Enrolling daemon via connect URL ...")
+
+	if err := enrollDaemon(ctx, state); err != nil {
+		return state, errors.WithMessage(err, "failed to enroll daemon via connect URL")
+	}
+
+	return state, nil
+}
+
+func legacyConfigureFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	var err error
+
+	fmt.Println("Generating GameAP Daemon certificates ...")
+	state, err = generateCertificates(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to generate certificates")
+	}
+
+	fmt.Println("Configuring gameap-daemon ...")
+	state, err = configureDaemon(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to configure daemon")
+	}
+
+	state, err = saveDaemonConfig(ctx, state)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to save daemon config")
+	}
+
+	return state, nil
+}
+
+func enrollDaemon(ctx context.Context, state daemonsInstallState) error {
+	daemonPath := gameap.DefaultDaemonFilePath
+
+	if _, err := os.Stat(daemonPath); os.IsNotExist(err) {
+		return errors.New("gameap-daemon binary not found at " + daemonPath)
+	}
+
+	enrollCtx, cancel := context.WithTimeout(ctx, 60*time.Second) //nolint:mnd
+	defer cancel()
+
+	cmd := exec.CommandContext(enrollCtx, daemonPath, "enroll",
+		"--connect="+state.ConnectURL,
+		"--config-path="+gameap.DefaultDaemonConfigFilePath,
+		"--certs-dir="+state.CertsPath,
+		"--work-path="+state.WorkPath,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	log.Println(cmd.String())
+
+	if err := cmd.Run(); err != nil {
+		return errors.WithMessage(err, "gameap-daemon enroll failed")
+	}
+
+	return nil
 }
 
 func dumpRequestAndResponse(req *http.Request, res *http.Response) {

@@ -495,21 +495,46 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 		return errors.Wrap(err, "failed to get executable path")
 	}
 
-	host := ""
-	installationToken := ""
-
-	if len(args) < 2 {
-		return errors.New("not enough arguments, should be at least 2: host and installation token")
+	if len(args) < 1 {
+		return errors.New("not enough arguments")
 	}
 
+	host := ""
+	installationToken := ""
+	connectURL := ""
+
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "--host=") {
+		switch {
+		case strings.HasPrefix(arg, "--host="):
 			host = strings.TrimPrefix(arg, "--host=")
+		case strings.HasPrefix(arg, "--installation-token="):
+			installationToken = strings.TrimPrefix(arg, "--installation-token=")
+		case strings.HasPrefix(arg, "--connect-url="):
+			connectURL = strings.TrimPrefix(arg, "--connect-url=")
+		}
+	}
+
+	exPath := filepath.Dir(ex)
+
+	if connectURL != "" {
+		cmd := exec.Command(
+			ex,
+			"--non-interactive",
+			"daemon",
+			"install",
+			"--connect="+connectURL,
+		)
+		cmd.Stdout = w
+		cmd.Stderr = w
+		cmd.Dir = exPath
+
+		if runErr := cmd.Run(); runErr != nil {
+			return errors.Wrap(runErr, "failed to execute command")
 		}
 
-		if strings.HasPrefix(arg, "--installation-token=") {
-			installationToken = strings.TrimPrefix(arg, "--installation-token=")
-		}
+		packagemanager.UpdateEnvPath(ctx)
+
+		return nil
 	}
 
 	if host == "" || installationToken == "" {
@@ -573,8 +598,6 @@ func daemonInstall(ctx context.Context, w io.Writer, args []string) error {
 	if createToken == "" {
 		return errors.New("failed to get create token")
 	}
-
-	exPath := filepath.Dir(ex)
 
 	cmd := exec.Command(
 		ex,
