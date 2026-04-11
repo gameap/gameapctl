@@ -125,8 +125,14 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	}
 
 	if opts.ConnectURL != "" {
-		if _, err := ParseConnectURL(opts.ConnectURL); err != nil {
+		connInfo, err := ParseConnectURL(opts.ConnectURL)
+		if err != nil {
 			return errors.WithMessage(err, "invalid connect URL")
+		}
+
+		fmt.Printf("Checking gRPC connection to %s ...\n", connInfo.Address())
+		if err := checkGRPCConnectivity(connInfo.Address()); err != nil {
+			return err
 		}
 	}
 
@@ -791,12 +797,17 @@ func enrollDaemon(ctx context.Context, state daemonsInstallState) error {
 		"--certs-dir="+state.CertsPath,
 		"--work-path="+state.WorkPath,
 	)
+	var stderrBuf bytes.Buffer
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 
 	log.Println(cmd.String())
 
 	if err := cmd.Run(); err != nil {
+		if stderrBuf.Len() > 0 {
+			return errors.Wrapf(err, "gameap-daemon enroll failed: %s", strings.TrimSpace(stderrBuf.String()))
+		}
+
 		return errors.WithMessage(err, "gameap-daemon enroll failed")
 	}
 

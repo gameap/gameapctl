@@ -1,6 +1,7 @@
 package install
 
 import (
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,4 +94,44 @@ func Test_ParseConnectURL(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func Test_ConnectInfo_Address(t *testing.T) {
+	tests := []struct {
+		name string
+		info ConnectInfo
+		want string
+	}{
+		{
+			name: "ip with port",
+			info: ConnectInfo{Host: "192.168.1.1", Port: 31717},
+			want: "192.168.1.1:31717",
+		},
+		{
+			name: "hostname with port",
+			info: ConnectInfo{Host: "example.com", Port: 9090},
+			want: "example.com:9090",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.info.Address())
+		})
+	}
+}
+
+func Test_checkGRPCConnectivity_reachable(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+
+	err = checkGRPCConnectivity(listener.Addr().String())
+	assert.NoError(t, err)
+}
+
+func Test_checkGRPCConnectivity_unreachable(t *testing.T) {
+	err := checkGRPCConnectivity("127.0.0.1:1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot reach gRPC server")
 }

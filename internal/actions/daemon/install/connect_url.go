@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -51,4 +52,18 @@ func ParseConnectURL(rawURL string) (ConnectInfo, error) {
 		Port:     uint16(portNum),
 		SetupKey: key,
 	}, nil
+}
+
+func (c ConnectInfo) Address() string {
+	return net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port)))
+}
+
+func checkGRPCConnectivity(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second) //nolint:mnd
+	if err != nil {
+		return errors.Wrapf(err, "cannot reach gRPC server at %s", addr)
+	}
+	_ = conn.Close()
+
+	return nil
 }
