@@ -47,7 +47,7 @@ func Run(args []string) {
 	app := &cli.App{
 		Name:      "gameapctl",
 		Usage:     "GameAP Control",
-		UsageText: "Find more information at: https://docs.gameap.ru/",
+		UsageText: "Find more information at: https://docs.gameap.com/",
 		Before: func(ctx *cli.Context) error {
 			var err error
 			ctx.Context, err = contextInternal.SetOSContext(ctx.Context)
