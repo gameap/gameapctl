@@ -10,3 +10,7 @@ import (
 func FindProcess(ctx context.Context) (*process.Process, error) {
 	return oscore.FindProcessByName(ctx, daemonProcessName)
 }
+
+func WaitForProcess(ctx context.Context) (*process.Process, error) {
+	return oscore.WaitForProcessByName(ctx, daemonProcessName)
+}

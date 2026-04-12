@@ -53,13 +53,10 @@ func Restart(ctx context.Context, serviceName string) error {
 			"failed to restart",
 			slog.String("err", err.Error()),
 		)
+
 		err = s.Stop(ctx, serviceName)
 		if err != nil {
-			slog.WarnContext(
-				ctx,
-				"failed to stop",
-				slog.String("err", err.Error()),
-			)
+			return errors.WithMessage(err, "failed to stop service during restart fallback")
 		}
 
 		return s.Start(ctx, serviceName)

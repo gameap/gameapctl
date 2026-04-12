@@ -12,6 +12,8 @@ import (
 const (
 	defaultTerminateWaitTimeout = 30 * time.Second
 	defaultKillWaitTimeout      = 10 * time.Second
+	defaultWaitRetries          = 5
+	defaultWaitInterval         = 1 * time.Second
 )
 
 func FindProcessByName(ctx context.Context, processName string) (*process.Process, error) {
@@ -28,6 +30,31 @@ func FindProcessByName(ctx context.Context, processName string) (*process.Proces
 
 		if name == processName {
 			return p, nil
+		}
+	}
+
+	return nil, nil //nolint:nilnil
+}
+
+func WaitForProcessByName(ctx context.Context, processName string) (*process.Process, error) {
+	ticker := time.NewTicker(defaultWaitInterval)
+	defer ticker.Stop()
+
+	for i := 0; i < defaultWaitRetries; i++ {
+		p, err := FindProcessByName(ctx, processName)
+		if err != nil {
+			return nil, err
+		}
+		if p != nil {
+			return p, nil
+		}
+
+		log.Printf("Process %s not found, retrying (%d/%d)\n", processName, i+1, defaultWaitRetries)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
 		}
 	}
 

@@ -27,7 +27,7 @@ func Handle(cliCtx *cli.Context) error {
 
 	log.Println("Checking process status...")
 
-	pr, err := oscore.FindProcessByName(ctx, "gameap")
+	pr, err := oscore.WaitForProcessByName(ctx, "gameap")
 	if err != nil {
 		return errors.WithMessage(err, "failed to find started gameap process")
 	}

@@ -175,9 +175,12 @@ func startDaemon(ctx context.Context) error {
 	}
 
 	log.Println("Checking process status...")
-	daemonProcess, err := daemon.FindProcess(ctx)
-	if err != nil || daemonProcess == nil {
+	daemonProcess, err := daemon.WaitForProcess(ctx)
+	if err != nil {
 		return errors.WithMessage(err, "failed to find daemon process")
+	}
+	if daemonProcess == nil {
+		return errors.New("daemon process not found")
 	}
 
 	return nil

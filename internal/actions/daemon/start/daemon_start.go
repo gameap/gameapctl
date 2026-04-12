@@ -18,7 +18,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	log.Println("Checking process status...")
-	daemonProcess, err := daemon.FindProcess(cliCtx.Context)
+	daemonProcess, err := daemon.WaitForProcess(cliCtx.Context)
 	if err != nil {
 		return errors.WithMessage(err, "failed to find daemon process")
 	}
