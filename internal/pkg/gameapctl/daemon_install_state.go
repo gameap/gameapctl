@@ -22,6 +22,7 @@ type DaemonInstallState struct {
 	FromGithub     bool   `json:"fromGithub"`
 	Branch         string `json:"branch"`
 	ProcessManager string `json:"processManager"`
+	GRPCEnabled    bool   `json:"grpcEnabled,omitempty"`
 }
 
 func SaveDaemonInstallState(_ context.Context, state DaemonInstallState) error {

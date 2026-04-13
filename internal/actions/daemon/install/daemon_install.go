@@ -131,7 +131,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		}
 
 		fmt.Printf("Checking gRPC connection to %s ...\n", connInfo.Address())
-		if err := checkGRPCConnectivity(connInfo.Address()); err != nil {
+		if err := daemonpkg.CheckGRPCConnectivity(connInfo.Address()); err != nil {
 			return err
 		}
 	}

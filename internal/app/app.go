@@ -163,6 +163,16 @@ func Run(args []string) {
 								Usage:  "Set specific GitHub branch for daemon.",
 								Hidden: true,
 							},
+							&cli.BoolFlag{
+								Name: "switch-to-grpc",
+								Usage: "Switch daemon from legacy binn protocol to gRPC bidi stream. " +
+									"Daemon will be briefly unavailable during the switch; " +
+									"run during a maintenance window.",
+							},
+							&cli.StringFlag{
+								Name:  "grpc-address",
+								Usage: "Override gRPC server address (default: derived from api_host, port 31718).",
+							},
 						},
 					},
 					{

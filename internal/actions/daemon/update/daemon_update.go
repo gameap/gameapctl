@@ -23,6 +23,10 @@ import (
 
 //nolint:funlen,gocognit
 func Handle(cliCtx *cli.Context) error {
+	if cliCtx.Bool("switch-to-grpc") {
+		return HandleSwitchToGRPC(cliCtx)
+	}
+
 	ctx := cliCtx.Context
 
 	fmt.Println("Daemon update")
