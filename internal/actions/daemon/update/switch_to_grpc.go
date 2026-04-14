@@ -86,7 +86,7 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 
 	cfg, err := daemonpkg.LoadConfig(deps.cfgPath)
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "failed to load gRPC configuration")
 	}
 
 	if enabled, _, _ := cfg.ReadString("$.grpc.enabled"); enabled == "true" {
