@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,9 +38,9 @@ func newRecordingDeps(t *testing.T) *recordingDeps {
 	t.Helper()
 
 	return &recordingDeps{
-		t:        t,
-		procRuns: true,
-		fetchSeq: []fetchResult{{conn: "grpc"}},
+		t:         t,
+		procRuns:  true,
+		verifySeq: []error{nil},
 	}
 }
 
@@ -47,12 +49,8 @@ var (
 	errConnRefused       = errors.New("connection refused")
 	errStartBoom         = errors.New("start boom")
 	errNoStateFile       = errors.New("no state file")
+	errLegacyStillUp     = errors.New("expected HTTP 409, got 200")
 )
-
-type fetchResult struct {
-	conn string
-	err  error
-}
 
 type recordingDeps struct {
 	t            *testing.T
@@ -64,8 +62,8 @@ type recordingDeps struct {
 	tcpErr       error
 	tlsErr       error
 	lookPathErr  error
-	fetchSeq     []fetchResult
-	fetchCalls   int
+	verifySeq    []error
+	verifyCalls  int
 	stateLoadErr error
 	stateSaved   bool
 	state        gameapctl.DaemonInstallState
@@ -102,16 +100,13 @@ func (r *recordingDeps) build(cfgPath, explicit string) switchDeps {
 		},
 		tcpDial:  func(string) error { return r.tcpErr },
 		tlsProbe: func(_, _, _, _ string) error { return r.tlsErr },
-		fetchConnType: func(_ context.Context, _ string, _ uint, _ string) (string, error) {
-			defer func() { r.fetchCalls++ }()
-			if r.fetchCalls < len(r.fetchSeq) {
-				res := r.fetchSeq[r.fetchCalls]
-
-				return res.conn, res.err
+		verifyLegacyRevoked: func(_ context.Context, _, _ string) error {
+			defer func() { r.verifyCalls++ }()
+			if r.verifyCalls < len(r.verifySeq) {
+				return r.verifySeq[r.verifyCalls]
 			}
-			last := r.fetchSeq[len(r.fetchSeq)-1]
 
-			return last.conn, last.err
+			return r.verifySeq[len(r.verifySeq)-1]
 		},
 		sleep: func(time.Duration) {},
 		loadState: func(context.Context) (gameapctl.DaemonInstallState, error) {
@@ -147,7 +142,7 @@ func TestSwitchToGRPC_AlreadyEnabled_ShortCircuits(t *testing.T) {
 	assert.Equal(t, cfg, string(original))
 	assert.Equal(t, 0, r.stopped)
 	assert.Equal(t, 0, r.started)
-	assert.Equal(t, 0, r.fetchCalls)
+	assert.Equal(t, 0, r.verifyCalls)
 }
 
 func TestSwitchToGRPC_APIHostMissing_NoFlag_ReturnsError(t *testing.T) {
@@ -211,11 +206,11 @@ func TestSwitchToGRPC_HappyPath(t *testing.T) {
 	assert.Contains(t, string(after), "address:")
 	assert.Contains(t, string(after), "panel.example.com:31718")
 	assert.NotContains(t, string(after), "api_host")
-	assert.NotContains(t, string(after), "api_key")
+	assert.Contains(t, string(after), "api_key")
 	assert.Contains(t, string(after), "ca_certificate_file")
 	assert.Equal(t, 1, r.stopped)
 	assert.Equal(t, 1, r.started)
-	assert.Equal(t, 1, r.fetchCalls)
+	assert.Equal(t, 1, r.verifyCalls)
 	assert.True(t, r.stateSaved)
 	assert.True(t, r.state.GRPCEnabled)
 }
@@ -223,21 +218,21 @@ func TestSwitchToGRPC_HappyPath(t *testing.T) {
 func TestSwitchToGRPC_VerificationPolls_ThenSucceeds(t *testing.T) {
 	p := writeConfig(t, validLegacyConfig)
 	r := newRecordingDeps(t)
-	r.fetchSeq = []fetchResult{
-		{conn: "legacy"},
-		{conn: "legacy"},
-		{conn: "grpc"},
+	r.verifySeq = []error{
+		errLegacyStillUp,
+		errLegacyStillUp,
+		nil,
 	}
 
 	err := switchToGRPC(context.Background(), r.build(p, ""))
 	require.NoError(t, err)
-	assert.Equal(t, 3, r.fetchCalls)
+	assert.Equal(t, 3, r.verifyCalls)
 }
 
-func TestSwitchToGRPC_VerificationNeverGRPC_TriggersRollback(t *testing.T) {
+func TestSwitchToGRPC_LegacyNeverRevoked_TriggersRollback(t *testing.T) {
 	p := writeConfig(t, validLegacyConfig)
 	r := newRecordingDeps(t)
-	r.fetchSeq = []fetchResult{{conn: "legacy"}}
+	r.verifySeq = []error{errLegacyStillUp}
 
 	err := switchToGRPC(context.Background(), r.build(p, ""))
 	require.Error(t, err)
@@ -245,7 +240,7 @@ func TestSwitchToGRPC_VerificationNeverGRPC_TriggersRollback(t *testing.T) {
 
 	after, _ := os.ReadFile(p)
 	assert.Equal(t, validLegacyConfig, string(after))
-	assert.Equal(t, verificationPollMaxAttempts, r.fetchCalls)
+	assert.Equal(t, verificationPollMaxAttempts, r.verifyCalls)
 	assert.GreaterOrEqual(t, r.started, 2) // initial start + rollback restart
 }
 
@@ -285,7 +280,7 @@ func TestSwitchToGRPC_ExplicitGRPCAddress_WrittenToConfig(t *testing.T) {
 	assert.Contains(t, string(after), "address:")
 	assert.Contains(t, string(after), "grpc.example.com:31718")
 	assert.NotContains(t, string(after), "api_host")
-	assert.NotContains(t, string(after), "api_key")
+	assert.Contains(t, string(after), "api_key")
 }
 
 func TestSwitchToGRPC_StateLoadError_NonFatal(t *testing.T) {
@@ -332,4 +327,76 @@ func assertNoBackup(t *testing.T, cfgPath string) {
 	for _, e := range entries {
 		assert.NotContains(t, e.Name(), ".bak.")
 	}
+}
+
+func TestRealVerifyLegacyRevoked_409WithMarker_Succeeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte("daemon is connected via gRPC bidi stream, HTTP API is disabled for this node"))
+	}))
+	defer srv.Close()
+
+	err := realVerifyLegacyRevoked(context.Background(), srv.URL, "test-key")
+	require.NoError(t, err)
+}
+
+func TestRealVerifyLegacyRevoked_409WithoutMarker_Fails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte("conflict: some other reason"))
+	}))
+	defer srv.Close()
+
+	err := realVerifyLegacyRevoked(context.Background(), srv.URL, "test-key")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "without expected marker")
+}
+
+func TestRealVerifyLegacyRevoked_200_Fails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"token":"legacy-token"}`))
+	}))
+	defer srv.Close()
+
+	err := realVerifyLegacyRevoked(context.Background(), srv.URL, "test-key")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected HTTP 409, got 200")
+}
+
+func TestRealVerifyLegacyRevoked_500_Fails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	}))
+	defer srv.Close()
+
+	err := realVerifyLegacyRevoked(context.Background(), srv.URL, "test-key")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected HTTP 409, got 500")
+}
+
+func TestRealVerifyLegacyRevoked_RequestShape(t *testing.T) {
+	var (
+		gotMethod string
+		gotPath   string
+		gotAuth   string
+		gotCT     string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		gotCT = r.Header.Get("Content-Type")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte("HTTP API is disabled for this node"))
+	}))
+	defer srv.Close()
+
+	err := realVerifyLegacyRevoked(context.Background(), srv.URL, "secret-key")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodGet, gotMethod)
+	assert.Equal(t, "/gdaemon_api/get_token", gotPath)
+	assert.Equal(t, "Bearer secret-key", gotAuth)
+	assert.Equal(t, "application/json", gotCT)
 }

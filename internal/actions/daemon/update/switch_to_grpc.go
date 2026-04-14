@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -33,9 +32,11 @@ const (
 	postStartGracePeriod        = 3 * time.Second
 	tlsDialTimeout              = 5 * time.Second
 	httpRequestTimeout          = 10 * time.Second
+
+	grpcDisabledMarker = "HTTP API is disabled for this node"
 )
 
-var errVerificationTimeout = errors.New("daemon did not register via gRPC within timeout")
+var errVerificationTimeout = errors.New("panel did not revoke legacy credentials within timeout")
 
 type switchDeps struct {
 	cfgPath          string
@@ -46,9 +47,9 @@ type switchDeps struct {
 	findProcess func(context.Context) (*process.Process, error)
 	lookPath    func(string) (string, error)
 
-	tcpDial       func(addr string) error
-	tlsProbe      func(caFile, certFile, keyFile, addr string) error
-	fetchConnType func(ctx context.Context, apiHost string, nodeID uint, apiKey string) (string, error)
+	tcpDial             func(addr string) error
+	tlsProbe            func(caFile, certFile, keyFile, addr string) error
+	verifyLegacyRevoked func(ctx context.Context, apiHost, apiKey string) error
 
 	sleep     func(time.Duration)
 	loadState func(context.Context) (gameapctl.DaemonInstallState, error)
@@ -60,18 +61,18 @@ func HandleSwitchToGRPC(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
 	deps := switchDeps{
-		cfgPath:          gameap.DefaultDaemonConfigFilePath,
-		explicitGRPCAddr: cliCtx.String("grpc-address"),
-		stopDaemon:       stopDaemon,
-		startDaemon:      startDaemon,
-		findProcess:      pkgdaemon.FindProcess,
-		lookPath:         exec.LookPath,
-		tcpDial:          daemonpkg.CheckGRPCConnectivity,
-		tlsProbe:         realTLSProbe,
-		fetchConnType:    realFetchConnectionType,
-		sleep:            time.Sleep,
-		loadState:        gameapctl.LoadDaemonInstallState,
-		saveState:        gameapctl.SaveDaemonInstallState,
+		cfgPath:             gameap.DefaultDaemonConfigFilePath,
+		explicitGRPCAddr:    cliCtx.String("grpc-address"),
+		stopDaemon:          stopDaemon,
+		startDaemon:         startDaemon,
+		findProcess:         pkgdaemon.FindProcess,
+		lookPath:            exec.LookPath,
+		tcpDial:             daemonpkg.CheckGRPCConnectivity,
+		tlsProbe:            realTLSProbe,
+		verifyLegacyRevoked: realVerifyLegacyRevoked,
+		sleep:               time.Sleep,
+		loadState:           gameapctl.LoadDaemonInstallState,
+		saveState:           gameapctl.SaveDaemonInstallState,
 		printf: func(format string, a ...interface{}) {
 			fmt.Printf(format, a...)
 		},
@@ -112,9 +113,11 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 	}
 
 	apiKey, keyOk, _ := cfg.ReadString("$.api_key")
-	nodeID, idOk, _ := cfg.ReadUint("$.ds_id")
-	if !keyOk || apiKey == "" || !idOk || nodeID == 0 {
-		return errors.New("api_key or ds_id missing in daemon config; daemon is not properly registered")
+	if !keyOk || apiKey == "" {
+		return errors.New("api_key missing in daemon config; daemon is not properly registered")
+	}
+	if nodeID, idOk, _ := cfg.ReadUint("$.ds_id"); !idOk || nodeID == 0 {
+		return errors.New("ds_id missing in daemon config; daemon is not properly registered")
 	}
 
 	caFile, _, _ := cfg.ReadString("$.ca_certificate_file")
@@ -201,15 +204,14 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 		return rollback(errors.New("daemon process not found after restart"))
 	}
 
-	deps.printf("Verifying gRPC connection via API...\n")
+	deps.printf("Verifying that panel revoked legacy credentials...\n")
 	var (
-		connType  string
 		lastErr   error
 		succeeded bool
 	)
 	for attempt := 0; attempt < verificationPollMaxAttempts; attempt++ {
-		connType, lastErr = deps.fetchConnType(ctx, apiHost, nodeID, apiKey)
-		if lastErr == nil && connType == "grpc" {
+		lastErr = deps.verifyLegacyRevoked(ctx, apiHost, apiKey)
+		if lastErr == nil {
 			succeeded = true
 
 			break
@@ -219,8 +221,8 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 	if !succeeded {
 		return rollback(errors.Wrapf(
 			errVerificationTimeout,
-			"after %d attempts (last status: %q, last error: %v)",
-			verificationPollMaxAttempts, connType, lastErr,
+			"after %d attempts (last error: %v)",
+			verificationPollMaxAttempts, lastErr,
 		))
 	}
 
@@ -329,43 +331,44 @@ func isCertAuthError(err error) bool {
 		strings.Contains(msg, "unknown certificate authority")
 }
 
-func realFetchConnectionType(
-	ctx context.Context, apiHost string, nodeID uint, apiKey string,
-) (string, error) {
+// realVerifyLegacyRevoked queries the legacy /gdaemon_api/get_token endpoint.
+// After the daemon successfully registers via gRPC, the panel rejects the
+// legacy HTTP path with 409 Conflict and a body containing grpcDisabledMarker.
+// Any other response (2xx, 4xx != 409, 5xx, transport failure) is treated as
+// "not yet revoked" and retried by the polling loop.
+func realVerifyLegacyRevoked(ctx context.Context, apiHost, apiKey string) error {
 	base := normalizeAPIHost(apiHost)
-	endpoint := fmt.Sprintf("%s/gdaemon_api/nodes/%d/daemon-status", base, nodeID)
+	endpoint := base + "/gdaemon_api/get_token"
 
 	reqCtx, cancel := context.WithTimeout(ctx, httpRequestTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to build request")
+		return errors.Wrap(err, "failed to build request")
 	}
-	req.Header.Set("X-Api-Key", apiKey)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	client := &http.Client{Timeout: httpRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "request failed")
+		return errors.Wrap(err, "request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := strings.TrimSpace(string(body))
 
-		return "", errors.Errorf("API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	if resp.StatusCode != http.StatusConflict {
+		return errors.Errorf("expected HTTP 409, got %d: %s", resp.StatusCode, bodyStr)
 	}
 
-	var payload struct {
-		ConnectionType string `json:"connection_type"` //nolint:tagliatelle
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", errors.Wrap(err, "failed to decode response")
+	if !strings.Contains(bodyStr, grpcDisabledMarker) {
+		return errors.Errorf("HTTP 409 without expected marker %q: %s", grpcDisabledMarker, bodyStr)
 	}
 
-	return payload.ConnectionType, nil
+	return nil
 }
 
 func normalizeAPIHost(apiHost string) string {
