@@ -117,6 +117,99 @@ grpc:
 	assert.Equal(t, "true", enabled)
 }
 
+func TestConfigFile_DeleteKey_RemovesTopLevelKey(t *testing.T) {
+	p := writeTempConfig(t, `api_host: "https://panel.example.com"
+api_key: "secret"
+ds_id: 42
+`)
+	cfg, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.DeleteKey("$.api_host"))
+	require.NoError(t, cfg.Save())
+
+	reloaded, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	_, ok, err := reloaded.ReadString("$.api_host")
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	apiKey, ok, err := reloaded.ReadString("$.api_key")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "secret", apiKey)
+
+	dsID, ok, err := reloaded.ReadUint("$.ds_id")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, uint(42), dsID)
+}
+
+func TestConfigFile_DeleteKey_MissingKey_NoError(t *testing.T) {
+	original := `api_key: "secret"
+ds_id: 42
+`
+	p := writeTempConfig(t, original)
+	cfg, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.DeleteKey("$.api_host"))
+	require.NoError(t, cfg.Save())
+
+	out, err := os.ReadFile(p)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "api_key: \"secret\"")
+	assert.Contains(t, string(out), "ds_id: 42")
+}
+
+func TestConfigFile_DeleteKey_RejectsNestedPath(t *testing.T) {
+	p := writeTempConfig(t, `grpc:
+  enabled: true
+`)
+	cfg, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	err = cfg.DeleteKey("$.grpc.enabled")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "top-level")
+}
+
+func TestConfigFile_DeleteKey_CombinedWithEnsureGRPCEnabled(t *testing.T) {
+	p := writeTempConfig(t, `api_host: "https://panel.example.com"
+api_key: "secret"
+ds_id: 7
+ca_certificate_file: "certs/ca.crt"
+`)
+	cfg, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.EnsureGRPCEnabled("panel.example.com:31718"))
+	require.NoError(t, cfg.DeleteKey("$.api_host"))
+	require.NoError(t, cfg.DeleteKey("$.api_key"))
+	require.NoError(t, cfg.Save())
+
+	out, err := os.ReadFile(p)
+	require.NoError(t, err)
+	result := string(out)
+	assert.NotContains(t, result, "api_host")
+	assert.NotContains(t, result, "api_key")
+	assert.Contains(t, result, "ca_certificate_file")
+
+	reloaded, err := LoadConfig(p)
+	require.NoError(t, err)
+
+	enabled, ok, err := reloaded.ReadString("$.grpc.enabled")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "true", enabled)
+
+	addr, ok, err := reloaded.ReadString("$.grpc.address")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "panel.example.com:31718", addr)
+}
+
 func TestConfigFile_EnsureGRPCEnabled_PreservesComments(t *testing.T) {
 	p := writeTempConfig(t, `# top comment
 api_host: "https://panel.example.com" # inline comment

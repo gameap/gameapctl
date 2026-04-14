@@ -157,6 +157,43 @@ func (c *ConfigFile) appendGRPCBlock(address string) error {
 	return nil
 }
 
+// DeleteKey removes a top-level key from the document. Missing keys are a no-op.
+// Only paths of the form "$.<key>" are supported; nested paths return an error.
+func (c *ConfigFile) DeleteKey(yamlPath string) error {
+	const topLevelPrefix = "$."
+	if !strings.HasPrefix(yamlPath, topLevelPrefix) {
+		return errors.Errorf("DeleteKey: path %q must start with %q", yamlPath, topLevelPrefix)
+	}
+	key := yamlPath[len(topLevelPrefix):]
+	if key == "" || strings.ContainsAny(key, ".[") {
+		return errors.Errorf("DeleteKey supports only top-level keys, got %q", yamlPath)
+	}
+
+	if c.ast == nil || len(c.ast.Docs) == 0 {
+		return errors.New("DeleteKey: empty yaml document")
+	}
+
+	body := c.ast.Docs[0].Body
+	mapping, ok := body.(*ast.MappingNode)
+	if !ok {
+		return errors.Errorf("DeleteKey: document root is not a mapping (got %T)", body)
+	}
+
+	for i, v := range mapping.Values {
+		tok := v.Key.GetToken()
+		if tok == nil {
+			continue
+		}
+		if tok.Value == key {
+			mapping.Values = append(mapping.Values[:i], mapping.Values[i+1:]...)
+
+			return nil
+		}
+	}
+
+	return nil
+}
+
 func (c *ConfigFile) Save() error {
 	out := c.ast.String()
 	if !strings.HasSuffix(out, "\n") {

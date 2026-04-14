@@ -208,6 +208,11 @@ func TestSwitchToGRPC_HappyPath(t *testing.T) {
 	after, _ := os.ReadFile(p)
 	assert.Contains(t, string(after), "grpc:")
 	assert.Contains(t, string(after), "enabled: true")
+	assert.Contains(t, string(after), "address:")
+	assert.Contains(t, string(after), "panel.example.com:31718")
+	assert.NotContains(t, string(after), "api_host")
+	assert.NotContains(t, string(after), "api_key")
+	assert.Contains(t, string(after), "ca_certificate_file")
 	assert.Equal(t, 1, r.stopped)
 	assert.Equal(t, 1, r.started)
 	assert.Equal(t, 1, r.fetchCalls)
@@ -273,12 +278,14 @@ func TestSwitchToGRPC_ExplicitGRPCAddress_WrittenToConfig(t *testing.T) {
 	p := writeConfig(t, validLegacyConfig)
 	r := newRecordingDeps(t)
 
-	err := switchToGRPC(context.Background(), r.build(p, "panel.example.com:31718"))
+	err := switchToGRPC(context.Background(), r.build(p, "grpc.example.com:31718"))
 	require.NoError(t, err)
 
 	after, _ := os.ReadFile(p)
 	assert.Contains(t, string(after), "address:")
-	assert.Contains(t, string(after), "panel.example.com:31718")
+	assert.Contains(t, string(after), "grpc.example.com:31718")
+	assert.NotContains(t, string(after), "api_host")
+	assert.NotContains(t, string(after), "api_key")
 }
 
 func TestSwitchToGRPC_StateLoadError_NonFatal(t *testing.T) {

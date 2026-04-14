@@ -175,8 +175,14 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 		return errors.WithMessage(originalErr, "switch to gRPC failed, daemon rolled back to legacy mode")
 	}
 
-	if err := cfg.EnsureGRPCEnabled(deps.explicitGRPCAddr); err != nil {
+	if err := cfg.EnsureGRPCEnabled(grpcAddr); err != nil {
 		return rollback(errors.WithMessage(err, "failed to modify daemon config"))
+	}
+	if err := cfg.DeleteKey("$.api_host"); err != nil {
+		return rollback(errors.WithMessage(err, "failed to remove api_host from daemon config"))
+	}
+	if err := cfg.DeleteKey("$.api_key"); err != nil {
+		return rollback(errors.WithMessage(err, "failed to remove api_key from daemon config"))
 	}
 	if err := cfg.Save(); err != nil {
 		return rollback(errors.WithMessage(err, "failed to save daemon config"))
