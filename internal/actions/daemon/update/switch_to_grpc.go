@@ -181,9 +181,6 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 	if err := cfg.DeleteKey("$.api_host"); err != nil {
 		return rollback(errors.WithMessage(err, "failed to remove api_host from daemon config"))
 	}
-	if err := cfg.DeleteKey("$.api_key"); err != nil {
-		return rollback(errors.WithMessage(err, "failed to remove api_key from daemon config"))
-	}
 	if err := cfg.Save(); err != nil {
 		return rollback(errors.WithMessage(err, "failed to save daemon config"))
 	}
