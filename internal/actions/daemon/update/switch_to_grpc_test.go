@@ -20,6 +20,8 @@ import (
 const validLegacyConfig = `api_host: "https://panel.example.com"
 api_key: "test-api-key"
 ds_id: 7
+listen_ip: "0.0.0.0"
+listen_port: 31717
 ca_certificate_file: "certs/ca.crt"
 certificate_chain_file: "certs/server.crt"
 private_key_file: "certs/server.key"
@@ -206,6 +208,8 @@ func TestSwitchToGRPC_HappyPath(t *testing.T) {
 	assert.Contains(t, string(after), "address:")
 	assert.Contains(t, string(after), "panel.example.com:31718")
 	assert.NotContains(t, string(after), "api_host")
+	assert.NotContains(t, string(after), "listen_ip")
+	assert.NotContains(t, string(after), "listen_port")
 	assert.Contains(t, string(after), "api_key")
 	assert.Contains(t, string(after), "ca_certificate_file")
 	assert.Equal(t, 1, r.stopped)
@@ -280,6 +284,8 @@ func TestSwitchToGRPC_ExplicitGRPCAddress_WrittenToConfig(t *testing.T) {
 	assert.Contains(t, string(after), "address:")
 	assert.Contains(t, string(after), "grpc.example.com:31718")
 	assert.NotContains(t, string(after), "api_host")
+	assert.NotContains(t, string(after), "listen_ip")
+	assert.NotContains(t, string(after), "listen_port")
 	assert.Contains(t, string(after), "api_key")
 }
 

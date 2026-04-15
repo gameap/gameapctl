@@ -181,8 +181,10 @@ func switchToGRPC(ctx context.Context, deps switchDeps) error {
 	if err := cfg.EnsureGRPCEnabled(grpcAddr); err != nil {
 		return rollback(errors.WithMessage(err, "failed to modify daemon config"))
 	}
-	if err := cfg.DeleteKey("$.api_host"); err != nil {
-		return rollback(errors.WithMessage(err, "failed to remove api_host from daemon config"))
+	for _, key := range []string{"$.api_host", "$.listen_ip", "$.listen_port"} {
+		if err := cfg.DeleteKey(key); err != nil {
+			return rollback(errors.WithMessagef(err, "failed to remove %s from daemon config", key))
+		}
 	}
 	if err := cfg.Save(); err != nil {
 		return rollback(errors.WithMessage(err, "failed to save daemon config"))
