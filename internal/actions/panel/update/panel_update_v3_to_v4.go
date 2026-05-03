@@ -205,26 +205,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 		}
 	}
 
-	newVersion := resolvedTag
-	if newVersion == "" {
-		newVersion = "v4"
-	}
-
-	newState := gameapctl.PanelInstallState{
-		Version:              newVersion,
-		Host:                 state.Host,
-		HostIP:               state.HostIP,
-		Port:                 installConfig.HTTPPort,
-		ConfigDirectory:      installConfig.ConfigDirectory,
-		DataDirectory:        installConfig.DataDirectory,
-		Database:             state.Database,
-		DatabaseWasInstalled: state.DatabaseWasInstalled,
-		Develop:              state.Develop,
-		FromGithub:           state.FromGithub,
-		Branch:               state.Branch,
-	}
-
-	if err := gameapctl.SavePanelInstallState(ctx, newState); err != nil {
+	if err := saveV3toV4State(ctx, state, installConfig, resolvedTag); err != nil {
 		log.Printf("Warning: failed to save new panel state: %v\n", err)
 	}
 
@@ -236,6 +217,32 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	log.Printf("GameAP v4 is now running on %s:%s\n", installConfig.HTTPHost, installConfig.HTTPPort)
 
 	return nil
+}
+
+func saveV3toV4State(
+	ctx context.Context,
+	state gameapctl.PanelInstallState,
+	installConfig panel.InstallConfig,
+	resolvedTag string,
+) error {
+	newVersion := resolvedTag
+	if newVersion == "" {
+		newVersion = "v4"
+	}
+
+	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version:              newVersion,
+		Host:                 state.Host,
+		HostIP:               state.HostIP,
+		Port:                 installConfig.HTTPPort,
+		ConfigDirectory:      installConfig.ConfigDirectory,
+		DataDirectory:        installConfig.DataDirectory,
+		Database:             state.Database,
+		DatabaseWasInstalled: state.DatabaseWasInstalled,
+		Develop:              state.Develop,
+		FromGithub:           state.FromGithub,
+		Branch:               state.Branch,
+	})
 }
 
 func parseV3Env(envPath string) (map[string]string, error) {
