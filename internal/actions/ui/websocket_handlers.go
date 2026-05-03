@@ -208,19 +208,26 @@ func gameapStatus(ctx context.Context, w io.Writer, _ []string) error {
 		return nil
 	}
 
-	if state.Version == "" || state.Version == "3" || state.Version == "v3" {
+	switch {
+	case isStateVersionV4(state.Version):
+		log.Println("Checking GameAP v4 status")
+
+		return gameapStatusV4(ctx, w, state)
+	case state.Version == "" || isStateVersionV3(state.Version):
 		log.Println("Checking GameAP v3 status")
 
 		return gameapStatusV3(ctx, w, state)
 	}
 
-	if state.Version == "v4" || state.Version == "4" {
-		log.Println("Checking GameAP v4 status")
-
-		return gameapStatusV4(ctx, w, state)
-	}
-
 	return nil
+}
+
+func isStateVersionV3(v string) bool {
+	return v == "3" || v == "v3" || strings.HasPrefix(v, "v3.") || strings.HasPrefix(v, "3.")
+}
+
+func isStateVersionV4(v string) bool {
+	return v == "4" || v == "v4" || strings.HasPrefix(v, "v4.") || strings.HasPrefix(v, "4.")
 }
 
 func gameapStatusV3(_ context.Context, w io.Writer, state gameapctl.PanelInstallState) error {

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -20,19 +22,36 @@ const (
 	versionV4 version = "v4"
 )
 
+var errV3UpgradeNotSupported = errors.New("upgrading to GameAP v3 is not supported")
+
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
 	fmt.Println("GameAP update")
 
-	currentMajorVersion, err := detectMajorVersion(cliCtx.Context)
+	rawVersion := cliCtx.String("version")
+	if rawVersion == "" {
+		if rawTo := cliCtx.String("to"); rawTo != "" {
+			log.Println("Warning: --to is deprecated, use --version instead")
+			rawVersion = rawTo
+		}
+	}
+
+	norm, err := releasefinder.NormalizeTag(rawVersion)
+	if err != nil {
+		return err
+	}
+	if releasefinder.IsMajorV3(norm) {
+		return errV3UpgradeNotSupported
+	}
+
+	currentMajorVersion, err := detectMajorVersion(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
 
-	state, err := gameapctl.LoadPanelInstallState(cliCtx.Context)
+	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err == nil && state.Version == "" {
-		// Update installation state with detected version if not set
 		state.Version = string(currentMajorVersion)
 		saveStateErr := gameapctl.SavePanelInstallState(ctx, state)
 		if saveStateErr != nil {
@@ -45,23 +64,17 @@ func Handle(cliCtx *cli.Context) error {
 
 	fmt.Printf("Detected installed GameAP version: %s\n", currentMajorVersion)
 
-	toValue := cliCtx.String("to")
-	if toValue != "" {
-		toVersion, err := parseToVersion(toValue)
-		if err != nil {
-			return err
+	if currentMajorVersion == versionV3 {
+		if norm.Full != "" || norm.Prefix != "" {
+			log.Println(
+				"Warning: --version is ignored during v3→v4 migration; latest stable v4 will be used",
+			)
 		}
 
-		if currentMajorVersion == versionV3 && toVersion == versionV4 {
-			return handleV3toV4(cliCtx)
-		}
+		return handleV3toV4(cliCtx)
 	}
 
-	if currentMajorVersion == versionV4 {
-		return handleV4(cliCtx)
-	}
-
-	return handleV3(cliCtx)
+	return handleV4(cliCtx, norm.Full, norm.Prefix)
 }
 
 // detectMajorVersion detects the major version of the installed panel.
@@ -71,35 +84,28 @@ func Handle(cliCtx *cli.Context) error {
 // 3. v3-specific file system markers (artisan, .env files)
 // Returns the detected version or an error if version cannot be determined.
 func detectMajorVersion(ctx context.Context) (version, error) {
-	// Priority 1: Check installation state file first
 	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err == nil && state.Version != "" {
-		// Version field is set in installation state
-		if state.Version == "3" || state.Version == string(versionV3) {
+		switch {
+		case isStateVersionV3(state.Version):
 			return versionV3, nil
-		}
-		if state.Version == "4" || state.Version == string(versionV4) {
+		case isStateVersionV4(state.Version):
 			return versionV4, nil
 		}
 	}
 
-	// Priority 2: Check v3-specific markers using installation state
 	if err == nil && state.Path != "" {
-		// Check if artisan file exists (Laravel indicator)
 		artisanPath := filepath.Join(state.Path, "artisan")
 		if utils.IsFileExists(artisanPath) {
 			return versionV3, nil
 		}
 
-		// Check if .env file exists (Laravel config)
 		envPath := filepath.Join(state.Path, ".env")
 		if utils.IsFileExists(envPath) {
 			return versionV3, nil
 		}
 	}
 
-	// Priority 3: Check v4-specific markers (using constants from pkg/gameap)
-	// These paths are platform-specific via build tags
 	if utils.IsFileExists(gameap.DefaultConfigFilePath) ||
 		utils.IsFileExists(gameap.DefaultBinaryPath) ||
 		utils.IsFileExists(gameap.DefaultDataPath) {
@@ -109,15 +115,10 @@ func detectMajorVersion(ctx context.Context) (version, error) {
 	return "", errors.New("unable to detect GameAP version: no installation markers found")
 }
 
-var errInvalidToVersion = errors.New("invalid --to version specified, must be '4' or 'v4'")
+func isStateVersionV3(v string) bool {
+	return v == "3" || v == string(versionV3) || strings.HasPrefix(v, "v3.") || strings.HasPrefix(v, "3.")
+}
 
-func parseToVersion(to string) (version, error) {
-	switch to {
-	case "3", "v3":
-		return versionV3, errInvalidToVersion
-	case "4", "v4":
-		return versionV4, nil
-	default:
-		return "", errInvalidToVersion
-	}
+func isStateVersionV4(v string) bool {
+	return v == "4" || v == string(versionV4) || strings.HasPrefix(v, "v4.") || strings.HasPrefix(v, "4.")
 }

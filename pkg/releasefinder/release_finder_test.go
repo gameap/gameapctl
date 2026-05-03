@@ -162,7 +162,7 @@ func Test_findReleaseFromBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			release, err := findReleaseFromBytes([]byte(tt.json), tt.os, tt.arch)
+			release, err := findReleaseFromList([]byte(tt.json), tt.os, tt.arch, FindOptions{})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -407,4 +407,245 @@ func Test_Find(t *testing.T) {
 		assert.Contains(t, err.Error(), "status 500")
 		assert.Equal(t, int32(1), reqCount.Load())
 	})
+}
+
+const releasesWithPrerelease = `[
+  {
+    "tag_name": "v5.0.0-beta1",
+    "prerelease": true,
+    "draft": false,
+    "assets": [
+      {"name": "gameap-v5.0.0-beta1-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v5.0.0-beta1-linux-amd64.tar.gz"}
+    ]
+  },
+  {
+    "tag_name": "v4.2.0-draft",
+    "prerelease": false,
+    "draft": true,
+    "assets": [
+      {"name": "gameap-v4.2.0-draft-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v4.2.0-draft-linux-amd64.tar.gz"}
+    ]
+  },
+  {
+    "tag_name": "v4.1.5",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {"name": "gameap-v4.1.5-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v4.1.5-linux-amd64.tar.gz"}
+    ]
+  },
+  {
+    "tag_name": "v4.1.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {"name": "gameap-v4.1.0-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v4.1.0-linux-amd64.tar.gz"}
+    ]
+  }
+]`
+
+func Test_findReleaseFromList_filterPrereleaseAndDraft(t *testing.T) {
+	t.Run("default_skips_prerelease_and_draft", func(t *testing.T) {
+		release, err := findReleaseFromList([]byte(releasesWithPrerelease), "linux", "amd64", FindOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.5", release.Tag)
+	})
+
+	t.Run("allow_prerelease_returns_first", func(t *testing.T) {
+		release, err := findReleaseFromList(
+			[]byte(releasesWithPrerelease), "linux", "amd64",
+			FindOptions{AllowPrerelease: true},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v5.0.0-beta1", release.Tag)
+	})
+}
+
+func Test_findReleaseFromList_byPrefix(t *testing.T) {
+	t.Run("prefix_picks_latest_in_minor_line", func(t *testing.T) {
+		release, err := findReleaseFromList(
+			[]byte(releasesWithPrerelease), "linux", "amd64",
+			FindOptions{TagPrefix: "v4.1."},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.5", release.Tag)
+	})
+
+	t.Run("prefix_no_match", func(t *testing.T) {
+		_, err := findReleaseFromList(
+			[]byte(releasesWithPrerelease), "linux", "amd64",
+			FindOptions{TagPrefix: "v9.9."},
+		)
+		require.Error(t, err)
+		var notFound FailedToFindReleaseError
+		assert.ErrorAs(t, err, &notFound)
+	})
+
+	t.Run("prefix_with_allow_prerelease", func(t *testing.T) {
+		release, err := findReleaseFromList(
+			[]byte(releasesWithPrerelease), "linux", "amd64",
+			FindOptions{TagPrefix: "v5.", AllowPrerelease: true},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v5.0.0-beta1", release.Tag)
+	})
+}
+
+func Test_FindWithOptions_byTag(t *testing.T) {
+	tagJSON := `{
+		"tag_name": "v4.1.2",
+		"prerelease": false,
+		"draft": false,
+		"assets": [
+			{"name": "gameap-v4.1.2-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v4.1.2-linux-amd64.tar.gz"}
+		]
+	}`
+
+	t.Run("tag_found", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/repo/releases/tags/v4.1.2", r.URL.Path)
+			_, _ = w.Write([]byte(tagJSON))
+		}))
+		defer srv.Close()
+
+		release, err := FindWithOptions(
+			context.Background(), srv.URL+"/repo/releases", "linux", "amd64",
+			FindOptions{Tag: "v4.1.2"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.2", release.Tag)
+	})
+
+	t.Run("tag_not_found", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+		}))
+		defer srv.Close()
+
+		_, err := FindWithOptions(
+			context.Background(), srv.URL+"/repo/releases", "linux", "amd64",
+			FindOptions{Tag: "v9.9.9"},
+		)
+		require.Error(t, err)
+		var notFound TagNotFoundError
+		assert.ErrorAs(t, err, &notFound)
+		assert.Equal(t, "v9.9.9", notFound.Tag)
+	})
+
+	t.Run("tag_found_but_no_matching_asset", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(tagJSON))
+		}))
+		defer srv.Close()
+
+		_, err := FindWithOptions(
+			context.Background(), srv.URL+"/repo/releases", "windows", "amd64",
+			FindOptions{Tag: "v4.1.2"},
+		)
+		require.Error(t, err)
+		var notFound FailedToFindReleaseError
+		assert.ErrorAs(t, err, &notFound)
+	})
+}
+
+func Test_FindWithOptions_listAddsPerPageQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "100", r.URL.Query().Get("per_page"))
+		_, _ = w.Write([]byte(daemonReleasesJSON))
+	}))
+	defer srv.Close()
+
+	_, err := FindWithOptions(context.Background(), srv.URL, "linux", "amd64", FindOptions{})
+	require.NoError(t, err)
+}
+
+func Test_NormalizeTag(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantFull   string
+		wantPrefix string
+		wantErr    bool
+	}{
+		{name: "empty", input: "", wantFull: "", wantPrefix: ""},
+		{name: "major_only", input: "4", wantPrefix: "v4."},
+		{name: "major_only_v", input: "v4", wantPrefix: "v4."},
+		{name: "major_only_uppercase_v", input: "V4", wantPrefix: "v4."},
+		{name: "major_three", input: "3", wantPrefix: "v3."},
+		{name: "major_three_v", input: "v3", wantPrefix: "v3."},
+		{name: "major_minor", input: "4.1", wantPrefix: "v4.1."},
+		{name: "major_minor_v", input: "v4.1", wantPrefix: "v4.1."},
+		{name: "major_minor_three", input: "v3.2", wantPrefix: "v3.2."},
+		{name: "full_three_segments", input: "4.1.2", wantFull: "v4.1.2"},
+		{name: "full_three_v", input: "v4.1.2", wantFull: "v4.1.2"},
+		{name: "full_with_beta", input: "4.1.2beta1", wantFull: "v4.1.2beta1"},
+		{name: "full_with_dash_rc", input: "v4.1.0-rc1", wantFull: "v4.1.0-rc1"},
+		{name: "full_three_v3", input: "v3.2.1", wantFull: "v3.2.1"},
+		{name: "garbage", input: "foo", wantErr: true},
+		{name: "too_many_segments", input: "4.1.2.3", wantErr: true},
+		{name: "trailing_dot", input: "4.1.", wantErr: true},
+		{name: "double_dot", input: "4..1", wantErr: true},
+		{name: "leading_dot", input: ".1.2", wantErr: true},
+		{name: "major_with_suffix", input: "4-rc1", wantErr: true},
+		{name: "major_minor_with_suffix", input: "4.1beta", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NormalizeTag(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFull, got.Full)
+			assert.Equal(t, tt.wantPrefix, got.Prefix)
+		})
+	}
+}
+
+func Test_NormalizedTag_HasPrereleaseSuffix(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  NormalizedTag
+		want bool
+	}{
+		{name: "empty", tag: NormalizedTag{}, want: false},
+		{name: "stable_full", tag: NormalizedTag{Full: "v4.1.2"}, want: false},
+		{name: "beta_full", tag: NormalizedTag{Full: "v4.1.2beta1"}, want: true},
+		{name: "rc_full", tag: NormalizedTag{Full: "v4.1.0-rc1"}, want: true},
+		{name: "prefix_only", tag: NormalizedTag{Prefix: "v4.1."}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.tag.HasPrereleaseSuffix())
+		})
+	}
+}
+
+func Test_IsMajorV3(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  NormalizedTag
+		want bool
+	}{
+		{name: "empty", tag: NormalizedTag{}, want: false},
+		{name: "v4_full", tag: NormalizedTag{Full: "v4.1.2"}, want: false},
+		{name: "v3_full", tag: NormalizedTag{Full: "v3.2.1"}, want: true},
+		{name: "v3_full_with_beta", tag: NormalizedTag{Full: "v3.2.1beta1"}, want: true},
+		{name: "v30_full", tag: NormalizedTag{Full: "v30.0.0"}, want: false},
+		{name: "v4_prefix", tag: NormalizedTag{Prefix: "v4."}, want: false},
+		{name: "v3_prefix", tag: NormalizedTag{Prefix: "v3."}, want: true},
+		{name: "v3_minor_prefix", tag: NormalizedTag{Prefix: "v3.2."}, want: true},
+		{name: "v30_prefix", tag: NormalizedTag{Prefix: "v30."}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsMajorV3(tt.tag))
+		})
+	}
 }

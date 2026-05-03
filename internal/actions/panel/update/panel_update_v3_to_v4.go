@@ -101,7 +101,8 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	}
 
 	log.Println("Installing GameAP v4...")
-	if err := panel.Install(ctx, installConfig); err != nil {
+	resolvedTag, err := panel.Install(ctx, installConfig)
+	if err != nil {
 		log.Printf("Failed to install v4: %v\n", err)
 		log.Println("Rolling back...")
 		rollbackErr := rollbackV3toV4(ctx, backupV3Dir, v3Path, webServerBackup, state.WebServer)
@@ -204,8 +205,13 @@ func handleV3toV4(cliCtx *cli.Context) error {
 		}
 	}
 
+	newVersion := resolvedTag
+	if newVersion == "" {
+		newVersion = "v4"
+	}
+
 	newState := gameapctl.PanelInstallState{
-		Version:              "v4",
+		Version:              newVersion,
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 installConfig.HTTPPort,

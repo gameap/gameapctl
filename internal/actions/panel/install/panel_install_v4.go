@@ -23,6 +23,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/service"
 	"github.com/gameap/gameapctl/pkg/utils"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -51,6 +52,11 @@ type panelInstallStateV4 struct {
 	FromGithub bool
 	Branch     string
 
+	VersionInput string
+	Tag          string
+	TagPrefix    string
+	ResolvedTag  string
+
 	// Installation variables
 	DatabaseWasInstalled     bool
 	DatabaseDirExistedBefore bool
@@ -63,7 +69,7 @@ func restorePreviousStateV4(ctx context.Context, state panelInstallStateV4) pane
 		return state
 	}
 
-	if prevState.Version != "v4" {
+	if !isPrevStateV4(prevState.Version) {
 		return state
 	}
 
@@ -100,7 +106,6 @@ func restorePreviousStateV4(ctx context.Context, state panelInstallStateV4) pane
 	return state
 }
 
-//nolint:unparam
 func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	state := panelInstallStateV4{}
 
@@ -129,15 +134,43 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 		state.Branch = cliCtx.String("branch")
 	}
 
+	state.VersionInput = cliCtx.String("version")
+	if state.VersionInput != "" {
+		if state.FromGithub || developBranch || cliCtx.String("branch") != "" {
+			return state, errors.New("--version is mutually exclusive with --github, --branch and --develop")
+		}
+
+		norm, err := releasefinder.NormalizeTag(state.VersionInput)
+		if err != nil {
+			return state, err
+		}
+		if releasefinder.IsMajorV3(norm) {
+			return state, errV3InstallNotSupported
+		}
+
+		state.Tag = norm.Full
+		state.TagPrefix = norm.Prefix
+	}
+
 	if state.Branch == "" {
 		state.Branch = "main"
 	}
 
-	// Set default directories
 	state.ConfigDirectory = filepath.Dir(gameap.DefaultConfigFilePath)
 	state.DataDirectory = gameap.DefaultDataPath
 
 	return state, nil
+}
+
+func isPrevStateV4(version string) bool {
+	if version == "" {
+		return false
+	}
+	if version == "v4" || version == "4" {
+		return true
+	}
+
+	return strings.HasPrefix(version, "v4.") || strings.HasPrefix(version, "4.")
 }
 
 //nolint:gocognit,gocyclo,funlen
@@ -515,9 +548,12 @@ func HandleV4(cliCtx *cli.Context) error {
 }
 
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
-	err := panel.Install(ctx, buildPanelInstallConfigV4(state))
+	resolvedTag, err := panel.Install(ctx, buildPanelInstallConfigV4(state))
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install GameAP v4")
+	}
+	if resolvedTag != "" {
+		state.ResolvedTag = resolvedTag
 	}
 
 	return state, nil
@@ -576,6 +612,8 @@ func buildPanelInstallConfigV4(state panelInstallStateV4) panel.InstallConfig {
 		DatabaseURL:     buildDatabaseURLV4(state),
 		CacheDriver:     "inmemory",
 		FilesDriver:     "local",
+		Tag:             state.Tag,
+		TagPrefix:       state.TagPrefix,
 	}
 }
 
@@ -1288,7 +1326,12 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 		sb.WriteString("gameapctl ")
 	}
 
-	sb.WriteString("panel install --version=4 --host=")
+	sb.WriteString("panel install")
+	if state.VersionInput != "" {
+		sb.WriteString(" --version=")
+		sb.WriteString(state.VersionInput)
+	}
+	sb.WriteString(" --host=")
 	sb.WriteString(state.Host)
 	sb.WriteString(" --port=")
 	sb.WriteString(state.Port)
@@ -1322,8 +1365,13 @@ func saveStateCheckpointV4(ctx context.Context, state panelInstallStateV4) {
 }
 
 func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallStateV4) error {
+	version := state.ResolvedTag
+	if version == "" {
+		version = "v4"
+	}
+
 	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
-		Version:              "v4",
+		Version:              version,
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 state.Port,

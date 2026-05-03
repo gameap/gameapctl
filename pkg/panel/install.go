@@ -61,6 +61,13 @@ type InstallConfig struct {
 
 	// Global API
 	GlobalAPIURL string
+
+	// Tag pins the installation to a specific GitHub release tag (e.g. "v4.1.2").
+	// If empty, TagPrefix takes effect (or the latest stable release is used).
+	Tag string
+	// TagPrefix selects the latest stable release whose tag_name starts with this
+	// prefix (e.g. "v4.1." matches v4.1.0, v4.1.5).
+	TagPrefix string
 }
 
 // ConfigEnvData represents the data for config.env template.
@@ -137,16 +144,18 @@ func Configure(ctx context.Context, config InstallConfig) error {
 }
 
 // Install installs GameAP v4: configures and downloads binaries.
-func Install(ctx context.Context, config InstallConfig) error {
+// Returns the resolved release tag (e.g. "v4.1.2") that was actually downloaded.
+func Install(ctx context.Context, config InstallConfig) (string, error) {
 	if err := Configure(ctx, config); err != nil {
-		return err
+		return "", err
 	}
 
-	if err := downloadBinaries(ctx, config); err != nil {
-		return errors.WithMessage(err, "failed to download binaries")
+	resolvedTag, err := downloadBinaries(ctx, config)
+	if err != nil {
+		return "", errors.WithMessage(err, "failed to download binaries")
 	}
 
-	return nil
+	return resolvedTag, nil
 }
 
 func applyConfigDefaults(config InstallConfig) InstallConfig {
@@ -271,20 +280,32 @@ func generateRandomKey(length int) (string, error) {
 	return fmt.Sprintf("base64:%s", encoded), nil
 }
 
-func downloadBinaries(ctx context.Context, _ InstallConfig) error {
+func downloadBinaries(ctx context.Context, config InstallConfig) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "gameap")
 	if err != nil {
-		return errors.WithMessage(err, "failed to make temp dir")
+		return "", errors.WithMessage(err, "failed to make temp dir")
 	}
 
-	release, err := releasefinder.Find(
+	opts := releasefinder.FindOptions{
+		Tag:       config.Tag,
+		TagPrefix: config.TagPrefix,
+	}
+	if config.Tag != "" {
+		norm, normErr := releasefinder.NormalizeTag(config.Tag)
+		if normErr == nil && norm.HasPrereleaseSuffix() {
+			opts.AllowPrerelease = true
+		}
+	}
+
+	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/gameap/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
+		opts,
 	)
 	if err != nil {
-		return errors.WithMessage(err, "failed to find release")
+		return "", errors.WithMessage(err, "failed to find release")
 	}
 
 	fmt.Println("Downloading binaries ...")
@@ -299,7 +320,7 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 		tmpDir,
 	)
 	if err != nil {
-		return errors.WithMessage(err, "failed to download gameap binaries")
+		return "", errors.WithMessage(err, "failed to download gameap binaries")
 	}
 
 	var binariesInstalled bool
@@ -309,12 +330,12 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 		if _, err = os.Stat(fp); errors.Is(err, fs.ErrNotExist) {
 			continue
 		} else if err != nil {
-			return errors.WithMessage(err, "failed to stat file")
+			return "", errors.WithMessage(err, "failed to stat file")
 		}
 
 		err = utils.Move(fp, gameap.DefaultBinaryPath)
 		if err != nil {
-			return errors.WithMessage(err, "failed to move gameap binaries")
+			return "", errors.WithMessage(err, "failed to move gameap binaries")
 		}
 
 		binariesInstalled = true
@@ -323,10 +344,10 @@ func downloadBinaries(ctx context.Context, _ InstallConfig) error {
 	}
 
 	if !binariesInstalled {
-		return errors.New("gameap binaries wasn't installed, invalid archive contents")
+		return "", errors.New("gameap binaries wasn't installed, invalid archive contents")
 	}
 
-	return nil
+	return release.Tag, nil
 }
 
 // preserveExistingSecrets reads ENCRYPTION_KEY and AUTH_SECRET from an existing

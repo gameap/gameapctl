@@ -33,9 +33,23 @@ func Handle(cliCtx *cli.Context) error {
 
 	fromGithub := cliCtx.Bool("github")
 	branch := cliCtx.String("branch")
+	rawVersion := cliCtx.String("version")
+
+	var tag, tagPrefix string
+	if rawVersion != "" {
+		if fromGithub || branch != "" {
+			return errors.New("--version is mutually exclusive with --github and --branch")
+		}
+		norm, err := releasefinder.NormalizeTag(rawVersion)
+		if err != nil {
+			return err
+		}
+		tag = norm.Full
+		tagPrefix = norm.Prefix
+	}
 
 	daemonState, stateErr := gameapctl.LoadDaemonInstallState(ctx)
-	if stateErr == nil {
+	if stateErr == nil && rawVersion == "" {
 		if !fromGithub && daemonState.FromGithub {
 			fromGithub = true
 		}
@@ -60,7 +74,10 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Checking new versions...")
-	release, err := findRelease(ctx)
+	release, err := findRelease(ctx, releasefinder.FindOptions{
+		Tag:       tag,
+		TagPrefix: tagPrefix,
+	})
 	if err != nil {
 		return errors.WithMessage(err, "failed to find release")
 	}
@@ -149,9 +166,30 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}
 
+	updateDaemonStateVersion(ctx, release.Tag)
+
 	fmt.Println("Updated successfully")
 
 	return nil
+}
+
+func updateDaemonStateVersion(ctx context.Context, resolvedTag string) {
+	if resolvedTag == "" {
+		return
+	}
+	state, err := gameapctl.LoadDaemonInstallState(ctx)
+	if err != nil {
+		log.Printf("Warning: failed to load daemon state to record version: %v\n", err)
+
+		return
+	}
+	if state.Version == resolvedTag {
+		return
+	}
+	state.Version = resolvedTag
+	if err := gameapctl.SaveDaemonInstallState(ctx, state); err != nil {
+		log.Printf("Warning: failed to save daemon state with new version: %v\n", err)
+	}
 }
 
 func stopDaemon(ctx context.Context) error {
@@ -209,12 +247,19 @@ func revert(_ context.Context, path, backupPath string) error {
 	return errors.WithMessage(err, "failed to revert")
 }
 
-func findRelease(ctx context.Context) (*releasefinder.Release, error) {
-	release, err := releasefinder.Find(
+func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
+	if opts.Tag != "" {
+		if norm, normErr := releasefinder.NormalizeTag(opts.Tag); normErr == nil && norm.HasPrereleaseSuffix() {
+			opts.AllowPrerelease = true
+		}
+	}
+
+	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/daemon/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
+		opts,
 	)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to find release")

@@ -29,18 +29,22 @@ const (
 	healthCheckDelay   = 2 * time.Second
 )
 
-func handleV4(cliCtx *cli.Context) error {
+func handleV4(cliCtx *cli.Context, tag, tagPrefix string) error {
 	ctx := cliCtx.Context
 
 	fromGithub := cliCtx.Bool("github")
 	branch := cliCtx.String("branch")
 
+	if (tag != "" || tagPrefix != "") && (fromGithub || branch != "") {
+		return errors.New("--version is mutually exclusive with --github and --branch")
+	}
+
 	state, stateErr := gameapctl.LoadPanelInstallState(ctx)
 	if stateErr == nil {
-		if !fromGithub && state.FromGithub {
+		if !fromGithub && state.FromGithub && tag == "" && tagPrefix == "" {
 			fromGithub = true
 		}
-		if branch == "" && state.Branch != "" {
+		if branch == "" && state.Branch != "" && tag == "" && tagPrefix == "" {
 			branch = state.Branch
 		}
 	}
@@ -53,10 +57,10 @@ func handleV4(cliCtx *cli.Context) error {
 		return handleV4FromGithub(ctx, branch)
 	}
 
-	log.Println("Downloading latest GameAP release...")
-	tmpDir, downloadedBinary, err := downloadLatestRelease(ctx)
+	log.Println("Downloading GameAP release...")
+	tmpDir, downloadedBinary, resolvedTag, err := downloadRelease(ctx, tag, tagPrefix)
 	if err != nil {
-		return errors.WithMessage(err, "failed to download latest release")
+		return errors.WithMessage(err, "failed to download release")
 	}
 	defer func() {
 		if err := os.RemoveAll(tmpDir); err != nil {
@@ -114,45 +118,77 @@ func handleV4(cliCtx *cli.Context) error {
 		log.Printf("Warning: failed to remove backup file: %v\n", err)
 	}
 
+	if resolvedTag != "" {
+		updatePanelStateVersion(ctx, resolvedTag)
+	}
+
 	fmt.Println("GameAP has been successfully updated!")
 
 	return nil
 }
 
-// downloadLatestRelease downloads the latest GameAP release to a temporary directory
-// and returns the temporary directory path and the path to the downloaded binary.
-func downloadLatestRelease(ctx context.Context) (string, string, error) {
+func updatePanelStateVersion(ctx context.Context, resolvedTag string) {
+	state, err := gameapctl.LoadPanelInstallState(ctx)
+	if err != nil {
+		log.Printf("Warning: failed to load panel state to record version: %v\n", err)
+
+		return
+	}
+	if state.Version == resolvedTag {
+		return
+	}
+	state.Version = resolvedTag
+	if err := gameapctl.SavePanelInstallState(ctx, state); err != nil {
+		log.Printf("Warning: failed to save panel state with new version: %v\n", err)
+	}
+}
+
+// downloadRelease downloads the GameAP release matching tag/prefix to a temporary
+// directory and returns the temporary directory path, the path to the downloaded
+// binary, and the resolved release tag.
+func downloadRelease(ctx context.Context, tag, tagPrefix string) (string, string, string, error) {
 	tmpDir, err := os.MkdirTemp("", "gameap-update-*")
 	if err != nil {
-		return "", "", errors.WithMessage(err, "failed to create temporary directory")
+		return "", "", "", errors.WithMessage(err, "failed to create temporary directory")
 	}
 
-	release, err := releasefinder.Find(
+	opts := releasefinder.FindOptions{
+		Tag:       tag,
+		TagPrefix: tagPrefix,
+	}
+	if tag != "" {
+		if norm, normErr := releasefinder.NormalizeTag(tag); normErr == nil && norm.HasPrereleaseSuffix() {
+			opts.AllowPrerelease = true
+		}
+	}
+
+	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/gameap/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
+		opts,
 	)
 	if err != nil {
-		return tmpDir, "", errors.WithMessage(err, "failed to find release")
+		return tmpDir, "", "", errors.WithMessage(err, "failed to find release")
 	}
 
 	log.Printf("Found release: %s\n", release.Tag)
 	log.Printf("Downloading from: %s\n", release.URL)
 
 	if err := utils.Download(ctx, release.URL, tmpDir); err != nil {
-		return tmpDir, "", errors.WithMessage(err, "failed to download release")
+		return tmpDir, "", "", errors.WithMessage(err, "failed to download release")
 	}
 
 	binaryNames := []string{"gameap", "gameap.exe"}
 	for _, name := range binaryNames {
 		binaryPath := filepath.Join(tmpDir, name)
 		if _, err := os.Stat(binaryPath); err == nil {
-			return tmpDir, binaryPath, nil
+			return tmpDir, binaryPath, release.Tag, nil
 		}
 	}
 
-	return tmpDir, "", errors.New("downloaded binary not found in archive")
+	return tmpDir, "", "", errors.New("downloaded binary not found in archive")
 }
 
 // backupAndReplace creates a backup of the current binary and replaces it with the new one.

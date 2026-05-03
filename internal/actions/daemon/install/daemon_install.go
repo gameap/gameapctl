@@ -88,6 +88,11 @@ type daemonsInstallState struct {
 	FromGithub bool
 	Branch     string
 
+	VersionInput string
+	Tag          string
+	TagPrefix    string
+	ResolvedTag  string
+
 	User     string
 	Password string // Password for user (Windows only)
 }
@@ -99,6 +104,7 @@ type InstallOptions struct {
 	Config     string
 	FromGithub bool
 	Branch     string
+	Version    string
 }
 
 func Handle(cliCtx *cli.Context) error {
@@ -109,6 +115,7 @@ func Handle(cliCtx *cli.Context) error {
 		Config:     cliCtx.String("config"),
 		FromGithub: cliCtx.Bool("github"),
 		Branch:     cliCtx.String("branch"),
+		Version:    cliCtx.String("version"),
 	})
 }
 
@@ -144,6 +151,19 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return errEmptyToken
 	}
 
+	var tag, tagPrefix string
+	if opts.Version != "" {
+		if opts.FromGithub || opts.Branch != "master" {
+			return errors.New("--version is mutually exclusive with --github and --branch")
+		}
+		norm, err := releasefinder.NormalizeTag(opts.Version)
+		if err != nil {
+			return err
+		}
+		tag = norm.Full
+		tagPrefix = norm.Prefix
+	}
+
 	state := daemonsInstallState{
 		Host:         opts.Host,
 		Token:        opts.Token,
@@ -151,6 +171,9 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		Config:       opts.Config,
 		FromGithub:   opts.FromGithub,
 		Branch:       opts.Branch,
+		VersionInput: opts.Version,
+		Tag:          tag,
+		TagPrefix:    tagPrefix,
 		SteamCMDPath: gameap.DefaultSteamCMDPath,
 	}
 
@@ -298,6 +321,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	if saveErr := gameapctl.SaveDaemonInstallState(ctx, gameapctl.DaemonInstallState{
 		Host:           state.Host,
 		ConnectURL:     state.ConnectURL,
+		Version:        state.ResolvedTag,
 		WorkPath:       state.WorkPath,
 		SteamCMDPath:   state.SteamCMDPath,
 		CertsPath:      state.CertsPath,
@@ -500,18 +524,22 @@ func installDaemonBinaries(
 
 	daemonBinariesTmpDir := filepath.Join(tmpDir, "daemon")
 
-	downloadURL, err := findDaemonReleaseURL(ctx)
+	release, err := findDaemonRelease(ctx, releasefinder.FindOptions{
+		Tag:       state.Tag,
+		TagPrefix: state.TagPrefix,
+	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to find release")
 	}
+	state.ResolvedTag = release.Tag
 
 	err = utils.Download(
 		ctx,
-		downloadURL,
+		release.URL,
 		daemonBinariesTmpDir,
 	)
 	if err != nil {
-		log.Println("Download url: ", downloadURL)
+		log.Println("Download url: ", release.URL)
 
 		return state, errors.WithMessage(err, "failed to download gameap-daemon binaries")
 	}
@@ -1156,16 +1184,23 @@ type DaemonConfig struct {
 	UseNetworkServiceUser bool `yaml:"use_network_service_user"`
 }
 
-func findDaemonReleaseURL(ctx context.Context) (string, error) {
-	release, err := releasefinder.Find(
+func findDaemonRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
+	if opts.Tag != "" {
+		if norm, normErr := releasefinder.NormalizeTag(opts.Tag); normErr == nil && norm.HasPrereleaseSuffix() {
+			opts.AllowPrerelease = true
+		}
+	}
+
+	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/daemon/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
+		opts,
 	)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to find release")
+		return nil, errors.WithMessage(err, "failed to find release")
 	}
 
-	return release.URL, nil
+	return release, nil
 }

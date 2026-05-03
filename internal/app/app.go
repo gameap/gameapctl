@@ -140,6 +140,11 @@ func Run(args []string) {
 								Usage:  "Set specific GitHub branch for daemon.",
 								Hidden: true,
 							},
+							&cli.StringFlag{
+								Name: "version",
+								Usage: "Install specific gameap-daemon release tag (e.g. v4.0.0, v4.0.0beta1). " +
+									"Empty = latest stable.",
+							},
 						},
 					},
 					{
@@ -162,6 +167,11 @@ func Run(args []string) {
 								Name:   "branch",
 								Usage:  "Set specific GitHub branch for daemon.",
 								Hidden: true,
+							},
+							&cli.StringFlag{
+								Name: "version",
+								Usage: "Upgrade to specific gameap-daemon release tag (e.g. 4.0.0, 4.0.0beta1). " +
+									"Empty = latest stable.",
 							},
 							&cli.BoolFlag{
 								Name: "switch-to-grpc",
@@ -241,9 +251,9 @@ func Run(args []string) {
 								Usage: "Install develop version of panel.",
 							},
 							&cli.StringFlag{
-								Name:  "version",
-								Usage: "Install specific version of panel (3 for PHP, 4 for Go)",
-								Value: "4",
+								Name: "version",
+								Usage: "Install specific GameAP release tag (e.g. 4.1, 4.1.2, v4.2.0beta1). " +
+									"Empty = latest stable v4. v3.x is not supported.",
 							},
 							&cli.BoolFlag{
 								Name:  "github",
@@ -305,10 +315,13 @@ func Run(args []string) {
 						Usage:   "Update panel to a new version",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
-								Name: "to",
-								Usage: "Update to specific version. " +
-									"The version must be greater than the current one, " +
-									"for example: --to=v4, --to=4",
+								Name: "version",
+								Usage: "Upgrade to specific GameAP release tag (e.g. 4.2.0, 4.2.0beta1). " +
+									"Empty = latest stable v4. v3.x is not supported.",
+							},
+							&cli.StringFlag{
+								Name:  "to",
+								Usage: "Deprecated, use --version instead.",
 							},
 							&cli.BoolFlag{
 								Name:  "github",
