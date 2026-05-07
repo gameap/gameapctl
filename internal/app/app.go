@@ -386,12 +386,18 @@ func Run(args []string) {
 								Usage: "Configure ACME / Let's Encrypt and restart the panel",
 								Description: "Interactive wizard (or flag-driven with --non-interactive) " +
 									"that writes ACME settings to /etc/gameap/config.env and restarts " +
-									"the gameap service. Domains may include wildcards (DNS-01).",
+									"the gameap service. http-01 (default) requires port 80 reachable " +
+									"from the public internet; dns-01 requires a DNS provider plugin and " +
+									"supports wildcard domains.",
 								Action: panelletsencrypt.Setup,
 								Flags: []cli.Flag{
 									&cli.StringFlag{
+										Name:  "challenge",
+										Usage: "Challenge type: http-01 (default) or dns-01",
+									},
+									&cli.StringFlag{
 										Name:  "domains",
-										Usage: "Comma-separated list of domains (supports wildcards)",
+										Usage: "Comma-separated list of domains (wildcards require dns-01)",
 									},
 									&cli.StringFlag{
 										Name:  "email",
@@ -399,7 +405,7 @@ func Run(args []string) {
 									},
 									&cli.StringFlag{
 										Name:  "dns-provider",
-										Usage: "DNS provider identifier in <plugin-id>:<provider-name> form",
+										Usage: "DNS provider identifier (<plugin-id>:<provider-name>); only for dns-01",
 									},
 									&cli.BoolFlag{
 										Name:  "staging",

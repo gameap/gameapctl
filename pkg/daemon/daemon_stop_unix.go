@@ -42,11 +42,12 @@ func Stop(ctx context.Context) error {
 func stopDaemonSystemd(ctx context.Context) error {
 	_, err := os.Stat(daemonSystemdConfigPath)
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		return errors.WithMessagef(
-			err,
-			"daemon service configuration file %s not found",
+		log.Printf(
+			"gameap-daemon systemd configuration file %s not found, nothing to stop\n",
 			daemonSystemdConfigPath,
 		)
+
+		return nil
 	}
 	if err != nil {
 		return errors.WithMessage(err, "failed to stat gameap-daemon service configuration")
@@ -66,7 +67,9 @@ func stopDaemonProcess(ctx context.Context) error {
 		return errors.WithMessage(err, "failed to find daemon process")
 	}
 	if p == nil {
-		return errors.New("daemon process not found")
+		log.Println("gameap-daemon process is not running, nothing to stop")
+
+		return nil
 	}
 
 	log.Printf("Found daemon process with pid %d \n", p.Pid)

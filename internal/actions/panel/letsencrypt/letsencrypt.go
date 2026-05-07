@@ -24,6 +24,7 @@ const (
 // are merged in at write time.
 var envKeysOwned = []string{
 	"ACME_ENABLED",
+	"ACME_CHALLENGE_TYPE",
 	"ACME_EMAIL",
 	"ACME_DOMAINS",
 	"ACME_DIRECTORY_URL",
@@ -33,6 +34,11 @@ var envKeysOwned = []string{
 	"ACME_PROPAGATION_TIMEOUT",
 	"ACME_STORAGE_PATH",
 }
+
+const (
+	ChallengeHTTP01 = "http-01"
+	ChallengeDNS01  = "dns-01"
+)
 
 func ConfigPath() string {
 	var dir string
