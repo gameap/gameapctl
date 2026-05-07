@@ -20,6 +20,7 @@ import (
 	daemonupdate "github.com/gameap/gameapctl/internal/actions/daemon/update"
 	panelchangepassword "github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	panelinstall "github.com/gameap/gameapctl/internal/actions/panel/install"
+	panelletsencrypt "github.com/gameap/gameapctl/internal/actions/panel/letsencrypt"
 	panelrestart "github.com/gameap/gameapctl/internal/actions/panel/restart"
 	panelstart "github.com/gameap/gameapctl/internal/actions/panel/start"
 	panelstatus "github.com/gameap/gameapctl/internal/actions/panel/status"
@@ -372,6 +373,61 @@ func Run(args []string) {
 						Description: "Change password for a user in GameAP v4 database",
 						Action:      panelchangepassword.Handle,
 						ArgsUsage:   "<username> [password]",
+					},
+					{
+						Name:  "letsencrypt",
+						Usage: "Manage Let's Encrypt (ACME) certificates",
+						Description: "Configure or disable automatic HTTPS certificate management " +
+							"via the in-process ACME client. DNS-01 challenge is used; a DNS " +
+							"provider plugin must be installed in the panel beforehand.",
+						Subcommands: []*cli.Command{
+							{
+								Name:  "setup",
+								Usage: "Configure ACME / Let's Encrypt and restart the panel",
+								Description: "Interactive wizard (or flag-driven with --non-interactive) " +
+									"that writes ACME settings to /etc/gameap/config.env and restarts " +
+									"the gameap service. Domains may include wildcards (DNS-01).",
+								Action: panelletsencrypt.Setup,
+								Flags: []cli.Flag{
+									&cli.StringFlag{
+										Name:  "domains",
+										Usage: "Comma-separated list of domains (supports wildcards)",
+									},
+									&cli.StringFlag{
+										Name:  "email",
+										Usage: "ACME account email",
+									},
+									&cli.StringFlag{
+										Name:  "dns-provider",
+										Usage: "DNS provider identifier in <plugin-id>:<provider-name> form",
+									},
+									&cli.BoolFlag{
+										Name:  "staging",
+										Usage: "Use Let's Encrypt staging directory",
+									},
+									&cli.StringSliceFlag{
+										Name:  "env",
+										Usage: "Additional KEY=VALUE entries appended to config.env (DNS provider credentials)",
+									},
+									&cli.BoolFlag{
+										Name:  "non-interactive",
+										Usage: "Fail instead of prompting when required flags are missing",
+									},
+								},
+							},
+							{
+								Name:        "disable",
+								Usage:       "Disable ACME and restart the panel",
+								Description: "Removes ACME_* keys from config.env and restarts gameap service.",
+								Action:      panelletsencrypt.Disable,
+								Flags: []cli.Flag{
+									&cli.BoolFlag{
+										Name:  "purge-certs",
+										Usage: "Also delete stored certificate material (not yet implemented)",
+									},
+								},
+							},
+						},
 					},
 				},
 			},
