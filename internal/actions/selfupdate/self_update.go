@@ -3,10 +3,13 @@ package selfupdate
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 
+	gameapctlpkg "github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/minio/selfupdate"
@@ -15,16 +18,48 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+//nolint:funlen
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
 	fmt.Println("Self update")
 
+	fromGithub := cliCtx.Bool("github")
+	branch := cliCtx.String("branch")
+	rawVersion := cliCtx.String("version")
+
+	if rawVersion != "" && (fromGithub || branch != "") {
+		return errors.New("--version is mutually exclusive with --github and --branch")
+	}
+	if branch != "" && !fromGithub {
+		return errors.New("--branch requires --github")
+	}
+	if fromGithub {
+		if branch == "" {
+			branch = "main"
+		}
+
+		return handleFromGithub(ctx, branch)
+	}
+
+	var tag, tagPrefix string
+	if rawVersion != "" {
+		norm, err := releasefinder.NormalizeTag(rawVersion)
+		if err != nil {
+			return err
+		}
+		tag, tagPrefix = norm.Full, norm.Prefix
+	}
+
 	fmt.Println("Checking new versions...")
-	release, err := findRelease(ctx)
+	release, err := findRelease(ctx, releasefinder.FindOptions{
+		Tag:             tag,
+		TagPrefix:       tagPrefix,
+		AllowPrerelease: true,
+	})
 	if err != nil {
 		var notFound releasefinder.FailedToFindReleaseError
-		if errors.As(err, &notFound) && notFound.LatestTag != "" {
+		if errors.As(err, &notFound) && notFound.LatestTag != "" && rawVersion == "" {
 			return handleMissingAsset(cliCtx, notFound)
 		}
 
@@ -40,7 +75,7 @@ func Handle(cliCtx *cli.Context) error {
 		return nil
 	}
 
-	if !isUpdateAvailable(ctx, release) {
+	if rawVersion == "" && !isUpdateAvailable(ctx, release) {
 		fmt.Println("No updates available")
 
 		return nil
@@ -128,17 +163,55 @@ func printDevVersionMessage() {
 	)
 }
 
-func findRelease(ctx context.Context) (*releasefinder.Release, error) {
+func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
 	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/gameapctl/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
-		releasefinder.FindOptions{AllowPrerelease: true},
+		opts,
 	)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to find release")
 	}
 
 	return release, nil
+}
+
+func handleFromGithub(ctx context.Context, branch string) error {
+	log.Printf("Building gameapctl from GitHub (branch: %s)...\n", branch)
+
+	pm, err := packagemanager.Load(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "failed to load package manager")
+	}
+
+	binPath, tmpDir, err := gameapctlpkg.BuildGameapctlFromGithub(ctx, pm, branch)
+	if err != nil {
+		return errors.WithMessage(err, "failed to build gameapctl from github")
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+			log.Printf("Failed to remove temp dir %s: %v\n", tmpDir, rmErr)
+		}
+	}()
+
+	f, err := os.Open(binPath)
+	if err != nil {
+		return errors.WithMessage(err, "failed to open built binary")
+	}
+	defer func() {
+		if cErr := f.Close(); cErr != nil {
+			log.Printf("Failed to close built binary: %v\n", cErr)
+		}
+	}()
+
+	fmt.Println("Applying...")
+	if err := selfupdate.Apply(f, selfupdate.Options{}); err != nil {
+		return errors.WithMessage(err, "failed to apply update")
+	}
+
+	fmt.Println("Updated successfully from GitHub")
+
+	return nil
 }

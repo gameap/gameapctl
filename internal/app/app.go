@@ -467,12 +467,15 @@ func Run(args []string) {
 				Description: "Update the gameapctl binary to the latest version",
 				Usage:       "Update the gameapctl binary to the latest version",
 				Action:      selfupdate.Handle,
-				Flags: []cli.Flag{
-					&cli.BoolFlag{
-						Name:  "force",
-						Usage: "Update even if dev version is used. ",
-					},
-				},
+				Flags:       selfUpdateFlags(),
+			},
+			{
+				Name:        "self-upgrade",
+				Description: "Update the gameapctl binary to the latest version",
+				Usage:       "Update the gameapctl binary to the latest version",
+				Hidden:      true,
+				Action:      selfupdate.Handle,
+				Flags:       selfUpdateFlags(),
 			},
 			{
 				Name:        "send-logs",
@@ -550,6 +553,28 @@ func initLogFile(command string) string {
 	log.SetOutput(f)
 
 	return filepath.Clean(logpath + string(os.PathSeparator) + logname)
+}
+
+func selfUpdateFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "force",
+			Usage: "Update even if dev version is used. ",
+		},
+		&cli.BoolFlag{
+			Name:  "github",
+			Usage: "Build gameapctl from GitHub source.",
+		},
+		&cli.StringFlag{
+			Name:   "branch",
+			Usage:  "Set specific GitHub branch.",
+			Hidden: true,
+		},
+		&cli.StringFlag{
+			Name:  "version",
+			Usage: "Update to specific gameapctl release tag (e.g. 0.26.0, v0.26.0). Empty = latest.",
+		},
+	}
 }
 
 func shutdownContext(ctx context.Context) context.Context {
