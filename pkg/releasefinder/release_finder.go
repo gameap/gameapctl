@@ -223,11 +223,16 @@ func shouldRetry(err error) bool {
 }
 
 type FailedToFindReleaseError struct {
-	OS   string
-	Arch string
+	OS        string
+	Arch      string
+	LatestTag string
 }
 
 func (e FailedToFindReleaseError) Error() string {
+	if e.LatestTag != "" {
+		return fmt.Sprintf("no %s/%s asset in release %s", e.OS, e.Arch, e.LatestTag)
+	}
+
 	return fmt.Sprintf("failed to find release for %s (arch: %s)", e.OS, e.Arch)
 }
 
@@ -250,6 +255,7 @@ func findReleaseFromList(bodyBytes []byte, os, arch string, opts FindOptions) (*
 		return nil, errors.WithMessage(err, "failed to decode GitHub API response")
 	}
 
+	var firstEligibleTag string
 	for _, release := range r {
 		if !opts.AllowPrerelease && (release.Prerelease || release.Draft) {
 			continue
@@ -257,12 +263,15 @@ func findReleaseFromList(bodyBytes []byte, os, arch string, opts FindOptions) (*
 		if opts.TagPrefix != "" && !strings.HasPrefix(release.TagName, opts.TagPrefix) {
 			continue
 		}
+		if firstEligibleTag == "" {
+			firstEligibleTag = release.TagName
+		}
 		if matched := matchAsset(release, os, arch); matched != nil {
 			return matched, nil
 		}
 	}
 
-	return nil, FailedToFindReleaseError{os, arch}
+	return nil, FailedToFindReleaseError{OS: os, Arch: arch, LatestTag: firstEligibleTag}
 }
 
 func findReleaseFromSingleResponse(bodyBytes []byte, os, arch string) (*Release, error) {
@@ -275,7 +284,7 @@ func findReleaseFromSingleResponse(bodyBytes []byte, os, arch string) (*Release,
 		return matched, nil
 	}
 
-	return nil, FailedToFindReleaseError{os, arch}
+	return nil, FailedToFindReleaseError{OS: os, Arch: arch, LatestTag: release.TagName}
 }
 
 func matchAsset(release releases, os, arch string) *Release {

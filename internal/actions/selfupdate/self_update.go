@@ -23,18 +23,19 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Checking new versions...")
 	release, err := findRelease(ctx)
 	if err != nil {
+		var notFound releasefinder.FailedToFindReleaseError
+		if errors.As(err, &notFound) && notFound.LatestTag != "" {
+			return handleMissingAsset(cliCtx, notFound)
+		}
+
 		return errors.WithMessage(err, "failed to find release")
 	}
 
 	fmt.Println("Last version is", release.Tag)
 	fmt.Println("You version is", gameap.Version)
 
-	if len(gameap.Version) >= 3 && gameap.Version[0:3] == "dev" && !cliCtx.Bool("force") {
-		fmt.Println(
-			"You use development version. " +
-				"Update is not available. " +
-				"Specify the --force flag to update you dev version to the latest version.",
-		)
+	if isDevVersion(cliCtx) {
+		printDevVersionMessage()
 
 		return nil
 	}
@@ -94,12 +95,46 @@ func isUpdateAvailable(_ context.Context, release *releasefinder.Release) bool {
 	return semver.Compare(release.Tag, gameap.Version) == +1
 }
 
+func handleMissingAsset(cliCtx *cli.Context, notFound releasefinder.FailedToFindReleaseError) error {
+	fmt.Println("Last version is", notFound.LatestTag)
+	fmt.Println("You version is", gameap.Version)
+
+	if isDevVersion(cliCtx) {
+		printDevVersionMessage()
+
+		return nil
+	}
+	if semver.Compare(notFound.LatestTag, gameap.Version) != +1 {
+		fmt.Println("No updates available")
+
+		return nil
+	}
+
+	return errors.Errorf(
+		"update is available (%s), but no binary for %s/%s",
+		notFound.LatestTag, notFound.OS, notFound.Arch,
+	)
+}
+
+func isDevVersion(cliCtx *cli.Context) bool {
+	return len(gameap.Version) >= 3 && gameap.Version[0:3] == "dev" && !cliCtx.Bool("force")
+}
+
+func printDevVersionMessage() {
+	fmt.Println(
+		"You use development version. " +
+			"Update is not available. " +
+			"Specify the --force flag to update you dev version to the latest version.",
+	)
+}
+
 func findRelease(ctx context.Context) (*releasefinder.Release, error) {
-	release, err := releasefinder.Find(
+	release, err := releasefinder.FindWithOptions(
 		ctx,
 		"https://api.github.com/repos/gameap/gameapctl/releases",
 		runtime.GOOS,
 		runtime.GOARCH,
+		releasefinder.FindOptions{AllowPrerelease: true},
 	)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to find release")

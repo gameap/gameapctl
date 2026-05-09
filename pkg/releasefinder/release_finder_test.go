@@ -491,6 +491,102 @@ func Test_findReleaseFromList_byPrefix(t *testing.T) {
 	})
 }
 
+// Mirrors the gameapctl GitHub state: every release marked as prerelease.
+const allPrereleasesJSON = `[
+  {"tag_name":"v0.26.0","prerelease":true,"draft":false,"assets":[
+    {"name":"gameapctl-v0.26.0-linux-amd64.tar.gz","browser_download_url":"https://example.com/v0.26.0-linux-amd64.tar.gz"}
+  ]},
+  {"tag_name":"v0.25.0","prerelease":true,"draft":false,"assets":[
+    {"name":"gameapctl-v0.25.0-linux-amd64.tar.gz","browser_download_url":"https://example.com/v0.25.0-linux-amd64.tar.gz"}
+  ]}
+]`
+
+func Test_findReleaseFromList_LatestTagOnNoMatch(t *testing.T) {
+	t.Run("all_prerelease_without_allow_yields_empty_latest_tag", func(t *testing.T) {
+		_, err := findReleaseFromList([]byte(allPrereleasesJSON), "linux", "amd64", FindOptions{})
+		require.Error(t, err)
+
+		var notFound FailedToFindReleaseError
+		require.ErrorAs(t, err, &notFound)
+		assert.Empty(t, notFound.LatestTag)
+		assert.Equal(t, "failed to find release for linux (arch: amd64)", err.Error())
+	})
+
+	t.Run("all_prerelease_with_allow_returns_first", func(t *testing.T) {
+		release, err := findReleaseFromList(
+			[]byte(allPrereleasesJSON), "linux", "amd64",
+			FindOptions{AllowPrerelease: true},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v0.26.0", release.Tag)
+	})
+
+	t.Run("no_asset_for_platform_populates_latest_tag", func(t *testing.T) {
+		_, err := findReleaseFromList(
+			[]byte(allPrereleasesJSON), "darwin", "arm64",
+			FindOptions{AllowPrerelease: true},
+		)
+		require.Error(t, err)
+
+		var notFound FailedToFindReleaseError
+		require.ErrorAs(t, err, &notFound)
+		assert.Equal(t, "v0.26.0", notFound.LatestTag)
+		assert.Equal(t, "no darwin/arm64 asset in release v0.26.0", err.Error())
+	})
+
+	t.Run("default_skips_prerelease_then_uses_first_stable_for_latest_tag", func(t *testing.T) {
+		_, err := findReleaseFromList([]byte(releasesWithPrerelease), "darwin", "arm64", FindOptions{})
+		require.Error(t, err)
+
+		var notFound FailedToFindReleaseError
+		require.ErrorAs(t, err, &notFound)
+		assert.Equal(t, "v4.1.5", notFound.LatestTag)
+	})
+
+	t.Run("prefix_no_match_yields_empty_latest_tag", func(t *testing.T) {
+		_, err := findReleaseFromList(
+			[]byte(releasesWithPrerelease), "linux", "amd64",
+			FindOptions{TagPrefix: "v9.9."},
+		)
+		require.Error(t, err)
+
+		var notFound FailedToFindReleaseError
+		require.ErrorAs(t, err, &notFound)
+		assert.Empty(t, notFound.LatestTag)
+	})
+}
+
+func Test_findReleaseFromSingleResponse_PopulatesLatestTag(t *testing.T) {
+	const singleJSON = `{
+		"tag_name": "v4.1.2",
+		"prerelease": false,
+		"draft": false,
+		"assets": [
+			{"name": "gameap-v4.1.2-linux-amd64.tar.gz", "browser_download_url": "https://example.com/v4.1.2-linux-amd64.tar.gz"}
+		]
+	}`
+
+	_, err := findReleaseFromSingleResponse([]byte(singleJSON), "darwin", "arm64")
+	require.Error(t, err)
+
+	var notFound FailedToFindReleaseError
+	require.ErrorAs(t, err, &notFound)
+	assert.Equal(t, "v4.1.2", notFound.LatestTag)
+	assert.Equal(t, "no darwin/arm64 asset in release v4.1.2", err.Error())
+}
+
+func Test_FailedToFindReleaseError_Error(t *testing.T) {
+	t.Run("without_latest_tag", func(t *testing.T) {
+		e := FailedToFindReleaseError{OS: "linux", Arch: "amd64"}
+		assert.Equal(t, "failed to find release for linux (arch: amd64)", e.Error())
+	})
+
+	t.Run("with_latest_tag", func(t *testing.T) {
+		e := FailedToFindReleaseError{OS: "darwin", Arch: "arm64", LatestTag: "v0.26.0"}
+		assert.Equal(t, "no darwin/arm64 asset in release v0.26.0", e.Error())
+	})
+}
+
 func Test_FindWithOptions_byTag(t *testing.T) {
 	tagJSON := `{
 		"tag_name": "v4.1.2",
