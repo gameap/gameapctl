@@ -1346,7 +1346,7 @@ func appendConfigEnvVar(configPath, name, value string) error {
 			}
 		}
 
-		if writeErr := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); writeErr != nil { //nolint:gosec
+		if writeErr := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); writeErr != nil {
 			return errors.WithMessage(writeErr, "failed to rewrite config.env without stale entry")
 		}
 	}
@@ -1387,7 +1387,7 @@ func removeConfigEnvVar(configPath, name string) {
 		}
 	}
 
-	if err := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); err != nil { //nolint:gosec
+	if err := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); err != nil {
 		log.Println(errors.WithMessagef(err, "failed to remove %s from config.env", name))
 	}
 }
