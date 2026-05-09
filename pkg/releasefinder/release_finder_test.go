@@ -745,3 +745,32 @@ func Test_IsMajorV3(t *testing.T) {
 		})
 	}
 }
+
+func Test_IsAtLeastV4_2(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  string
+		want bool
+	}{
+		{name: "empty", tag: "", want: false},
+		{name: "spaces_only", tag: "   ", want: false},
+		{name: "v4_1_9", tag: "v4.1.9", want: false},
+		{name: "v4_1_99", tag: "v4.1.99", want: false},
+		{name: "v4_2_0", tag: "v4.2.0", want: true},
+		{name: "v4_2_0_no_v_prefix", tag: "4.2.0", want: true},
+		{name: "v4_2_0_beta1", tag: "v4.2.0beta1", want: true},
+		{name: "v4_2_0_dash_rc1", tag: "v4.2.0-rc1", want: true},
+		{name: "v4_10_0", tag: "v4.10.0", want: true},
+		{name: "v5_0_0", tag: "v5.0.0", want: true},
+		{name: "v3_9_9", tag: "v3.9.9", want: false},
+		{name: "v4_only", tag: "v4", want: false},
+		{name: "garbage", tag: "garbage", want: false},
+		{name: "uppercase_V", tag: "V4.2.0", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsAtLeastV4_2(tt.tag))
+		})
+	}
+}

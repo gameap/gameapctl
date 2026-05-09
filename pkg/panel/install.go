@@ -62,18 +62,30 @@ type InstallConfig struct {
 	// Global API
 	GlobalAPIURL string
 
+	// gRPC bidirectional protocol (panel >= v4.2). When enabled, GRPC_ENABLED=true
+	// and GRPC_PORT are written to config.env. GRPCPort defaults to gameap.DefaultGRPCPort.
+	GRPCEnabled bool
+	GRPCPort    string
+
 	// Tag pins the installation to a specific GitHub release tag (e.g. "v4.1.2").
 	// If empty, TagPrefix takes effect (or the latest stable release is used).
 	Tag string
 	// TagPrefix selects the latest stable release whose tag_name starts with this
 	// prefix (e.g. "v4.1." matches v4.1.0, v4.1.5).
 	TagPrefix string
+
+	// PreResolvedRelease, when non-nil, is used directly by Install instead of
+	// querying GitHub again. Lets the caller resolve the release once and decide
+	// version-dependent settings (like GRPCEnabled) before installation.
+	PreResolvedRelease *releasefinder.Release
 }
 
 // ConfigEnvData represents the data for config.env template.
 type ConfigEnvData struct {
 	HTTPHost           string
 	HTTPPort           string
+	GRPCEnabled        bool
+	GRPCPort           string
 	DatabaseDriver     string
 	DatabaseURL        string
 	EncryptionKey      string
@@ -195,20 +207,25 @@ func applyConfigDefaults(config InstallConfig) InstallConfig {
 	if config.GlobalAPIURL == "" {
 		config.GlobalAPIURL = "https://api.gameap.com"
 	}
+	if config.GRPCEnabled && config.GRPCPort == "" {
+		config.GRPCPort = gameap.DefaultGRPCPort
+	}
 
 	return config
 }
 
-// createConfigEnv creates the config.env file.
-func createConfigEnv(ctx context.Context, config InstallConfig) error {
+// renderConfigEnv renders the config.env template into bytes without touching disk.
+func renderConfigEnv(config InstallConfig) ([]byte, error) {
 	tmpl, err := template.New("config.env").Parse(configEnvTemplate)
 	if err != nil {
-		return errors.WithMessage(err, "failed to parse config.env template")
+		return nil, errors.WithMessage(err, "failed to parse config.env template")
 	}
 
 	data := ConfigEnvData{
 		HTTPHost:           config.HTTPHost,
 		HTTPPort:           config.HTTPPort,
+		GRPCEnabled:        config.GRPCEnabled,
+		GRPCPort:           config.GRPCPort,
 		DatabaseDriver:     config.DatabaseDriver,
 		DatabaseURL:        config.DatabaseURL,
 		EncryptionKey:      config.EncryptionKey,
@@ -223,11 +240,21 @@ func createConfigEnv(ctx context.Context, config InstallConfig) error {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return errors.WithMessage(err, "failed to execute config.env template")
+		return nil, errors.WithMessage(err, "failed to execute config.env template")
+	}
+
+	return buf.Bytes(), nil
+}
+
+// createConfigEnv creates the config.env file.
+func createConfigEnv(ctx context.Context, config InstallConfig) error {
+	rendered, err := renderConfigEnv(config)
+	if err != nil {
+		return err
 	}
 
 	configPath := filepath.Join(config.ConfigDirectory, "config.env")
-	if err := os.WriteFile(configPath, buf.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(configPath, rendered, 0600); err != nil {
 		return errors.WithMessage(err, "failed to write config.env file")
 	}
 
@@ -280,12 +307,10 @@ func generateRandomKey(length int) (string, error) {
 	return fmt.Sprintf("base64:%s", encoded), nil
 }
 
-func downloadBinaries(ctx context.Context, config InstallConfig) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "gameap")
-	if err != nil {
-		return "", errors.WithMessage(err, "failed to make temp dir")
-	}
-
+// ResolveRelease queries GitHub for the GameAP release matching the given
+// install config (Tag/TagPrefix). Lets callers know the resolved tag before
+// running Install — useful for version-dependent decisions (e.g. enabling gRPC).
+func ResolveRelease(ctx context.Context, config InstallConfig) (*releasefinder.Release, error) {
 	opts := releasefinder.FindOptions{
 		Tag:       config.Tag,
 		TagPrefix: config.TagPrefix,
@@ -305,7 +330,24 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 		opts,
 	)
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to find release")
+		return nil, errors.WithMessage(err, "failed to find release")
+	}
+
+	return release, nil
+}
+
+func downloadBinaries(ctx context.Context, config InstallConfig) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "gameap")
+	if err != nil {
+		return "", errors.WithMessage(err, "failed to make temp dir")
+	}
+
+	release := config.PreResolvedRelease
+	if release == nil {
+		release, err = ResolveRelease(ctx, config)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	fmt.Println("Downloading binaries ...")

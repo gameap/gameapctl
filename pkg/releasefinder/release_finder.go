@@ -341,6 +341,57 @@ func IsMajorV3(t NormalizedTag) bool {
 	return false
 }
 
+// IsAtLeastV4_2 reports whether the resolved tag is GameAP v4.2.0 or newer.
+//
+// Accepts inputs like "v4.2.0", "v4.2.0beta1", "v4.10.0", "v5.0.0", "4.2.0".
+// The non-standard prerelease form ("v4.2.0beta1") is parsed by stripping the
+// suffix after the last numeric segment, so semver libraries that require a
+// dash separator are intentionally avoided.
+//
+// Empty input returns false (caller should treat unknown version as legacy).
+func IsAtLeastV4_2(tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return false
+	}
+
+	if len(tag) > 0 && (tag[0] == 'v' || tag[0] == 'V') {
+		tag = tag[1:]
+	}
+
+	matches := versionSuffixSplitRegex.FindStringSubmatch(tag)
+	if matches == nil {
+		return false
+	}
+
+	versionPart := strings.TrimSuffix(matches[1], ".")
+	if versionPart == "" {
+		return false
+	}
+
+	parts := strings.Split(versionPart, ".")
+	if len(parts) < 2 {
+		return false
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false
+	}
+
+	const (
+		minMajor = 4
+		minMinor = 2
+	)
+
+	return major > minMajor || (major == minMajor && minor >= minMinor)
+}
+
 var versionSuffixSplitRegex = regexp.MustCompile(`^([0-9.]*)(.*)$`)
 
 // NormalizeTag converts a user-supplied version string into a NormalizedTag.

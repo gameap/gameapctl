@@ -3,7 +3,11 @@ package panel
 const configEnvTemplate = `# Server
 HTTP_HOST={{.HTTPHost}}
 HTTP_PORT={{.HTTPPort}}
-
+{{if .GRPCEnabled}}
+# gRPC
+GRPC_ENABLED=true
+GRPC_PORT={{.GRPCPort}}
+{{end}}
 # Database
 DATABASE_DRIVER={{.DatabaseDriver}}
 DATABASE_URL={{.DatabaseURL}}

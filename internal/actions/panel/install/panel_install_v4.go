@@ -2,10 +2,13 @@ package install
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +18,7 @@ import (
 	daemoninstall "github.com/gameap/gameapctl/internal/actions/daemon/install"
 	"github.com/gameap/gameapctl/internal/actions/panel/changepassword"
 	contextInternal "github.com/gameap/gameapctl/internal/context"
+	daemonpkg "github.com/gameap/gameapctl/internal/pkg/daemon"
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/daemon"
@@ -56,6 +60,14 @@ type panelInstallStateV4 struct {
 	Tag          string
 	TagPrefix    string
 	ResolvedTag  string
+
+	// gRPC bidi protocol settings (panel >= v4.2). GRPCEnabled is decided by the
+	// installer after the release tag is resolved (or forced for --github builds).
+	// GRPCPortInput captures the explicit --grpc-port flag (empty means default).
+	// GRPCEnabled / GRPCPort are the resolved values used during install.
+	GRPCEnabled   bool
+	GRPCPort      string
+	GRPCPortInput string
 
 	// Installation variables
 	DatabaseWasInstalled     bool
@@ -133,6 +145,9 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	} else {
 		state.Branch = cliCtx.String("branch")
 	}
+
+	state.GRPCPortInput = cliCtx.String("grpc-port")
+	state.GRPCPort = state.GRPCPortInput
 
 	state.VersionInput = cliCtx.String("version")
 	if state.VersionInput != "" {
@@ -548,7 +563,18 @@ func HandleV4(cliCtx *cli.Context) error {
 }
 
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
-	resolvedTag, err := panel.Install(ctx, buildPanelInstallConfigV4(state))
+	release, err := panel.ResolveRelease(ctx, buildPanelInstallConfigV4(state))
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to resolve GameAP release")
+	}
+
+	state.ResolvedTag = release.Tag
+	state = applyGRPCDecision(state, release.Tag)
+
+	cfg := buildPanelInstallConfigV4(state)
+	cfg.PreResolvedRelease = release
+
+	resolvedTag, err := panel.Install(ctx, cfg)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install GameAP v4")
 	}
@@ -559,11 +585,19 @@ func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 	return state, nil
 }
 
+// installGameAPFromGithubV4 builds the panel from GitHub source. There is no
+// resolved release tag in this path; per project policy we treat GitHub builds
+// as the latest line and always enable gRPC.
 func installGameAPFromGithubV4(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
 	state panelInstallStateV4,
 ) (panelInstallStateV4, error) {
+	state.GRPCEnabled = true
+	if state.GRPCPort == "" {
+		state.GRPCPort = gameap.DefaultGRPCPort
+	}
+
 	if err := panelpkg.SetupGameAPFromGithubV4(ctx, pm, state.Branch); err != nil {
 		return state, errors.WithMessage(err, "failed to setup GameAP from github")
 	}
@@ -573,6 +607,19 @@ func installGameAPFromGithubV4(
 	}
 
 	return state, nil
+}
+
+// applyGRPCDecision sets GRPCEnabled based on the resolved tag and fills the
+// default port when the user did not pass --grpc-port.
+func applyGRPCDecision(state panelInstallStateV4, resolvedTag string) panelInstallStateV4 {
+	if releasefinder.IsAtLeastV4_2(resolvedTag) {
+		state.GRPCEnabled = true
+		if state.GRPCPort == "" {
+			state.GRPCPort = gameap.DefaultGRPCPort
+		}
+	}
+
+	return state
 }
 
 func buildDatabaseURLV4(state panelInstallStateV4) string {
@@ -612,6 +659,8 @@ func buildPanelInstallConfigV4(state panelInstallStateV4) panel.InstallConfig {
 		DatabaseURL:     buildDatabaseURLV4(state),
 		CacheDriver:     "inmemory",
 		FilesDriver:     "local",
+		GRPCEnabled:     state.GRPCEnabled,
+		GRPCPort:        state.GRPCPort,
 		Tag:             state.Tag,
 		TagPrefix:       state.TagPrefix,
 	}
@@ -1114,99 +1163,53 @@ func installPostgreSQL(
 	return state, err
 }
 
-//nolint:funlen,gocognit
+// daemonInstallV4 dispatches to the daemon enrollment flow that matches the
+// panel's transport: gRPC bidi for >= v4.2, legacy HTTP otherwise.
 func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	if state.GRPCEnabled {
+		return daemonInstallV4GRPC(ctx, state)
+	}
+
+	return daemonInstallV4Legacy(ctx, state)
+}
+
+const (
+	daemonSetupTokenEnv = "DAEMON_SETUP_TOKEN"
+	daemonSetupKeyEnv   = "DAEMON_SETUP_KEY"
+	setupKeyByteLen     = 16
+	healthCheckRetries  = 30
+	healthCheckInterval = 2 * time.Second
+	httpClientTimeout   = 5 * time.Second
+)
+
+func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
 
 	configPath := filepath.Join(state.ConfigDirectory, "config.env")
 
-	// Clean up stale DAEMON_SETUP_TOKEN lines from previous failed runs
-	if content, readErr := os.ReadFile(configPath); readErr == nil {
-		lines := strings.Split(string(content), "\n")
-		var filtered []string
-		for _, line := range lines {
-			if !strings.HasPrefix(strings.TrimSpace(line), "DAEMON_SETUP_TOKEN=") {
-				filtered = append(filtered, line)
-			}
-		}
-
-		_ = os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600)
+	if err := appendConfigEnvVar(configPath, daemonSetupTokenEnv, token); err != nil {
+		return state, errors.WithMessage(err, "failed to set DAEMON_SETUP_TOKEN in config.env")
 	}
+	defer removeConfigEnvVar(configPath, daemonSetupTokenEnv)
 
-	// Append DAEMON_SETUP_TOKEN to config.env
-	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		return state, errors.WithMessage(err, "failed to open config.env")
-	}
-
-	tokenLine := fmt.Sprintf("\nDAEMON_SETUP_TOKEN=%s\n", token)
-	_, err = f.WriteString(tokenLine)
-	if err != nil {
-		closeErr := f.Close()
-		if closeErr != nil {
-			log.Println(errors.WithMessage(closeErr, "failed to close config.env after write error"))
-		}
-
-		return state, errors.WithMessage(err, "failed to write DAEMON_SETUP_TOKEN to config.env")
-	}
-	closeErr := f.Close()
-	if closeErr != nil {
-		log.Println(errors.WithMessage(closeErr, "failed to close config.env after write error"))
-	}
-
-	// Remove token from config after daemon installation
-	defer func() {
-		// Read the config file
-		content, err := os.ReadFile(configPath)
-		if err != nil {
-			log.Println(errors.WithMessage(err, "failed to read config.env for cleanup"))
-
-			return
-		}
-
-		// Remove the DAEMON_SETUP_TOKEN line
-		lines := strings.Split(string(content), "\n")
-		var filteredLines []string
-		for _, line := range lines {
-			if !strings.HasPrefix(strings.TrimSpace(line), "DAEMON_SETUP_TOKEN=") {
-				filteredLines = append(filteredLines, line)
-			}
-		}
-
-		// Write back without the token line
-		err = os.WriteFile(configPath, []byte(strings.Join(filteredLines, "\n")), 0600)
-		if err != nil {
-			log.Println(errors.WithMessage(err, "failed to remove DAEMON_SETUP_TOKEN from config.env"))
-		}
-	}()
-
-	// Temporary start gameap with DAEMON_SETUP_TOKEN in config.env
-	err = panel.Start(ctx)
-	if err != nil {
+	if err := panel.Start(ctx); err != nil {
 		return state, errors.WithMessage(err, "failed to start GameAP")
 	}
 
 	defer func() {
-		err = panel.Stop(ctx)
-		if err != nil {
+		if err := panel.Stop(ctx); err != nil {
 			log.Println(errors.WithMessage(err, "failed to stop GameAP"))
 		}
 	}()
 
 	host := "http://" + state.Host + ":" + state.Port
 
-	// Wait for GameAP panel to be ready using health check
-	maxRetries := 30
-	retryDelay := 2 * time.Second
-
-	err = waitForPanelHealthCheck(ctx, host, maxRetries, retryDelay)
-	if err != nil {
+	if err := waitForPanelHealthCheck(ctx, host, healthCheckRetries, healthCheckInterval); err != nil {
 		return state, err
 	}
 
-	// Make HTTP GET request to retrieve createToken
 	client := &http.Client{
-		Timeout: 5 * time.Second, //nolint:mnd
+		Timeout: httpClientTimeout,
 	}
 	req, err := http.NewRequestWithContext(
 		ctx,
@@ -1228,13 +1231,11 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 		return state, errors.New("failed to get daemon setup: non-200 status code")
 	}
 
-	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to read daemon setup response")
 	}
 
-	// Parse createToken from response
 	createToken := ""
 	split := strings.Split(string(body), ";")
 	for _, s := range split {
@@ -1259,6 +1260,136 @@ func daemonInstallV4(ctx context.Context, state panelInstallStateV4) (panelInsta
 	}
 
 	return state, nil
+}
+
+// daemonInstallV4GRPC enrolls the daemon over the gRPC bidi protocol introduced
+// in panel v4.2. We seed DAEMON_SETUP_KEY into the panel's config.env so the
+// panel's SetupKeyManager accepts the same key when the daemon enrolls; on
+// success the panel invalidates the key (one-shot enrollment).
+func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
+	if state.GRPCPort == "" {
+		state.GRPCPort = gameap.DefaultGRPCPort
+	}
+
+	setupKey, err := generateSetupKey()
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to generate gRPC setup key")
+	}
+
+	configPath := filepath.Join(state.ConfigDirectory, "config.env")
+
+	if err := appendConfigEnvVar(configPath, daemonSetupKeyEnv, setupKey); err != nil {
+		return state, errors.WithMessage(err, "failed to set DAEMON_SETUP_KEY in config.env")
+	}
+	defer removeConfigEnvVar(configPath, daemonSetupKeyEnv)
+
+	if err := panel.Start(ctx); err != nil {
+		return state, errors.WithMessage(err, "failed to start GameAP")
+	}
+
+	defer func() {
+		if err := panel.Stop(ctx); err != nil {
+			log.Println(errors.WithMessage(err, "failed to stop GameAP"))
+		}
+	}()
+
+	host := "http://" + state.Host + ":" + state.Port
+
+	if err := waitForPanelHealthCheck(ctx, host, healthCheckRetries, healthCheckInterval); err != nil {
+		return state, err
+	}
+
+	grpcAddr := net.JoinHostPort(state.Host, state.GRPCPort)
+	if err := daemonpkg.CheckGRPCConnectivity(grpcAddr); err != nil {
+		return state, errors.WithMessage(err,
+			"panel gRPC port unreachable; verify GRPC_ENABLED=true on panel and that the port is open")
+	}
+
+	connectURL := fmt.Sprintf("grpc://%s/%s", grpcAddr, setupKey)
+
+	if err := daemoninstall.Install(ctx, daemoninstall.InstallOptions{
+		ConnectURL: connectURL,
+	}); err != nil {
+		return state, errors.WithMessage(err, "failed to install daemon via gRPC enrollment")
+	}
+
+	return state, nil
+}
+
+// generateSetupKey returns a 32-character hex string suitable for use as a
+// daemon setup key; matches the panel's enrollment.setupKeyLength constant.
+func generateSetupKey() (string, error) {
+	buf := make([]byte, setupKeyByteLen)
+	n, err := rand.Read(buf)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read random bytes")
+	}
+	if n != setupKeyByteLen {
+		return "", errors.New("short read from crypto/rand")
+	}
+
+	return hex.EncodeToString(buf), nil
+}
+
+// appendConfigEnvVar removes any existing line for `name` from config.env, then
+// appends `name=value` on a new line. Used to seed transient install-time env
+// vars like DAEMON_SETUP_TOKEN / DAEMON_SETUP_KEY.
+func appendConfigEnvVar(configPath, name, value string) error {
+	prefix := name + "="
+
+	if content, readErr := os.ReadFile(configPath); readErr == nil {
+		lines := strings.Split(string(content), "\n")
+		filtered := lines[:0]
+		for _, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), prefix) {
+				filtered = append(filtered, line)
+			}
+		}
+
+		if writeErr := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); writeErr != nil { //nolint:gosec
+			return errors.WithMessage(writeErr, "failed to rewrite config.env without stale entry")
+		}
+	}
+
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return errors.Wrap(err, "failed to open config.env")
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Println(errors.WithMessage(closeErr, "failed to close config.env"))
+		}
+	}()
+
+	if _, err := fmt.Fprintf(f, "\n%s%s\n", prefix, value); err != nil {
+		return errors.Wrapf(err, "failed to write %s to config.env", name)
+	}
+
+	return nil
+}
+
+// removeConfigEnvVar drops every line that starts with `name=` from config.env.
+// Errors are logged, not returned, so it is safe to use directly with `defer`.
+func removeConfigEnvVar(configPath, name string) {
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Println(errors.WithMessagef(err, "failed to read config.env for %s cleanup", name))
+
+		return
+	}
+
+	prefix := name + "="
+	lines := strings.Split(string(content), "\n")
+	filtered := lines[:0]
+	for _, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(line), prefix) {
+			filtered = append(filtered, line)
+		}
+	}
+
+	if err := os.WriteFile(configPath, []byte(strings.Join(filtered, "\n")), 0600); err != nil { //nolint:gosec
+		log.Println(errors.WithMessagef(err, "failed to remove %s from config.env", name))
+	}
 }
 
 func waitForPanelHealthCheck(ctx context.Context, host string, maxRetries int, retryDelay time.Duration) error {
@@ -1353,6 +1484,11 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 
 	if state.WithDaemon {
 		sb.WriteString(" --with-daemon")
+	}
+
+	if state.GRPCPortInput != "" {
+		sb.WriteString(" --grpc-port=")
+		sb.WriteString(state.GRPCPortInput)
 	}
 
 	return sb.String()

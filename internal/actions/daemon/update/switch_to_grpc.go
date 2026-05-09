@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	defaultGRPCPort             = "31718"
 	verificationPollInterval    = 1 * time.Second
 	verificationPollMaxAttempts = 10
 	postStartGracePeriod        = 3 * time.Second
@@ -265,7 +264,7 @@ func deriveGRPCAddress(apiHost string) (string, error) {
 		return "", errors.New("api_host has no hostname")
 	}
 
-	return net.JoinHostPort(hostname, defaultGRPCPort), nil
+	return net.JoinHostPort(hostname, gameap.DefaultGRPCPort), nil
 }
 
 func resolveCertPath(cfgDir, path string) string {

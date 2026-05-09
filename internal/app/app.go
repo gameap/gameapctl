@@ -288,6 +288,11 @@ func Run(args []string) {
 								Name:  "with-daemon",
 								Usage: "Daemon will be also installed with panel. ",
 							},
+							&cli.StringFlag{
+								Name: "grpc-port",
+								Usage: "Override gRPC port written to panel config.env (panels >= v4.2). " +
+									"Default: 31718.",
+							},
 						},
 					},
 					{
