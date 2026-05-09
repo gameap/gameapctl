@@ -3,7 +3,8 @@ package letsencrypt
 import (
 	"log"
 
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -35,10 +36,14 @@ func Disable(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to write config")
 	}
 
-	log.Println("ACME disabled in config.env. Restarting gameap service ...")
+	if !utils.IsCommandAvailable("gameap") {
+		return errors.WithMessage(panel.ErrGameAPNotInstalled, "gameap binary not found in PATH")
+	}
 
-	if err := service.Restart(ctx, "gameap"); err != nil {
-		return errors.WithMessage(err, "failed to restart gameap service")
+	log.Println("ACME disabled in config.env. Restarting gameap ...")
+
+	if err := panel.Restart(ctx); err != nil {
+		return errors.WithMessage(err, "failed to restart gameap")
 	}
 
 	if cliCtx.Bool("purge-certs") {

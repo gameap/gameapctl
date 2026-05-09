@@ -8,7 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/oscore"
+	"github.com/gameap/gameapctl/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -55,14 +57,26 @@ func Setup(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to write config")
 	}
 
-	log.Println("config.env updated. Restarting gameap service ...")
-
-	if err := service.Restart(ctx, "gameap"); err != nil {
-		return errors.WithMessage(err, "failed to restart gameap service")
+	if !utils.IsCommandAvailable("gameap") {
+		return errors.WithMessage(panel.ErrGameAPNotInstalled, "gameap binary not found in PATH")
 	}
 
-	log.Println("gameap restarted. Check logs (journalctl -u gameap) and " +
-		"GET /api/admin/letsencrypt/status to confirm certificate issuance.")
+	log.Println("config.env updated. Restarting gameap ...")
+
+	if err := panel.Restart(ctx); err != nil {
+		return errors.WithMessage(err, "failed to restart gameap")
+	}
+
+	pr, err := oscore.WaitForProcessByName(ctx, "gameap")
+	if err != nil {
+		return errors.WithMessage(err, "failed to find started gameap process")
+	}
+	if pr == nil {
+		return errors.New("started gameap process not found after restart")
+	}
+
+	log.Printf("gameap restarted (pid %d). Check logs (journalctl -u gameap or container stdout) "+
+		"and GET /api/admin/letsencrypt/status to confirm certificate issuance.\n", pr.Pid)
 
 	if params.challengeType == ChallengeHTTP01 {
 		log.Println("HTTP-01 reminder: ensure port 80 is reachable from the public internet " +
