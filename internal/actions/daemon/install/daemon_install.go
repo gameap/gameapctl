@@ -108,11 +108,6 @@ func resolveScope(opts InstallOptions) (string, error) {
 				runtime.GOOS,
 			)
 		}
-		if opts.FromGithub {
-			return "", errors.New(
-				"--scope=user is not compatible with --github (build requires system-wide tools)",
-			)
-		}
 
 		return gameap.ScopeUser, nil
 	default:
@@ -692,7 +687,8 @@ func installDaemonFromGithub(
 	pm packagemanager.PackageManager,
 	state daemonsInstallState,
 ) (daemonsInstallState, error) {
-	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, state.Branch); err != nil {
+	userScope := state.Scope == gameap.ScopeUser
+	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, state.Branch, state.DaemonFilePath, userScope); err != nil {
 		return state, errors.WithMessage(err, "failed to build daemon from github")
 	}
 

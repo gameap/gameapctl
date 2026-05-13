@@ -11,24 +11,26 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
+
+const daemonBuildOutputDirMode = 0755
 
 func SetupDaemonFromGithub(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
 	branch string,
+	outputPath string,
+	userScope bool,
 ) error {
-	fmt.Println("Installing git ...")
-	if err := pm.Install(ctx, packagemanager.GitPackage); err != nil {
-		return errors.WithMessage(err, "failed to install git")
+	if outputPath == "" {
+		outputPath = gameap.DefaultDaemonFilePath
 	}
 
-	fmt.Println("Installing golang ...")
-	if err := pm.Install(ctx, packagemanager.GOPackage); err != nil {
-		return errors.WithMessage(err, "failed to install golang")
+	if err := ensureGithubBuildTools(ctx, pm, userScope); err != nil {
+		return err
 	}
-	packagemanager.UpdateEnvPath(ctx)
 
 	path, err := os.MkdirTemp("", "gameapctl-daemon")
 	if err != nil {
@@ -49,7 +51,7 @@ func SetupDaemonFromGithub(
 	}
 
 	fmt.Println("Building gameap-daemon ...")
-	err = BuildGoDaemon(ctx, path)
+	err = BuildGoDaemon(ctx, path, outputPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to build daemon")
 	}
@@ -57,13 +59,58 @@ func SetupDaemonFromGithub(
 	return nil
 }
 
-func BuildGoDaemon(_ context.Context, repoPath string) error {
+func ensureGithubBuildTools(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	userScope bool,
+) error {
+	if userScope {
+		if !utils.IsCommandAvailable("git") {
+			return errors.New(
+				"git is required to build gameap-daemon from GitHub in user scope; " +
+					"please install it manually (e.g. via sudo) and retry",
+			)
+		}
+		if !utils.IsCommandAvailable("go") {
+			return errors.New(
+				"go is required to build gameap-daemon from GitHub in user scope; " +
+					"please install it manually (e.g. via sudo) and retry",
+			)
+		}
+
+		return nil
+	}
+
+	fmt.Println("Installing git ...")
+	if err := pm.Install(ctx, packagemanager.GitPackage); err != nil {
+		return errors.WithMessage(err, "failed to install git")
+	}
+
+	fmt.Println("Installing golang ...")
+	if err := pm.Install(ctx, packagemanager.GOPackage); err != nil {
+		return errors.WithMessage(err, "failed to install golang")
+	}
+	packagemanager.UpdateEnvPath(ctx)
+
+	return nil
+}
+
+func BuildGoDaemon(_ context.Context, repoPath, outputPath string) error {
 	log.Println("Building go daemon...")
+
+	if outputPath == "" {
+		outputPath = gameap.DefaultDaemonFilePath
+	}
+
+	if dir := filepath.Dir(outputPath); dir != "" {
+		if err := os.MkdirAll(dir, daemonBuildOutputDirMode); err != nil {
+			return errors.Wrapf(err, "failed to create output directory %s", dir)
+		}
+	}
 
 	cmdPath := filepath.Join(repoPath, "cmd", "gameap-daemon")
 
-	//nolint:gosec
-	cmd := exec.Command("go", "build", "-o", gameap.DefaultDaemonFilePath, ".")
+	cmd := exec.Command("go", "build", "-o", outputPath, ".")
 	log.Println('\n', cmd.String())
 	cmd.Dir = cmdPath
 	cmd.Stdout = log.Writer()

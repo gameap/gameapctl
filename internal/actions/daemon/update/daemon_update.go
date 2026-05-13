@@ -68,11 +68,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	if fromGithub {
-		if scope == gameap.ScopeUser {
-			return errors.New("daemon upgrade from GitHub is not supported in user scope")
-		}
-
-		return handleFromGithub(ctx, branch)
+		return handleFromGithub(ctx, branch, scope)
 	}
 
 	gameapDaemonPath := ""
@@ -287,12 +283,25 @@ func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasef
 	return release, nil
 }
 
-func handleFromGithub(ctx context.Context, branch string) error {
+func handleFromGithub(ctx context.Context, branch, scope string) error {
 	log.Printf("Upgrading daemon from GitHub (branch: %s)...\n", branch)
 
-	gameapDaemonPath, err := exec.LookPath("gameap-daemon")
-	if err != nil {
-		gameapDaemonPath = gameap.DefaultDaemonFilePath
+	userScope := scope == gameap.ScopeUser
+
+	var gameapDaemonPath string
+	if userScope {
+		paths, pathsErr := gameap.DaemonPathsForScope(scope)
+		if pathsErr != nil {
+			return errors.WithMessage(pathsErr, "failed to resolve daemon paths")
+		}
+		gameapDaemonPath = paths.DaemonFilePath
+	} else {
+		lookPath, lookErr := exec.LookPath("gameap-daemon")
+		if lookErr != nil {
+			gameapDaemonPath = gameap.DefaultDaemonFilePath
+		} else {
+			gameapDaemonPath = lookPath
+		}
 	}
 
 	backupPath := filepath.Join(os.TempDir(), "gameap-daemon-backup")
@@ -310,17 +319,21 @@ func handleFromGithub(ctx context.Context, branch string) error {
 	}
 
 	fmt.Println("Stopping daemon...")
-	if err := stopDaemon(ctx, gameap.ScopeSystem); err != nil {
+	if err := stopDaemon(ctx, scope); err != nil {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
 
-	pm, err := packagemanager.Load(ctx)
-	if err != nil {
-		return errors.WithMessage(err, "failed to load package manager")
+	var pm packagemanager.PackageManager
+	if !userScope {
+		loadedPM, err := packagemanager.Load(ctx)
+		if err != nil {
+			return errors.WithMessage(err, "failed to load package manager")
+		}
+		pm = loadedPM
 	}
 
 	fmt.Println("Building daemon from GitHub source...")
-	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, branch); err != nil {
+	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, branch, gameapDaemonPath, userScope); err != nil {
 		log.Printf("Build failed: %v\n", err)
 
 		if _, statErr := os.Stat(backupPath); statErr == nil {
@@ -330,7 +343,7 @@ func handleFromGithub(ctx context.Context, branch string) error {
 			}
 		}
 
-		if startErr := startDaemon(ctx, gameap.ScopeSystem); startErr != nil {
+		if startErr := startDaemon(ctx, scope); startErr != nil {
 			log.Printf("Failed to start daemon after build failure: %v\n", startErr)
 		}
 
@@ -338,10 +351,10 @@ func handleFromGithub(ctx context.Context, branch string) error {
 	}
 
 	fmt.Println("Starting daemon...")
-	if err := startDaemon(ctx, gameap.ScopeSystem); err != nil {
+	if err := startDaemon(ctx, scope); err != nil {
 		fmt.Println("Failed to start daemon. Reverting...")
 
-		if revertErr := revertFromBackup(ctx, gameapDaemonPath, backupPath); revertErr != nil {
+		if revertErr := revertFromBackup(ctx, gameapDaemonPath, backupPath, scope); revertErr != nil {
 			return errors.WithMessage(revertErr, "failed to revert and restart after build failure")
 		}
 
@@ -353,7 +366,7 @@ func handleFromGithub(ctx context.Context, branch string) error {
 	return nil
 }
 
-func revertFromBackup(ctx context.Context, binaryPath, backupPath string) error {
+func revertFromBackup(ctx context.Context, binaryPath, backupPath, scope string) error {
 	if _, err := os.Stat(backupPath); err != nil {
 		return errors.WithMessage(err, "backup file not found")
 	}
@@ -364,5 +377,5 @@ func revertFromBackup(ctx context.Context, binaryPath, backupPath string) error 
 
 	fmt.Println("Starting daemon with old version...")
 
-	return startDaemon(ctx, gameap.ScopeSystem)
+	return startDaemon(ctx, scope)
 }
