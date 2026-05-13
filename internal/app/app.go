@@ -118,6 +118,13 @@ func Run(args []string) {
 								Usage:   "Connect URL for gRPC enrollment (grpc://host:port/key)",
 							},
 							&cli.StringFlag{
+								Name:    "scope",
+								EnvVars: []string{"SCOPE"},
+								Value:   "system",
+								Usage: "Installation scope: 'system' (default, requires root, writes to /etc and /usr/bin) " +
+									"or 'user' (systemd user units, files under $HOME; Linux only).",
+							},
+							&cli.StringFlag{
 								Name:    "token",
 								EnvVars: []string{"CREATE_TOKEN"},
 							},

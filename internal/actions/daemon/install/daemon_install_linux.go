@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/v3/process"
 )
@@ -21,8 +22,13 @@ func defineProcessManager(ctx context.Context, state daemonsInstallState) (daemo
 		}
 	}
 
+	if state.Scope == gameap.ScopeUser {
+		state.ProcessManager = processManagerSystemD
+
+		return state, nil
+	}
+
 	state.ProcessManager = processManagerDefault
-	// check that pid=1 is systemd
 	p, err := process.NewProcess(1)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to get process 1"))

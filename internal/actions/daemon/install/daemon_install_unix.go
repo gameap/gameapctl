@@ -8,12 +8,19 @@ import (
 	"os/user"
 	"strconv"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/pkg/errors"
 )
 
 func createUser(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	if state.Scope == gameap.ScopeUser {
+		fmt.Println("Skipping gameap user/group creation in user scope ...")
+
+		return state, nil
+	}
+
 	fmt.Println("Checking for gameap group existence ...")
 	_, err := user.LookupGroup("gameap")
 
@@ -46,6 +53,10 @@ func createUser(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 }
 
 func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
+	if state.Scope == gameap.ScopeUser {
+		return state, nil
+	}
+
 	gameapUser, err := user.Lookup("gameap")
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to lookup user")

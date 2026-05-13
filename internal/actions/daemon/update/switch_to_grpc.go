@@ -59,11 +59,23 @@ type switchDeps struct {
 func HandleSwitchToGRPC(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
+	cfgPath := gameap.DefaultDaemonConfigFilePath
+	scope := ""
+	if state, loadErr := gameapctl.LoadDaemonInstallState(ctx); loadErr == nil {
+		scope = state.Scope
+		if scope != "" {
+			if paths, pathsErr := gameap.DaemonPathsForScope(scope); pathsErr == nil &&
+				paths.DaemonConfigFilePath != "" {
+				cfgPath = paths.DaemonConfigFilePath
+			}
+		}
+	}
+
 	deps := switchDeps{
-		cfgPath:             gameap.DefaultDaemonConfigFilePath,
+		cfgPath:             cfgPath,
 		explicitGRPCAddr:    cliCtx.String("grpc-address"),
-		stopDaemon:          stopDaemon,
-		startDaemon:         startDaemon,
+		stopDaemon:          func(ctx context.Context) error { return stopDaemon(ctx, scope) },
+		startDaemon:         func(ctx context.Context) error { return startDaemon(ctx, scope) },
 		findProcess:         pkgdaemon.FindProcess,
 		lookPath:            exec.LookPath,
 		tcpDial:             daemonpkg.CheckGRPCConnectivity,

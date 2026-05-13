@@ -55,6 +55,74 @@ const (
 
 var errEmptyToken = errors.New("empty token")
 
+const (
+	daemonConfigDirMode = 0700
+	daemonDirMode       = 0755
+)
+
+func ensureDaemonDirs(state daemonsInstallState) error {
+	if state.DaemonConfigDir != "" {
+		if err := os.MkdirAll(state.DaemonConfigDir, daemonConfigDirMode); err != nil {
+			return errors.Wrapf(err, "failed to create %s", state.DaemonConfigDir)
+		}
+	}
+	if state.OutputLogPath != "" {
+		logDir := filepath.Dir(state.OutputLogPath)
+		if err := os.MkdirAll(logDir, daemonDirMode); err != nil {
+			return errors.Wrapf(err, "failed to create %s", logDir)
+		}
+	}
+	if state.DaemonFilePath != "" {
+		binDir := filepath.Dir(state.DaemonFilePath)
+		if err := os.MkdirAll(binDir, daemonDirMode); err != nil {
+			return errors.Wrapf(err, "failed to create %s", binDir)
+		}
+	}
+
+	return nil
+}
+
+func warnIfBinaryMissing(name string) {
+	if utils.IsCommandAvailable(name) {
+		return
+	}
+	log.Printf("Warning: %q is not available in PATH. "+
+		"In user scope packages cannot be installed automatically; please install it manually (e.g. via sudo).\n", name)
+}
+
+const linuxOS = "linux"
+
+func resolveScope(opts InstallOptions) (string, error) {
+	scope := opts.Scope
+	if scope == "" {
+		scope = gameap.ScopeSystem
+	}
+
+	switch scope {
+	case gameap.ScopeSystem:
+		return gameap.ScopeSystem, nil
+	case gameap.ScopeUser:
+		if runtime.GOOS != linuxOS {
+			return "", errors.Errorf(
+				"--scope=user requires Linux with systemd (current OS: %s)",
+				runtime.GOOS,
+			)
+		}
+		if opts.FromGithub {
+			return "", errors.New(
+				"--scope=user is not compatible with --github (build requires system-wide tools)",
+			)
+		}
+
+		return gameap.ScopeUser, nil
+	default:
+		return "", errors.Errorf(
+			"unknown --scope value %q (expected %q or %q)",
+			opts.Scope, gameap.ScopeSystem, gameap.ScopeUser,
+		)
+	}
+}
+
 type UnableToSetupNodeError string
 
 func (e UnableToSetupNodeError) Error() string {
@@ -73,9 +141,16 @@ type daemonsInstallState struct {
 	ConnectURL string
 	Config     string
 
-	WorkPath     string
-	SteamCMDPath string
-	CertsPath    string
+	Scope string
+
+	WorkPath             string
+	SteamCMDPath         string
+	ToolsPath            string
+	CertsPath            string
+	DaemonFilePath       string
+	DaemonConfigFilePath string
+	DaemonConfigDir      string
+	OutputLogPath        string
 
 	OSInfo osinfo.Info
 
@@ -102,6 +177,7 @@ type InstallOptions struct {
 	Token      string
 	ConnectURL string
 	Config     string
+	Scope      string
 	FromGithub bool
 	Branch     string
 	Version    string
@@ -113,6 +189,7 @@ func Handle(cliCtx *cli.Context) error {
 		Token:      cliCtx.String("token"),
 		ConnectURL: cliCtx.String("connect"),
 		Config:     cliCtx.String("config"),
+		Scope:      cliCtx.String("scope"),
 		FromGithub: cliCtx.Bool("github"),
 		Branch:     cliCtx.String("branch"),
 		Version:    cliCtx.String("version"),
@@ -151,6 +228,16 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return errEmptyToken
 	}
 
+	scope, err := resolveScope(opts)
+	if err != nil {
+		return err
+	}
+
+	paths, err := gameap.DaemonPathsForScope(scope)
+	if err != nil {
+		return errors.WithMessage(err, "failed to resolve daemon paths for scope")
+	}
+
 	var tag, tagPrefix string
 	if opts.Version != "" {
 		if opts.FromGithub || opts.Branch != "master" {
@@ -165,27 +252,31 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	}
 
 	state := daemonsInstallState{
-		Host:         opts.Host,
-		Token:        opts.Token,
-		ConnectURL:   opts.ConnectURL,
-		Config:       opts.Config,
-		FromGithub:   opts.FromGithub,
-		Branch:       opts.Branch,
-		VersionInput: opts.Version,
-		Tag:          tag,
-		TagPrefix:    tagPrefix,
-		SteamCMDPath: gameap.DefaultSteamCMDPath,
-	}
-
-	if state.WorkPath == "" {
-		state.WorkPath = gameap.DefaultWorkPath
-	}
-
-	if state.CertsPath == "" {
-		state.CertsPath = gameap.DefaultDaemonCertPath
+		Host:                 opts.Host,
+		Token:                opts.Token,
+		ConnectURL:           opts.ConnectURL,
+		Config:               opts.Config,
+		Scope:                scope,
+		FromGithub:           opts.FromGithub,
+		Branch:               opts.Branch,
+		VersionInput:         opts.Version,
+		Tag:                  tag,
+		TagPrefix:            tagPrefix,
+		WorkPath:             paths.WorkPath,
+		SteamCMDPath:         paths.SteamCMDPath,
+		ToolsPath:            paths.ToolsPath,
+		CertsPath:            paths.CertsPath,
+		DaemonFilePath:       paths.DaemonFilePath,
+		DaemonConfigFilePath: paths.DaemonConfigFilePath,
+		DaemonConfigDir:      paths.DaemonConfigDir,
+		OutputLogPath:        paths.OutputLogPath,
 	}
 
 	state.OSInfo = contextInternal.OSInfoFromContext(ctx)
+
+	if err := ensureDaemonDirs(state); err != nil {
+		return errors.WithMessage(err, "failed to prepare daemon directories")
+	}
 
 	pm, err := packagemanager.Load(ctx)
 	if err != nil {
@@ -205,41 +296,52 @@ func Install(ctx context.Context, opts InstallOptions) error {
 
 	//nolint:nestif
 	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
-		fmt.Println("Checking for curl ...")
-		if !utils.IsCommandAvailable("curl") {
-			fmt.Println("Installing curl ...")
-			if err = pm.Install(ctx, packagemanager.CurlPackage); err != nil {
-				return errors.WithMessage(err, "failed to install curl")
+		if state.Scope == gameap.ScopeUser {
+			warnIfBinaryMissing("curl")
+			warnIfBinaryMissing("gpg")
+			if state.ProcessManager == processManagerDefault {
+				warnIfBinaryMissing("tmux")
 			}
-		}
-
-		fmt.Println("Checking for gpg ...")
-		if !utils.IsCommandAvailable("gpg") {
-			fmt.Println("Installing gpg ...")
-			if err = pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
-				return errors.WithMessage(err, "failed to install gpg")
+			if state.ProcessManager == processManagerDocker {
+				warnIfBinaryMissing("docker")
 			}
-		}
-
-		if state.ProcessManager == processManagerDefault {
-			fmt.Println("Checking for tmux ...")
-
-			if !utils.IsCommandAvailable("tmux") {
-				fmt.Println("Installing tmux ...")
-				if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
-					return errors.WithMessage(err, "failed to install tmux")
+		} else {
+			fmt.Println("Checking for curl ...")
+			if !utils.IsCommandAvailable("curl") {
+				fmt.Println("Installing curl ...")
+				if err = pm.Install(ctx, packagemanager.CurlPackage); err != nil {
+					return errors.WithMessage(err, "failed to install curl")
 				}
 			}
-		}
 
-		if state.ProcessManager == processManagerDocker {
-			fmt.Println("Checking for docker ...")
+			fmt.Println("Checking for gpg ...")
+			if !utils.IsCommandAvailable("gpg") {
+				fmt.Println("Installing gpg ...")
+				if err = pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
+					return errors.WithMessage(err, "failed to install gpg")
+				}
+			}
 
-			if !utils.IsCommandAvailable("docker") {
-				fmt.Println("Installing docker ...")
+			if state.ProcessManager == processManagerDefault {
+				fmt.Println("Checking for tmux ...")
 
-				if err = pm.Install(ctx, packagemanager.DockerPackage); err != nil {
-					return errors.WithMessage(err, "failed to install docker")
+				if !utils.IsCommandAvailable("tmux") {
+					fmt.Println("Installing tmux ...")
+					if err = pm.Install(ctx, packagemanager.TmuxPackage); err != nil {
+						return errors.WithMessage(err, "failed to install tmux")
+					}
+				}
+			}
+
+			if state.ProcessManager == processManagerDocker {
+				fmt.Println("Checking for docker ...")
+
+				if !utils.IsCommandAvailable("docker") {
+					fmt.Println("Installing docker ...")
+
+					if err = pm.Install(ctx, packagemanager.DockerPackage); err != nil {
+						return errors.WithMessage(err, "failed to install docker")
+					}
 				}
 			}
 		}
@@ -271,7 +373,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		}
 	}
 
-	if state.OSInfo.Distribution != packagemanager.DistributionWindows {
+	if state.OSInfo.Distribution != packagemanager.DistributionWindows && state.Scope != gameap.ScopeUser {
 		if err = pm.Install(ctx, packagemanager.UnzipPackage); err != nil {
 			return errors.WithMessage(err, "failed to install archive managers")
 		}
@@ -322,6 +424,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		Host:           state.Host,
 		ConnectURL:     state.ConnectURL,
 		Version:        state.ResolvedTag,
+		Scope:          state.Scope,
 		WorkPath:       state.WorkPath,
 		SteamCMDPath:   state.SteamCMDPath,
 		CertsPath:      state.CertsPath,
@@ -333,7 +436,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
-	err = daemon.Start(ctx)
+	err = daemon.Start(ctx, daemon.Options{Scope: state.Scope})
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
@@ -376,7 +479,7 @@ func installSteamCMD(
 		fmt.Println("SteamCMD already installed, skipping download ...")
 	}
 
-	if runtime.GOOS == "linux" && strconv.IntSize == 64 {
+	if runtime.GOOS == linuxOS && strconv.IntSize == 64 && state.Scope != gameap.ScopeUser {
 		fmt.Println("Installing 32-bit libraries ...")
 		err := pm.Install(ctx, packagemanager.Lib32GCCPackage)
 		if err != nil {
@@ -390,6 +493,13 @@ func installSteamCMD(
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to install 32 bit libraries")
 		}
+	}
+
+	if state.Scope == gameap.ScopeUser && runtime.GOOS == linuxOS && strconv.IntSize == 64 {
+		log.Println(
+			"Warning: 32-bit libraries (lib32gcc, lib32stdc++6, lib32z1) are required for SteamCMD " +
+				"but cannot be installed in user scope. Install them manually if SteamCMD fails to run.",
+		)
 	}
 
 	return state, nil
@@ -554,7 +664,7 @@ func installDaemonBinaries(
 			return state, errors.WithMessage(err, "failed to stat file")
 		}
 
-		err = utils.Move(fp, gameap.DefaultDaemonFilePath)
+		err = utils.Move(fp, state.DaemonFilePath)
 		if err != nil {
 			return state, errors.WithMessage(err, "failed to move gameap-daemon binaries")
 		}
@@ -810,7 +920,7 @@ func legacyConfigureFlow(ctx context.Context, state daemonsInstallState) (daemon
 }
 
 func enrollDaemon(ctx context.Context, state daemonsInstallState) error {
-	daemonPath := gameap.DefaultDaemonFilePath
+	daemonPath := state.DaemonFilePath
 
 	if _, err := os.Stat(daemonPath); os.IsNotExist(err) {
 		return errors.New("gameap-daemon binary not found at " + daemonPath)
@@ -821,7 +931,7 @@ func enrollDaemon(ctx context.Context, state daemonsInstallState) error {
 
 	cmd := exec.CommandContext(enrollCtx, daemonPath, "enroll",
 		"--connect="+state.ConnectURL,
-		"--config-path="+gameap.DefaultDaemonConfigFilePath,
+		"--config-path="+state.DaemonConfigFilePath,
 		"--certs-dir="+state.CertsPath,
 		"--work-path="+state.WorkPath,
 	)
@@ -873,10 +983,10 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		PrivateKeyFile:       filepath.Join(state.CertsPath, "server.key"),
 
 		LogLevel:  "debug",
-		OutputLog: gameap.DefaultOutputLogPath,
+		OutputLog: state.OutputLogPath,
 
 		WorkPath:     state.WorkPath,
-		ToolsPath:    gameap.DefaultToolsPath,
+		ToolsPath:    state.ToolsPath,
 		SteamCMDPath: state.SteamCMDPath,
 
 		ProcessManager: ProcessManagerConfig{
@@ -901,12 +1011,21 @@ func saveDaemonConfig(_ context.Context, state daemonsInstallState) (daemonsInst
 		applyConfigOverrides(&cfg, overrides)
 	}
 
+	if state.Scope == gameap.ScopeUser && cfg.ProcessManager.Name == processManagerSystemD {
+		if cfg.ProcessManager.Config == nil {
+			cfg.ProcessManager.Config = make(map[string]string)
+		}
+		if _, ok := cfg.ProcessManager.Config["scope"]; !ok {
+			cfg.ProcessManager.Config["scope"] = gameap.ScopeUser
+		}
+	}
+
 	cfgBytes, err := yaml.Marshal(cfg)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to marshal daemon config")
 	}
 
-	err = os.WriteFile(gameap.DefaultDaemonConfigFilePath, cfgBytes, 0600)
+	err = os.WriteFile(state.DaemonConfigFilePath, cfgBytes, 0600)
 
 	return state, err
 }

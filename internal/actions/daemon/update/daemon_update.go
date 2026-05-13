@@ -21,7 +21,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-//nolint:funlen,gocognit
+//nolint:funlen,gocognit,gocyclo,cyclop
 func Handle(cliCtx *cli.Context) error {
 	if cliCtx.Bool("switch-to-grpc") {
 		return HandleSwitchToGRPC(cliCtx)
@@ -62,15 +62,34 @@ func Handle(cliCtx *cli.Context) error {
 		branch = "master"
 	}
 
+	scope := ""
+	if stateErr == nil {
+		scope = daemonState.Scope
+	}
+
 	if fromGithub {
+		if scope == gameap.ScopeUser {
+			return errors.New("daemon upgrade from GitHub is not supported in user scope")
+		}
+
 		return handleFromGithub(ctx, branch)
 	}
 
-	gameapDaemonPath, err := exec.LookPath("gameap-daemon")
-	if err != nil {
-		fmt.Println("Daemon not found")
+	gameapDaemonPath := ""
+	if scope == gameap.ScopeUser {
+		paths, pathsErr := gameap.DaemonPathsForScope(scope)
+		if pathsErr != nil {
+			return errors.WithMessage(pathsErr, "failed to resolve daemon paths")
+		}
+		gameapDaemonPath = paths.DaemonFilePath
+	} else {
+		var lookErr error
+		gameapDaemonPath, lookErr = exec.LookPath("gameap-daemon")
+		if lookErr != nil {
+			fmt.Println("Daemon not found")
 
-		return errors.WithMessage(err, "failed to find gameap-daemon")
+			return errors.WithMessage(lookErr, "failed to find gameap-daemon")
+		}
 	}
 
 	fmt.Println("Checking new versions...")
@@ -119,7 +138,7 @@ func Handle(cliCtx *cli.Context) error {
 	}()
 
 	fmt.Println("Stopping daemon...")
-	err = stopDaemon(ctx)
+	err = stopDaemon(ctx, scope)
 	if err != nil {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
@@ -150,7 +169,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Starting daemon...")
-	err = startDaemon(ctx)
+	err = startDaemon(ctx, scope)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("Failed to start daemon. Reverting...")
@@ -160,7 +179,7 @@ func Handle(cliCtx *cli.Context) error {
 		}
 
 		fmt.Println("Starting daemon...")
-		err = startDaemon(ctx)
+		err = startDaemon(ctx, scope)
 		if err != nil {
 			return errors.WithMessage(err, "failed to start daemon")
 		}
@@ -192,8 +211,8 @@ func updateDaemonStateVersion(ctx context.Context, resolvedTag string) {
 	}
 }
 
-func stopDaemon(ctx context.Context) error {
-	err := daemon.Stop(ctx)
+func stopDaemon(ctx context.Context, scope string) error {
+	err := daemon.Stop(ctx, daemon.Options{Scope: scope})
 	if err != nil {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
@@ -210,8 +229,8 @@ func stopDaemon(ctx context.Context) error {
 	return nil
 }
 
-func startDaemon(ctx context.Context) error {
-	err := daemon.Start(ctx)
+func startDaemon(ctx context.Context, scope string) error {
+	err := daemon.Start(ctx, daemon.Options{Scope: scope})
 	if err != nil {
 		return errors.WithMessage(err, "failed to start daemon")
 	}
@@ -291,7 +310,7 @@ func handleFromGithub(ctx context.Context, branch string) error {
 	}
 
 	fmt.Println("Stopping daemon...")
-	if err := stopDaemon(ctx); err != nil {
+	if err := stopDaemon(ctx, gameap.ScopeSystem); err != nil {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
 
@@ -311,7 +330,7 @@ func handleFromGithub(ctx context.Context, branch string) error {
 			}
 		}
 
-		if startErr := startDaemon(ctx); startErr != nil {
+		if startErr := startDaemon(ctx, gameap.ScopeSystem); startErr != nil {
 			log.Printf("Failed to start daemon after build failure: %v\n", startErr)
 		}
 
@@ -319,7 +338,7 @@ func handleFromGithub(ctx context.Context, branch string) error {
 	}
 
 	fmt.Println("Starting daemon...")
-	if err := startDaemon(ctx); err != nil {
+	if err := startDaemon(ctx, gameap.ScopeSystem); err != nil {
 		fmt.Println("Failed to start daemon. Reverting...")
 
 		if revertErr := revertFromBackup(ctx, gameapDaemonPath, backupPath); revertErr != nil {
@@ -345,5 +364,5 @@ func revertFromBackup(ctx context.Context, binaryPath, backupPath string) error 
 
 	fmt.Println("Starting daemon with old version...")
 
-	return startDaemon(ctx)
+	return startDaemon(ctx, gameap.ScopeSystem)
 }

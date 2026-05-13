@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Restart(ctx context.Context) error {
+func Restart(ctx context.Context, _ ...Options) error {
 	err := service.Restart(ctx, serviceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to get daemon status")

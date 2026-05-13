@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
@@ -18,27 +19,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	daemonSystemdConfigPath = "/etc/systemd/system/gameap-daemon.service"
+const daemonServiceName = "gameap-daemon"
 
-	gameapDaemonServiceContent = `[Unit]
-Description=GameAP Daemon
+func Start(ctx context.Context, opts ...Options) error {
+	o := firstOptions(opts)
 
-Wants=network-online.target
-After=network.target network-online.target
+	if o.scope() == gameap.ScopeUser {
+		return startDaemonSystemdScope(ctx, gameap.ScopeUser)
+	}
 
-[Service]
-User=root
-WorkingDirectory=/srv/gameap
-ExecStart=/bin/bash -c '/usr/bin/gameap-daemon'
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-`
-)
-
-func Start(ctx context.Context) error {
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
@@ -46,7 +35,7 @@ func Start(ctx context.Context) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = startDaemonSystemd(ctx)
+		err = startDaemonSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
 		err = startDaemonFork(ctx)
 	}
@@ -58,46 +47,103 @@ func Start(ctx context.Context) error {
 	return nil
 }
 
-func startDaemonSystemd(ctx context.Context) error {
-	_, err := os.Stat(daemonSystemdConfigPath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		err = daemonConfigureSystemd(ctx)
-		if err != nil {
-			return err
-		}
-	}
+func startDaemonSystemdScope(ctx context.Context, scope string) error {
+	paths, err := gameap.DaemonPathsForScope(scope)
 	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap-daemon service configuration")
+		return errors.WithMessage(err, "failed to resolve daemon paths")
 	}
 
-	err = service.Start(ctx, "gameap-daemon")
-	if err != nil {
+	_, statErr := os.Stat(paths.SystemdUnitPath)
+	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
+		if cfgErr := daemonConfigureSystemd(ctx, paths); cfgErr != nil {
+			return cfgErr
+		}
+	} else if statErr != nil {
+		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
+	}
+
+	if err := startSystemdService(ctx, paths.Scope); err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
 
 	return nil
 }
 
-func daemonConfigureSystemd(ctx context.Context) error {
-	log.Println("Writing systemd service configuration")
+func startSystemdService(ctx context.Context, scope string) error {
+	if scope == gameap.ScopeUser {
+		return oscore.ExecCommand(ctx, "systemctl", "--user", "start", daemonServiceName)
+	}
+
+	return service.Start(ctx, daemonServiceName)
+}
+
+func daemonConfigureSystemd(ctx context.Context, paths gameap.DaemonPaths) error {
+	log.Println("Writing systemd service configuration to", paths.SystemdUnitPath)
+
+	if err := os.MkdirAll(paths.SystemdUnitDir, 0755); err != nil {
+		return errors.Wrap(err, "failed to create systemd unit directory")
+	}
 
 	//nolint:gosec // systemd unit files must be world-readable
-	err := os.WriteFile(daemonSystemdConfigPath, []byte(gameapDaemonServiceContent), 0644)
-	if err != nil {
+	if err := os.WriteFile(paths.SystemdUnitPath, []byte(renderDaemonUnit(paths)), 0644); err != nil {
 		return errors.WithMessage(err, "failed to write service configuration")
 	}
 
-	err = oscore.ExecCommand(ctx, "systemctl", "daemon-reload")
-	if err != nil {
+	if err := runSystemctl(ctx, paths.Scope, "daemon-reload"); err != nil {
 		return errors.WithMessage(err, "failed to reload systemctl")
 	}
 
-	err = oscore.ExecCommand(ctx, "systemctl", "enable", "gameap-daemon")
-	if err != nil {
+	if err := runSystemctl(ctx, paths.Scope, "enable", daemonServiceName); err != nil {
 		return errors.WithMessage(err, "failed to enable gameap-daemon service")
 	}
 
+	if paths.Scope == gameap.ScopeUser {
+		enableLinger(ctx)
+	}
+
 	return nil
+}
+
+func renderDaemonUnit(paths gameap.DaemonPaths) string {
+	var b strings.Builder
+
+	b.WriteString("[Unit]\n")
+	b.WriteString("Description=GameAP Daemon\n\n")
+	b.WriteString("Wants=network-online.target\n")
+	b.WriteString("After=network.target network-online.target\n\n")
+
+	b.WriteString("[Service]\n")
+	if paths.Scope == gameap.ScopeSystem {
+		b.WriteString("User=root\n")
+	}
+	fmt.Fprintf(&b, "WorkingDirectory=%s\n", paths.WorkPath)
+	fmt.Fprintf(&b, "ExecStart=/bin/bash -c '%s'\n", paths.DaemonFilePath)
+	b.WriteString("Restart=always\n\n")
+
+	b.WriteString("[Install]\n")
+	if paths.Scope == gameap.ScopeUser {
+		b.WriteString("WantedBy=default.target\n")
+	} else {
+		b.WriteString("WantedBy=multi-user.target\n")
+	}
+
+	return b.String()
+}
+
+func runSystemctl(ctx context.Context, scope string, args ...string) error {
+	return oscore.ExecCommand(ctx, "systemctl", buildSystemctlArgs(scope, args...)...)
+}
+
+func buildSystemctlArgs(scope string, args ...string) []string {
+	if scope == gameap.ScopeUser {
+		out := make([]string, 0, len(args)+1)
+		out = append(out, "--user")
+		out = append(out, args...)
+
+		return out
+	}
+
+	return args
 }
 
 type daemonAlreadyRunningError int
@@ -131,7 +177,6 @@ func startDaemonFork(ctx context.Context) error {
 		}
 	}
 
-	// Open /dev/null for stdin, stdout, stderr
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
 	if err != nil {
 		return errors.WithMessage(err, "failed to open /dev/null")
@@ -147,7 +192,7 @@ func startDaemonFork(ctx context.Context) error {
 		Dir: gameap.DefaultWorkPath,
 		Env: os.Environ(),
 		Sys: &syscall.SysProcAttr{
-			Setsid: true, // Create a new session and detach from terminal
+			Setsid: true,
 		},
 		Files: []*os.File{devNull, devNull, devNull},
 	}
@@ -158,8 +203,6 @@ func startDaemonFork(ctx context.Context) error {
 
 	log.Println("Process started with pid", p.Pid)
 
-	// Start a goroutine to wait for the process and reap it when it terminates
-	// This prevents zombie processes from accumulating
 	go func() {
 		state, waitErr := p.Wait()
 		if waitErr != nil {

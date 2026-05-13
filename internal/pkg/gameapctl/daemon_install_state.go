@@ -17,6 +17,7 @@ type DaemonInstallState struct {
 	Host           string `json:"host"`
 	ConnectURL     string `json:"connectUrl,omitempty"`
 	Version        string `json:"version,omitempty"`
+	Scope          string `json:"scope,omitempty"`
 	WorkPath       string `json:"workPath"`
 	SteamCMDPath   string `json:"steamCmdPath"`
 	CertsPath      string `json:"certsPath"`

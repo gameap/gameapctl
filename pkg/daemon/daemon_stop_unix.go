@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
 	"github.com/gameap/gameapctl/pkg/service"
@@ -19,7 +20,13 @@ const (
 	defaultTerminateWaitTimeout = 30 * time.Second
 )
 
-func Stop(ctx context.Context) error {
+func Stop(ctx context.Context, opts ...Options) error {
+	o := firstOptions(opts)
+
+	if o.scope() == gameap.ScopeUser {
+		return stopDaemonSystemdScope(ctx, gameap.ScopeUser)
+	}
+
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
@@ -27,7 +34,7 @@ func Stop(ctx context.Context) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = stopDaemonSystemd(ctx)
+		err = stopDaemonSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
 		err = stopDaemonProcess(ctx)
 	}
@@ -39,26 +46,38 @@ func Stop(ctx context.Context) error {
 	return nil
 }
 
-func stopDaemonSystemd(ctx context.Context) error {
-	_, err := os.Stat(daemonSystemdConfigPath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
+func stopDaemonSystemdScope(ctx context.Context, scope string) error {
+	paths, err := gameap.DaemonPathsForScope(scope)
+	if err != nil {
+		return errors.WithMessage(err, "failed to resolve daemon paths")
+	}
+
+	_, statErr := os.Stat(paths.SystemdUnitPath)
+	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
 		log.Printf(
 			"gameap-daemon systemd configuration file %s not found, nothing to stop\n",
-			daemonSystemdConfigPath,
+			paths.SystemdUnitPath,
 		)
 
 		return nil
 	}
-	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap-daemon service configuration")
+	if statErr != nil {
+		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
 	}
 
-	err = service.Stop(ctx, "gameap-daemon")
-	if err != nil {
+	if err := stopSystemdService(ctx, paths.Scope); err != nil {
 		return errors.WithMessage(err, "failed to stop gameap-daemon")
 	}
 
 	return nil
+}
+
+func stopSystemdService(ctx context.Context, scope string) error {
+	if scope == gameap.ScopeUser {
+		return oscore.ExecCommand(ctx, "systemctl", "--user", "stop", daemonServiceName)
+	}
+
+	return service.Stop(ctx, daemonServiceName)
 }
 
 func stopDaemonProcess(ctx context.Context) error {

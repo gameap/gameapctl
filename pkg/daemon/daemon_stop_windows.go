@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Stop(ctx context.Context) error {
+func Stop(ctx context.Context, _ ...Options) error {
 	err := service.Stop(ctx, serviceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute stop gameap-daemon command")
