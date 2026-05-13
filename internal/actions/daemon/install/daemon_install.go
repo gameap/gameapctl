@@ -895,6 +895,12 @@ func enrollFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 		}
 	}
 
+	if state.OSInfo.Distribution == packagemanager.DistributionWindows {
+		if err := applyWindowsNetworkServiceUser(state.DaemonConfigFilePath); err != nil {
+			return state, errors.WithMessage(err, "failed to set use_network_service_user in daemon config")
+		}
+	}
+
 	return state, nil
 }
 
@@ -929,6 +935,37 @@ func applyUserScopeProcessManager(configPath string) error {
 	}
 	pm["config"] = cfg
 	raw["process_manager"] = pm
+
+	out, err := yaml.Marshal(raw)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal daemon config")
+	}
+
+	if err := os.WriteFile(configPath, out, 0600); err != nil {
+		return errors.Wrap(err, "failed to write daemon config")
+	}
+
+	return nil
+}
+
+func applyWindowsNetworkServiceUser(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to read daemon config")
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return errors.Wrap(err, "failed to parse daemon config")
+	}
+	if raw == nil {
+		raw = make(map[string]interface{})
+	}
+
+	if _, exists := raw["use_network_service_user"]; exists {
+		return nil
+	}
+	raw["use_network_service_user"] = true
 
 	out, err := yaml.Marshal(raw)
 	if err != nil {

@@ -2,9 +2,12 @@ package install
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -205,4 +208,84 @@ func Test_applyConfigOverrides(t *testing.T) {
 		assert.Equal(t, "error", cfg.LogLevel)
 		assert.Equal(t, 31717, cfg.ListenPort)
 	})
+}
+
+func Test_applyWindowsNetworkServiceUser_addsKeyWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "gameap-daemon.yaml")
+	require.NoError(t, os.WriteFile(p, []byte("api_host: \"https://panel.example.com\"\napi_key: \"secret\"\n"), 0600))
+
+	require.NoError(t, applyWindowsNetworkServiceUser(p))
+
+	out, err := os.ReadFile(p)
+	require.NoError(t, err)
+
+	var raw map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(out, &raw))
+	assert.Equal(t, true, raw["use_network_service_user"])
+	assert.Equal(t, "https://panel.example.com", raw["api_host"])
+	assert.Equal(t, "secret", raw["api_key"])
+}
+
+func Test_applyWindowsNetworkServiceUser_preservesExistingFalse(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "gameap-daemon.yaml")
+	require.NoError(t, os.WriteFile(p, []byte("api_host: \"x\"\nuse_network_service_user: false\n"), 0600))
+
+	require.NoError(t, applyWindowsNetworkServiceUser(p))
+
+	out, err := os.ReadFile(p)
+	require.NoError(t, err)
+
+	var raw map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(out, &raw))
+	assert.Equal(t, false, raw["use_network_service_user"])
+}
+
+func Test_applyWindowsNetworkServiceUser_preservesOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "gameap-daemon.yaml")
+	original := `ds_id: 42
+api_host: "https://panel.example.com"
+api_key: "secret"
+listen_ip: "0.0.0.0"
+listen_port: 31717
+work_path: "C:\\gameap\\daemon"
+process_manager:
+  name: shawl
+  config:
+    foo: bar
+`
+	require.NoError(t, os.WriteFile(p, []byte(original), 0600))
+
+	require.NoError(t, applyWindowsNetworkServiceUser(p))
+
+	out, err := os.ReadFile(p)
+	require.NoError(t, err)
+
+	var raw map[string]interface{}
+	require.NoError(t, yaml.Unmarshal(out, &raw))
+
+	assert.Equal(t, uint64(42), raw["ds_id"])
+	assert.Equal(t, "https://panel.example.com", raw["api_host"])
+	assert.Equal(t, "secret", raw["api_key"])
+	assert.Equal(t, "0.0.0.0", raw["listen_ip"])
+	assert.Equal(t, uint64(31717), raw["listen_port"])
+	assert.Equal(t, "C:\\gameap\\daemon", raw["work_path"])
+	assert.Equal(t, true, raw["use_network_service_user"])
+
+	pm, ok := raw["process_manager"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "shawl", pm["name"])
+	pmCfg, ok := pm["config"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "bar", pmCfg["foo"])
+}
+
+func Test_applyWindowsNetworkServiceUser_errorOnMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+
+	err := applyWindowsNetworkServiceUser(missing)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read daemon config")
 }
