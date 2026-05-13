@@ -17,7 +17,7 @@ func TestRenderDaemonUnit_System(t *testing.T) {
 
 	assert.Contains(t, unit, "User=root")
 	assert.Contains(t, unit, "WorkingDirectory="+paths.WorkPath)
-	assert.Contains(t, unit, "ExecStart=/bin/bash -c '"+paths.DaemonFilePath+"'")
+	assert.Contains(t, unit, "ExecStart=/bin/bash -c '"+paths.DaemonFilePath+" -c "+paths.DaemonConfigFilePath+"'")
 	assert.Contains(t, unit, "WantedBy=multi-user.target")
 	assert.NotContains(t, unit, "WantedBy=default.target")
 }
@@ -25,9 +25,10 @@ func TestRenderDaemonUnit_System(t *testing.T) {
 func TestRenderDaemonUnit_User(t *testing.T) {
 	const home = "/home/tester"
 	paths := gameap.DaemonPaths{
-		Scope:          gameap.ScopeUser,
-		WorkPath:       filepath.Join(home, "gameap"),
-		DaemonFilePath: filepath.Join(home, ".local", "bin", "gameap-daemon"),
+		Scope:                gameap.ScopeUser,
+		WorkPath:             filepath.Join(home, "gameap"),
+		DaemonFilePath:       filepath.Join(home, ".local", "bin", "gameap-daemon"),
+		DaemonConfigFilePath: filepath.Join(home, ".config", "gameap-daemon", "gameap-daemon.yaml"),
 	}
 
 	unit := renderDaemonUnit(paths)
@@ -35,7 +36,7 @@ func TestRenderDaemonUnit_User(t *testing.T) {
 	assert.NotContains(t, unit, "User=root")
 	assert.NotContains(t, unit, "User=")
 	assert.Contains(t, unit, "WorkingDirectory="+paths.WorkPath)
-	assert.Contains(t, unit, "ExecStart=/bin/bash -c '"+paths.DaemonFilePath+"'")
+	assert.Contains(t, unit, "ExecStart=/bin/bash -c '"+paths.DaemonFilePath+" -c "+paths.DaemonConfigFilePath+"'")
 	assert.Contains(t, unit, "WantedBy=default.target")
 	assert.NotContains(t, unit, "WantedBy=multi-user.target")
 }

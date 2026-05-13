@@ -117,7 +117,7 @@ func renderDaemonUnit(paths gameap.DaemonPaths) string {
 		b.WriteString("User=root\n")
 	}
 	fmt.Fprintf(&b, "WorkingDirectory=%s\n", paths.WorkPath)
-	fmt.Fprintf(&b, "ExecStart=/bin/bash -c '%s'\n", paths.DaemonFilePath)
+	fmt.Fprintf(&b, "ExecStart=/bin/bash -c '%s -c %s'\n", paths.DaemonFilePath, paths.DaemonConfigFilePath)
 	b.WriteString("Restart=always\n\n")
 
 	b.WriteString("[Install]\n")
