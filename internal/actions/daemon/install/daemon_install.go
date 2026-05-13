@@ -889,7 +889,57 @@ func enrollFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 		return state, errors.WithMessage(err, "failed to enroll daemon via connect URL")
 	}
 
+	if state.Scope == gameap.ScopeUser && state.ProcessManager == processManagerSystemD {
+		if err := applyUserScopeProcessManager(state.DaemonConfigFilePath); err != nil {
+			return state, errors.WithMessage(err, "failed to set user scope on process manager in daemon config")
+		}
+	}
+
 	return state, nil
+}
+
+func applyUserScopeProcessManager(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to read daemon config")
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return errors.Wrap(err, "failed to parse daemon config")
+	}
+	if raw == nil {
+		raw = make(map[string]interface{})
+	}
+
+	pm, _ := raw["process_manager"].(map[string]interface{})
+	if pm == nil {
+		pm = make(map[string]interface{})
+	}
+	if name, _ := pm["name"].(string); name == "" {
+		pm["name"] = processManagerSystemD
+	}
+
+	cfg, _ := pm["config"].(map[string]interface{})
+	if cfg == nil {
+		cfg = make(map[string]interface{})
+	}
+	if _, exists := cfg["scope"]; !exists {
+		cfg["scope"] = gameap.ScopeUser
+	}
+	pm["config"] = cfg
+	raw["process_manager"] = pm
+
+	out, err := yaml.Marshal(raw)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal daemon config")
+	}
+
+	if err := os.WriteFile(configPath, out, 0600); err != nil {
+		return errors.Wrap(err, "failed to write daemon config")
+	}
+
+	return nil
 }
 
 func legacyConfigureFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
