@@ -192,7 +192,7 @@ func (e *extended) executePreInstallationSteps(ctx context.Context, packs []stri
 			continue
 		}
 
-		runtimeVars := runtimeTemplateVariables{
+		runtimeVars := extendedRuntimeTemplateVariables{
 			LookupPaths: make(map[string]string, len(config.LookupPaths)),
 			Options:     options,
 		}
@@ -250,7 +250,7 @@ func (e *extended) executeInstallSteps(
 			continue
 		}
 
-		runtimeVars := runtimeTemplateVariables{
+		runtimeVars := extendedRuntimeTemplateVariables{
 			LookupPaths: make(map[string]string, len(config.LookupPaths)),
 			Options:     options,
 		}
@@ -303,7 +303,7 @@ func (e *extended) postInstallationSteps(ctx context.Context, packs []string, op
 			continue
 		}
 
-		runtimeVars := runtimeTemplateVariables{
+		runtimeVars := extendedRuntimeTemplateVariables{
 			LookupPaths: make(map[string]string, len(config.LookupPaths)),
 			Options:     options,
 		}
@@ -374,13 +374,13 @@ func (e *extended) executeCommand(ctx context.Context, cmdStr string) error {
 	return oscore.ExecCommand(ctx, command, args...)
 }
 
-type runtimeTemplateVariables struct {
+type extendedRuntimeTemplateVariables struct {
 	LookupPaths map[string]string
 	Options     *installOptions
 }
 
 func (e *extended) replaceRuntimeVariablesString(
-	_ context.Context, v string, vars runtimeTemplateVariables,
+	_ context.Context, v string, vars extendedRuntimeTemplateVariables,
 ) (string, error) {
 	funcMap := template.FuncMap{
 		"configValue": func(name string) string {
