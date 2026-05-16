@@ -1,4 +1,4 @@
-package apt
+package pkgconfig
 
 import (
 	"embed"
@@ -9,9 +9,10 @@ import (
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	"github.com/goccy/go-yaml"
+	"github.com/pkg/errors"
 )
 
-//go:embed *.yaml
+//go:embed apt dnf
 var fs embed.FS
 
 type packagesConfig struct {
@@ -51,9 +52,10 @@ var (
 	packageCacheMutex sync.RWMutex
 )
 
-func buildCacheKey(osinf osinfo.Info) string {
+func buildCacheKey(manager string, osinf osinfo.Info) string {
 	return fmt.Sprintf(
-		"%s_%s_%s_%s",
+		"%s_%s_%s_%s_%s",
+		manager,
 		osinf.Distribution.String(),
 		osinf.DistributionVersion,
 		osinf.DistributionCodename,
@@ -61,8 +63,12 @@ func buildCacheKey(osinf osinfo.Info) string {
 	)
 }
 
-func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
-	cacheKey := buildCacheKey(osinf)
+// LoadPackages reads the embedded package configuration for the given package
+// manager ("apt" or "dnf"), merging files from the most generic (default.yaml)
+// to the most specific (distribution + codename/version + architecture). yum
+// reuses the "dnf" configuration.
+func LoadPackages(manager string, osinf osinfo.Info) (map[string]PackageConfig, error) {
+	cacheKey := buildCacheKey(manager, osinf)
 
 	packageCacheMutex.RLock()
 	if cached, exists := packageCache[cacheKey]; exists {
@@ -80,7 +86,9 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 	}
 	packages := make(map[string]PackageConfig)
 
-	distribution := osinf.Distribution.String()
+	distribution := strings.ToLower(osinf.Distribution.String())
+	version := osinf.DistributionVersion
+	codename := osinf.DistributionCodename
 	arch := osinf.Platform.String()
 
 	filesToLoad := []string{
@@ -92,41 +100,29 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 	}
 
 	if distribution != "" {
-		filesToLoad = append(filesToLoad, fmt.Sprintf("%s.yaml", strings.ToLower(distribution)))
+		filesToLoad = append(filesToLoad, fmt.Sprintf("%s.yaml", distribution))
 	}
 
-	if distribution != "" && osinf.DistributionVersion != "" {
-		filesToLoad = append(
-			filesToLoad,
-			fmt.Sprintf("%s_%s.yaml", strings.ToLower(distribution), osinf.DistributionVersion),
-		)
+	if distribution != "" && version != "" {
+		filesToLoad = append(filesToLoad, fmt.Sprintf("%s_%s.yaml", distribution, version))
 	}
 
-	if distribution != "" && osinf.DistributionCodename != "" {
-		filesToLoad = append(
-			filesToLoad,
-			fmt.Sprintf("%s_%s.yaml", strings.ToLower(distribution), osinf.DistributionCodename),
-		)
+	if distribution != "" && codename != "" {
+		filesToLoad = append(filesToLoad, fmt.Sprintf("%s_%s.yaml", distribution, codename))
 	}
 
-	if distribution != "" && osinf.DistributionVersion != "" && arch != "" {
-		filesToLoad = append(
-			filesToLoad,
-			fmt.Sprintf("%s_%s_%s.yaml", strings.ToLower(distribution), osinf.DistributionVersion, arch),
-		)
+	if distribution != "" && version != "" && arch != "" {
+		filesToLoad = append(filesToLoad, fmt.Sprintf("%s_%s_%s.yaml", distribution, version, arch))
 	}
 
-	if distribution != "" && osinf.DistributionCodename != "" && arch != "" {
-		filesToLoad = append(
-			filesToLoad,
-			fmt.Sprintf("%s_%s_%s.yaml", strings.ToLower(distribution), osinf.DistributionCodename, arch),
-		)
+	if distribution != "" && codename != "" && arch != "" {
+		filesToLoad = append(filesToLoad, fmt.Sprintf("%s_%s_%s.yaml", distribution, codename, arch))
 	}
 
-	log.Printf("Loading packages from files: %v", filesToLoad)
+	log.Printf("Loading %s packages from files: %v", manager, filesToLoad)
 
 	for _, filename := range filesToLoad {
-		data, err := fs.ReadFile(filename)
+		data, err := fs.ReadFile(manager + "/" + filename)
 		if err != nil {
 			continue
 		}
@@ -134,7 +130,7 @@ func LoadPackages(osinf osinfo.Info) (map[string]PackageConfig, error) {
 		var config packagesConfig
 		err = yaml.Unmarshal(data, &config)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal %s: %w", filename, err)
+			return nil, errors.Wrapf(err, "failed to unmarshal %s", filename)
 		}
 
 		for _, pkg := range config.Packages {
@@ -181,13 +177,13 @@ func replaceDistributionVariables(input string, osinf osinfo.Info) string {
 	return result
 }
 
-func normalizeCommandSlice(cmds []string) []string {
-	normalized := make([]string, len(cmds))
-	for i, cmd := range cmds {
-		normalized[i] = normalizeCommand(cmd)
+func normalizeCommandSlice(inputs []string) []string {
+	results := make([]string, len(inputs))
+	for i, input := range inputs {
+		results[i] = normalizeCommand(input)
 	}
 
-	return normalized
+	return results
 }
 
 func normalizeCommand(s string) string {

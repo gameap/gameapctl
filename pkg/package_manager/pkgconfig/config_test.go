@@ -1,4 +1,4 @@
-package apt
+package pkgconfig
 
 import (
 	"testing"
@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadPackages_Default(t *testing.T) {
-	packages, err := LoadPackages(osinfo.Info{})
+func TestLoadPackages_APT_Default(t *testing.T) {
+	packages, err := LoadPackages("apt", osinfo.Info{})
 	require.NoError(t, err)
 	require.NotEmpty(t, packages)
 
@@ -55,8 +55,8 @@ func TestLoadPackages_Default(t *testing.T) {
 	})
 }
 
-func TestLoadPackages_ARM64(t *testing.T) {
-	packages, err := LoadPackages(osinfo.Info{
+func TestLoadPackages_APT_ARM64(t *testing.T) {
+	packages, err := LoadPackages("apt", osinfo.Info{
 		Platform: osinfo.PlatformArm64,
 	})
 	require.NoError(t, err)
@@ -84,8 +84,8 @@ func TestLoadPackages_ARM64(t *testing.T) {
 	})
 }
 
-func TestLoadPackages_Debian12(t *testing.T) {
-	packages, err := LoadPackages(osinfo.Info{
+func TestLoadPackages_APT_Debian12(t *testing.T) {
+	packages, err := LoadPackages("apt", osinfo.Info{
 		Distribution:        osinfo.DistributionDebian,
 		DistributionVersion: "12",
 	})
@@ -114,8 +114,8 @@ func TestLoadPackages_Debian12(t *testing.T) {
 	})
 }
 
-func TestLoadPackages_DebianSid(t *testing.T) {
-	packages, err := LoadPackages(osinfo.Info{
+func TestLoadPackages_APT_DebianSid(t *testing.T) {
+	packages, err := LoadPackages("apt", osinfo.Info{
 		Distribution:         osinfo.DistributionDebian,
 		DistributionCodename: "sid",
 	})
@@ -137,9 +137,9 @@ func TestLoadPackages_DebianSid(t *testing.T) {
 	})
 }
 
-func TestLoadPackages_FileHierarchy(t *testing.T) {
+func TestLoadPackages_APT_FileHierarchy(t *testing.T) {
 	t.Run("default overridden by arch-specific", func(t *testing.T) {
-		packages, err := LoadPackages(osinfo.Info{
+		packages, err := LoadPackages("apt", osinfo.Info{
 			Platform: osinfo.PlatformArm64,
 		})
 		require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestLoadPackages_FileHierarchy(t *testing.T) {
 	})
 
 	t.Run("default overridden by distribution version", func(t *testing.T) {
-		packages, err := LoadPackages(osinfo.Info{
+		packages, err := LoadPackages("apt", osinfo.Info{
 			Distribution:        osinfo.DistributionDebian,
 			DistributionVersion: "12",
 		})
@@ -162,7 +162,7 @@ func TestLoadPackages_FileHierarchy(t *testing.T) {
 	})
 
 	t.Run("default overridden by distribution codename", func(t *testing.T) {
-		packages, err := LoadPackages(osinfo.Info{
+		packages, err := LoadPackages("apt", osinfo.Info{
 			Distribution:         osinfo.DistributionDebian,
 			DistributionCodename: "sid",
 		})
@@ -172,6 +172,230 @@ func TestLoadPackages_FileHierarchy(t *testing.T) {
 		require.True(t, exists)
 		assert.Equal(t, []string{"lib32gcc-s1"}, pkg.ReplaceWith)
 	})
+}
+
+func TestLoadPackages_DNF_Default(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("lib32gcc package", func(t *testing.T) {
+		pkg, exists := packages["lib32gcc"]
+		require.True(t, exists, "lib32gcc should exist in default.yaml")
+		assert.Equal(t, "lib32gcc", pkg.Name)
+		assert.Equal(t, []string{"libgcc.i686"}, pkg.ReplaceWith)
+		assert.Empty(t, pkg.PreInstall)
+		assert.Empty(t, pkg.PostInstall)
+	})
+
+	t.Run("lib32stdc6 package", func(t *testing.T) {
+		pkg, exists := packages["lib32stdc6"]
+		require.True(t, exists, "lib32stdc6 should exist in default.yaml")
+		assert.Equal(t, "lib32stdc6", pkg.Name)
+		assert.Equal(t, []string{"libstdc++.i686"}, pkg.ReplaceWith)
+	})
+
+	t.Run("xz-utils package", func(t *testing.T) {
+		pkg, exists := packages["xz-utils"]
+		require.True(t, exists, "xz-utils should exist in default.yaml")
+		assert.Equal(t, "xz-utils", pkg.Name)
+		assert.Equal(t, []string{"xz"}, pkg.ReplaceWith)
+	})
+
+	t.Run("php-extensions package", func(t *testing.T) {
+		pkg, exists := packages["php-extensions"]
+		require.True(t, exists, "php-extensions should exist in default.yaml")
+		assert.Equal(t, "php-extensions", pkg.Name)
+		assert.Contains(t, pkg.ReplaceWith, "php-bcmath")
+		assert.Contains(t, pkg.ReplaceWith, "php-gd")
+		assert.Contains(t, pkg.ReplaceWith, "php-xml")
+	})
+
+	t.Run("postgresql with post-install", func(t *testing.T) {
+		pkg, exists := packages["postgresql"]
+		require.True(t, exists, "postgresql should exist in default.yaml")
+		assert.Equal(t, "postgresql", pkg.Name)
+		assert.Equal(t, []string{"postgresql-server", "postgresql-contrib"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PostInstall, 2)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 3)
+		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl enable postgresql", pkg.PostInstall[0].RunCommands[1])
+		assert.Equal(t, "systemctl start postgresql", pkg.PostInstall[0].RunCommands[2])
+	})
+
+	t.Run("redis-server with post-install", func(t *testing.T) {
+		pkg, exists := packages["redis-server"]
+		require.True(t, exists, "redis-server should exist in default.yaml")
+		assert.Equal(t, "redis-server", pkg.Name)
+		assert.Equal(t, []string{"redis"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PostInstall, 1)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2)
+		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start redis", pkg.PostInstall[0].RunCommands[1])
+	})
+}
+
+func TestLoadPackages_DNF_CentOS7(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        osinfo.DistributionCentOS,
+		DistributionVersion: "7",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("php with pre-install", func(t *testing.T) {
+		pkg, exists := packages["php"]
+		require.True(t, exists, "php should exist in centos_7.yaml")
+		assert.Equal(t, "php", pkg.Name)
+		assert.Equal(t, []string{"php-cli", "php-common", "php-fpm"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 3)
+		assert.Equal(t, "yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "yum -y install yum-utils", pkg.PreInstall[0].RunCommands[1])
+		assert.Equal(t, "yum-config-manager --enable remi-php82", pkg.PreInstall[0].RunCommands[2])
+	})
+
+	t.Run("inherits from default.yaml", func(t *testing.T) {
+		pkg, exists := packages["lib32gcc"]
+		require.True(t, exists, "lib32gcc should be inherited from default.yaml")
+		assert.Equal(t, []string{"libgcc.i686"}, pkg.ReplaceWith)
+	})
+}
+
+func TestLoadPackages_DNF_CentOS8(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        osinfo.DistributionCentOS,
+		DistributionVersion: "8",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("php with pre-install", func(t *testing.T) {
+		pkg, exists := packages["php"]
+		require.True(t, exists, "php should exist in centos_8.yaml")
+		assert.Equal(t, "php", pkg.Name)
+		assert.Equal(t, []string{"php-cli", "php-common", "php-fpm"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		assert.Equal(t, "dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "dnf -y module switch-to php:remi-8.2", pkg.PreInstall[0].RunCommands[1])
+	})
+}
+
+func TestLoadPackages_DNF_CentOS10(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        osinfo.DistributionCentOS,
+		DistributionVersion: "10",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("redis-server with pre-install and post-install", func(t *testing.T) {
+		pkg, exists := packages["redis-server"]
+		require.True(t, exists, "redis-server should exist in centos_10.yaml")
+		assert.Equal(t, "redis-server", pkg.Name)
+		assert.Equal(t, []string{"redis"}, pkg.ReplaceWith)
+
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		assert.Equal(t, "dnf install -y epel-release", pkg.PreInstall[0].RunCommands[0])
+		assert.Equal(t, "dnf module enable redis:remi-7.2 -y", pkg.PreInstall[0].RunCommands[1])
+
+		require.Len(t, pkg.PostInstall, 1)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2)
+		assert.Equal(t, "systemctl enable redis", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start redis", pkg.PostInstall[0].RunCommands[1])
+	})
+
+	t.Run("postgresql overrides default", func(t *testing.T) {
+		pkg, exists := packages["postgresql"]
+		require.True(t, exists, "postgresql should exist")
+		assert.Equal(t, []string{"postgresql-server", "postgresql-contrib"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PostInstall, 2)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 3)
+		assert.Equal(t, "postgresql-setup --initdb", pkg.PostInstall[0].RunCommands[0])
+	})
+}
+
+func TestLoadPackages_DNF_Rocky(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{
+		Distribution: osinfo.DistributionRocky,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("lib32gcc overridden with empty array", func(t *testing.T) {
+		pkg, exists := packages["lib32gcc"]
+		require.True(t, exists, "lib32gcc should exist in rocky.yaml")
+		assert.Equal(t, "lib32gcc", pkg.Name)
+		assert.Empty(t, pkg.ReplaceWith, "rocky.yaml overrides with empty array")
+	})
+
+	t.Run("lib32stdc6 overridden with empty array", func(t *testing.T) {
+		pkg, exists := packages["lib32stdc6"]
+		require.True(t, exists, "lib32stdc6 should exist in rocky.yaml")
+		assert.Empty(t, pkg.ReplaceWith, "rocky.yaml overrides with empty array")
+	})
+
+	t.Run("lib32z1 overridden with empty array", func(t *testing.T) {
+		pkg, exists := packages["lib32z1"]
+		require.True(t, exists, "lib32z1 should exist in rocky.yaml")
+		assert.Empty(t, pkg.ReplaceWith, "rocky.yaml overrides with empty array")
+	})
+
+	t.Run("inherits packages not in rocky.yaml", func(t *testing.T) {
+		pkg, exists := packages["postgresql"]
+		require.True(t, exists, "postgresql should be inherited from default.yaml")
+		assert.Equal(t, []string{"postgresql-server", "postgresql-contrib"}, pkg.ReplaceWith)
+	})
+}
+
+func TestLoadPackages_DNF_MergeOverride(t *testing.T) {
+	t.Run("CentOS 10 redis-server overrides default", func(t *testing.T) {
+		packages, err := LoadPackages("dnf", osinfo.Info{
+			Distribution:        osinfo.DistributionCentOS,
+			DistributionVersion: "10",
+		})
+		require.NoError(t, err)
+
+		pkg, exists := packages["redis-server"]
+		require.True(t, exists)
+
+		require.Len(t, pkg.PreInstall, 1, "CentOS 10 should have pre-install steps")
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2, "CentOS 10 should have pre-install commands")
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[0], "epel-release")
+
+		require.Len(t, pkg.PostInstall, 1, "CentOS 10 should override default post-install")
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2, "CentOS 10 should have post-install commands")
+	})
+}
+
+func TestLoadPackages_DNF_NonExistentDistribution(t *testing.T) {
+	packages, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        "nonexistent",
+		DistributionVersion: "999",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages, "should still load default.yaml")
+
+	_, exists := packages["lib32gcc"]
+	assert.True(t, exists, "should have default packages")
+}
+
+func TestLoadPackages_DNF_CaseInsensitiveDistribution(t *testing.T) {
+	packagesLower, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        osinfo.DistributionCentOS,
+		DistributionVersion: "7",
+	})
+	require.NoError(t, err)
+
+	packagesUpper, err := LoadPackages("dnf", osinfo.Info{
+		Distribution:        "CentOS",
+		DistributionVersion: "7",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, len(packagesLower), len(packagesUpper), "should load same files regardless of case")
 }
 
 func TestReplaceDistributionVariables(t *testing.T) {
@@ -311,6 +535,12 @@ func Test_normalizeCommand(t *testing.T) {
     --install-dir=/usr/local/bin
     --filename=composer`,
 			expected: `curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer`,
+		},
+		{
+			name: "real dnf command from yaml",
+			input: `dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
+  && dnf -y module switch-to php:remi-8.2`,
+			expected: `dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm && dnf -y module switch-to php:remi-8.2`,
 		},
 	}
 

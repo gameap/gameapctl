@@ -11,8 +11,7 @@ import (
 
 	internalcontext "github.com/gameap/gameapctl/internal/context"
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
-	pmapt "github.com/gameap/gameapctl/pkg/package_manager/apt"
-	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
+	"github.com/gameap/gameapctl/pkg/package_manager/pkgconfig"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -42,7 +41,7 @@ func UpdateEnvPath(ctx context.Context) {
 }
 
 func collectAPTPathEnv(osinf osinfo.Info, currentPath, appendPath []string) []string {
-	packages, err := pmapt.LoadPackages(osinf)
+	packages, err := pkgconfig.LoadPackages("apt", osinf)
 	if err != nil {
 		return appendPath
 	}
@@ -55,7 +54,7 @@ func collectAPTPathEnv(osinf osinfo.Info, currentPath, appendPath []string) []st
 }
 
 func collectDNFPathEnv(osinf osinfo.Info, currentPath, appendPath []string) []string {
-	packages, err := pmdnf.LoadPackages(osinf)
+	packages, err := pkgconfig.LoadPackages("dnf", osinf)
 	if err != nil {
 		return appendPath
 	}

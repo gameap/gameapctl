@@ -52,13 +52,13 @@ func parseYumInfoOutput(out []byte) ([]PackageInfo, error) {
 			currentPackage = &PackageInfo{}
 
 			currentPackage.Name = value
-		case "Version":
+		case fieldVersion:
 			currentPackage.Version = value
-		case "Architecture":
+		case fieldArchitecture:
 			currentPackage.Architecture = value
-		case "Size":
+		case fieldSize:
 			currentPackage.Size = value
-		case "Description":
+		case fieldDescription:
 			currentPackage.Description = value
 		case "":
 			if value != "" && currentPackage != nil {
