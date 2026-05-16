@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-//go:embed apt dnf
+//go:embed apt dnf pacman
 var fs embed.FS
 
 type packagesConfig struct {
@@ -64,9 +64,10 @@ func buildCacheKey(manager string, osinf osinfo.Info) string {
 }
 
 // LoadPackages reads the embedded package configuration for the given package
-// manager ("apt" or "dnf"), merging files from the most generic (default.yaml)
-// to the most specific (distribution + codename/version + architecture). yum
-// reuses the "dnf" configuration.
+// manager ("apt", "dnf" or "pacman"), merging files from the most generic
+// (default.yaml) to the most specific (distribution + codename/version +
+// architecture). yum reuses the "dnf" configuration; the Arch family
+// (Arch, CachyOS, Manjaro, EndeavourOS) uses the "pacman" configuration.
 func LoadPackages(manager string, osinf osinfo.Info) (map[string]PackageConfig, error) {
 	cacheKey := buildCacheKey(manager, osinf)
 

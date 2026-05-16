@@ -1,0 +1,66 @@
+packages:
+  - name: lib32gcc
+    replace-with: [lib32-gcc-libs]
+    pre-install:
+      - run-commands:
+          - grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          - pacman -Sy --noconfirm
+
+  - name: lib32stdc6
+    replace-with: [lib32-gcc-libs]
+    pre-install:
+      - run-commands:
+          - grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          - pacman -Sy --noconfirm
+
+  - name: lib32stdc++6
+    replace-with: [lib32-gcc-libs]
+    pre-install:
+      - run-commands:
+          - grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          - pacman -Sy --noconfirm
+
+  - name: lib32z1
+    replace-with: [lib32-zlib]
+    pre-install:
+      - run-commands:
+          - grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          - pacman -Sy --noconfirm
+
+  - name: xz-utils
+    replace-with: [xz]
+
+  - name: postgresql
+    replace-with: [postgresql]
+    post-install:
+      - run-commands:
+          - test -f /var/lib/postgres/data/PG_VERSION || su - postgres -c "initdb --locale=C.UTF-8 --encoding=UTF8 -D /var/lib/postgres/data"
+          - systemctl enable postgresql
+          - systemctl start postgresql
+      - run-commands:
+          - su - postgres -c "psql -c \"ALTER USER postgres WITH PASSWORD '{{ configValue "db-root-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE USER {{ configValue "db-user" }} WITH PASSWORD '{{ configValue "db-password" }}';\""
+          - su - postgres -c "psql -c \"CREATE DATABASE {{ configValue "db-name" }} OWNER {{ configValue "db-user" }};\""
+
+  - name: redis-server
+    replace-with: [valkey]
+    post-install:
+      - run-commands:
+          - systemctl enable valkey
+          - systemctl start valkey
+
+  - name: docker
+    replace-with: [docker]
+    lookup-paths: [ docker ]
+    post-install:
+      - run-commands:
+          - systemctl enable docker
+          - systemctl start docker
+
+  - name: go
+    replace-with: [go]
+    lookup-paths: [ go ]
+
+  - name: nodejs
+    replace-with: [nodejs, npm]
+    lookup-paths: [ node, npm ]

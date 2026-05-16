@@ -235,6 +235,98 @@ func TestLoadPackages_DNF_Default(t *testing.T) {
 	})
 }
 
+func TestLoadPackages_Pacman_Default(t *testing.T) {
+	packages, err := LoadPackages("pacman", osinfo.Info{
+		Distribution: osinfo.DistributionArch,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+
+	t.Run("lib32gcc with multilib pre-install", func(t *testing.T) {
+		pkg, exists := packages["lib32gcc"]
+		require.True(t, exists, "lib32gcc should exist in default.yaml")
+		assert.Equal(t, "lib32gcc", pkg.Name)
+		assert.Equal(t, []string{"lib32-gcc-libs"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PreInstall, 1)
+		require.Len(t, pkg.PreInstall[0].RunCommands, 2)
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[0], "[multilib]")
+		assert.Contains(t, pkg.PreInstall[0].RunCommands[0], "/etc/pacman.conf")
+		assert.Equal(t, "pacman -Sy --noconfirm", pkg.PreInstall[0].RunCommands[1])
+	})
+
+	t.Run("lib32stdc6 and lib32stdc++6 map to lib32-gcc-libs", func(t *testing.T) {
+		pkg, exists := packages["lib32stdc6"]
+		require.True(t, exists, "lib32stdc6 should exist in default.yaml")
+		assert.Equal(t, []string{"lib32-gcc-libs"}, pkg.ReplaceWith)
+
+		pkg, exists = packages["lib32stdc++6"]
+		require.True(t, exists, "lib32stdc++6 should exist in default.yaml")
+		assert.Equal(t, []string{"lib32-gcc-libs"}, pkg.ReplaceWith)
+	})
+
+	t.Run("lib32z1 maps to lib32-zlib", func(t *testing.T) {
+		pkg, exists := packages["lib32z1"]
+		require.True(t, exists, "lib32z1 should exist in default.yaml")
+		assert.Equal(t, []string{"lib32-zlib"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PreInstall, 1)
+	})
+
+	t.Run("xz-utils maps to xz", func(t *testing.T) {
+		pkg, exists := packages["xz-utils"]
+		require.True(t, exists, "xz-utils should exist in default.yaml")
+		assert.Equal(t, []string{"xz"}, pkg.ReplaceWith)
+		assert.Empty(t, pkg.PreInstall)
+	})
+
+	t.Run("postgresql with initdb post-install", func(t *testing.T) {
+		pkg, exists := packages["postgresql"]
+		require.True(t, exists, "postgresql should exist in default.yaml")
+		assert.Equal(t, []string{"postgresql"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PostInstall, 2)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 3)
+		assert.Contains(t, pkg.PostInstall[0].RunCommands[0], "PG_VERSION")
+		assert.Contains(t, pkg.PostInstall[0].RunCommands[0], "initdb")
+		assert.Equal(t, "systemctl enable postgresql", pkg.PostInstall[0].RunCommands[1])
+		assert.Equal(t, "systemctl start postgresql", pkg.PostInstall[0].RunCommands[2])
+		require.Len(t, pkg.PostInstall[1].RunCommands, 3)
+		assert.Contains(t, pkg.PostInstall[1].RunCommands[0], `configValue "db-root-password"`)
+	})
+
+	t.Run("redis-server maps to valkey", func(t *testing.T) {
+		pkg, exists := packages["redis-server"]
+		require.True(t, exists, "redis-server should exist in default.yaml")
+		assert.Equal(t, []string{"valkey"}, pkg.ReplaceWith)
+		require.Len(t, pkg.PostInstall, 1)
+		require.Len(t, pkg.PostInstall[0].RunCommands, 2)
+		assert.Equal(t, "systemctl enable valkey", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start valkey", pkg.PostInstall[0].RunCommands[1])
+	})
+
+	t.Run("docker native package with service", func(t *testing.T) {
+		pkg, exists := packages["docker"]
+		require.True(t, exists, "docker should exist in default.yaml")
+		assert.Equal(t, []string{"docker"}, pkg.ReplaceWith)
+		assert.Equal(t, []string{"docker"}, pkg.LookupPaths)
+		require.Len(t, pkg.PostInstall, 1)
+		assert.Equal(t, "systemctl enable docker", pkg.PostInstall[0].RunCommands[0])
+		assert.Equal(t, "systemctl start docker", pkg.PostInstall[0].RunCommands[1])
+	})
+
+	t.Run("go native package", func(t *testing.T) {
+		pkg, exists := packages["go"]
+		require.True(t, exists, "go should exist in default.yaml")
+		assert.Equal(t, []string{"go"}, pkg.ReplaceWith)
+		assert.Equal(t, []string{"go"}, pkg.LookupPaths)
+	})
+
+	t.Run("nodejs maps to nodejs and npm", func(t *testing.T) {
+		pkg, exists := packages["nodejs"]
+		require.True(t, exists, "nodejs should exist in default.yaml")
+		assert.Equal(t, []string{"nodejs", "npm"}, pkg.ReplaceWith)
+		assert.Equal(t, []string{"node", "npm"}, pkg.LookupPaths)
+	})
+}
+
 func TestLoadPackages_DNF_CentOS7(t *testing.T) {
 	packages, err := LoadPackages("dnf", osinfo.Info{
 		Distribution:        osinfo.DistributionCentOS,

@@ -30,6 +30,7 @@ const XZUtilsPackage = "xz-utils"
 const DistributionDefault = Default
 const DistributionAlmaLinux = osinfo.DistributionAlmaLinux
 const DistributionAmazon = osinfo.DistributionAmazon
+const DistributionArch = osinfo.DistributionArch
 const DistributionCentOS = osinfo.DistributionCentOS
 const DistributionDebian = osinfo.DistributionDebian
 const DistributionRocky = osinfo.DistributionRocky
