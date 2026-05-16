@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
-	pmdnf "github.com/gameap/gameapctl/pkg/package_manager/dnf"
+	"github.com/gameap/gameapctl/pkg/package_manager/pkgconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,8 +71,9 @@ Description  : The mysql-common package provides the essential shared files for 
 
 func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 	t.Run("no pre-install steps", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"test-package": {
 					Name:        "test-package",
 					ReplaceWith: []string{"actual-package"},
@@ -86,8 +87,9 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("package not in config", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{},
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{},
 		}
 
 		packs, err := d.preInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
@@ -96,11 +98,12 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("multiple packages with different configs", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"package-with-pre": {
 					Name: "package-with-pre",
-					PreInstall: []pmdnf.PreInstallStep{
+					PreInstall: []pkgconfig.PreInstallStep{
 						{
 							RunCommands: []string{"echo pre-install"},
 						},
@@ -118,11 +121,12 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("duplicate packages in list", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"test-package": {
 					Name: "test-package",
-					PreInstall: []pmdnf.PreInstallStep{
+					PreInstall: []pkgconfig.PreInstallStep{
 						{
 							RunCommands: []string{"echo test"},
 						},
@@ -139,8 +143,9 @@ func Test_extendedDNF_preInstallationSteps(t *testing.T) {
 
 func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 	t.Run("no post-install steps", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"test-package": {
 					Name:        "test-package",
 					ReplaceWith: []string{"actual-package"},
@@ -153,8 +158,9 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("package not in config", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{},
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{},
 		}
 
 		err := d.postInstallationSteps(context.Background(), []string{"unknown-package"}, &installOptions{})
@@ -162,11 +168,12 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("multiple packages with different configs", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"package-with-post": {
 					Name: "package-with-post",
-					PostInstall: []pmdnf.PostInstallStep{
+					PostInstall: []pkgconfig.PostInstallStep{
 						{
 							RunCommands: []string{"echo post-install"},
 						},
@@ -183,11 +190,12 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 	})
 
 	t.Run("duplicate packages in list", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"test-package": {
 					Name: "test-package",
-					PostInstall: []pmdnf.PostInstallStep{
+					PostInstall: []pkgconfig.PostInstallStep{
 						{
 							RunCommands: []string{"echo test"},
 						},
@@ -202,7 +210,7 @@ func Test_extendedDNF_postInstallationSteps(t *testing.T) {
 }
 
 func Test_extendedDNF_executeCommand(t *testing.T) {
-	d := &extendedDNF{}
+	d := &extended{}
 
 	t.Run("empty command", func(t *testing.T) {
 		err := d.executeCommand(context.Background(), "")
@@ -227,8 +235,9 @@ func Test_extendedDNF_executeCommand(t *testing.T) {
 
 func Test_extendedDNF_replaceAliases(t *testing.T) {
 	t.Run("replace with configured packages", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"php": {
 					Name:        "php",
 					ReplaceWith: []string{"php-cli", "php-common", "php-fpm"},
@@ -241,8 +250,9 @@ func Test_extendedDNF_replaceAliases(t *testing.T) {
 	})
 
 	t.Run("keep unknown packages as is", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{},
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{},
 		}
 
 		result := d.replaceAliases(context.Background(), []string{"unknown-package"})
@@ -250,8 +260,9 @@ func Test_extendedDNF_replaceAliases(t *testing.T) {
 	})
 
 	t.Run("mixed known and unknown packages", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"php": {
 					Name:        "php",
 					ReplaceWith: []string{"php-cli", "php-fpm"},
@@ -264,8 +275,9 @@ func Test_extendedDNF_replaceAliases(t *testing.T) {
 	})
 
 	t.Run("empty replace-with array", func(t *testing.T) {
-		d := &extendedDNF{
-			packages: map[string]pmdnf.PackageConfig{
+		d := &extended{
+			strategy: noopStrategy{},
+			packages: map[string]pkgconfig.PackageConfig{
 				"lib32gcc": {
 					Name:        "lib32gcc",
 					ReplaceWith: []string{},
@@ -287,11 +299,11 @@ func Test_newExtendedDNF(t *testing.T) {
 		}
 
 		mockDNF := &dnf{}
-		extended, err := newExtendedDNF(osInfo, mockDNF)
+		ext, err := newExtendedDNF(osInfo, mockDNF)
 
 		require.NoError(t, err)
-		require.NotNil(t, extended)
-		assert.NotNil(t, extended.packages)
-		assert.NotNil(t, extended.underlined)
+		require.NotNil(t, ext)
+		assert.NotNil(t, ext.packages)
+		assert.NotNil(t, ext.underlined)
 	})
 }

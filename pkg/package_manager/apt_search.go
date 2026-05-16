@@ -1,4 +1,4 @@
-package apt
+package packagemanager
 
 import (
 	"bufio"
@@ -16,7 +16,15 @@ import (
 
 const aptListPath = "/var/lib/apt/lists/"
 
-type Package struct {
+// Field keys shared by the apt-cache, apt list and dnf/yum info parsers.
+const (
+	fieldVersion      = "Version"
+	fieldArchitecture = "Architecture"
+	fieldSize         = "Size"
+	fieldDescription  = "Description"
+)
+
+type aptListPackage struct {
 	PackageName   string
 	Version       string
 	Architecture  string
@@ -29,15 +37,7 @@ type Package struct {
 	Sha256        string
 }
 
-type RepoArchive struct {
-	Domain       string
-	Distribution string
-	Area         string
-	Architecture string
-	ListFileName string
-}
-
-func Search(q string) ([]Package, error) {
+func aptListSearch(q string) ([]aptListPackage, error) {
 	packages, err := aptListAllPackages()
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to list all packages")
@@ -48,8 +48,8 @@ func Search(q string) ([]Package, error) {
 
 // aptSearch allows to perform a targeted search using the exact name of the package to be searched,
 // or a keyword search that will result in all packages that include that string in the name.
-func aptSearch(searchPackage string, packagesList []Package, searchExactName bool) ([]Package, error) {
-	var filteredPackageList []Package
+func aptSearch(searchPackage string, packagesList []aptListPackage, searchExactName bool) ([]aptListPackage, error) {
+	var filteredPackageList []aptListPackage
 	for _, singlePackage := range packagesList {
 		if searchExactName {
 			if singlePackage.PackageName == searchPackage {
@@ -65,8 +65,8 @@ func aptSearch(searchPackage string, packagesList []Package, searchExactName boo
 	return filteredPackageList, nil
 }
 
-// AptListALL scan the all source.list on the system and return the list of all available packages.
-func aptListAllPackages() ([]Package, error) {
+// aptListAllPackages scans all source.list on the system and returns the list of all available packages.
+func aptListAllPackages() ([]aptListPackage, error) {
 	allPackagesFiles, errGetRepoFileList := getRepoFileList()
 	if errGetRepoFileList != nil {
 		return nil, errGetRepoFileList
@@ -101,8 +101,8 @@ func getRepoFileList() ([]string, error) {
 }
 
 // buildPackagesList: return packages available from a list of repositories.
-func buildPackagesList(repoList []string) ([]Package, error) {
-	var packageList []Package
+func buildPackagesList(repoList []string) ([]aptListPackage, error) {
+	var packageList []aptListPackage
 	for _, packagesFile := range repoList {
 		f, errOpen := os.Open(filepath.Join(aptListPath, packagesFile))
 		if errOpen != nil {
@@ -125,7 +125,7 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 
 		scanner := bufio.NewScanner(r)
 
-		var p Package
+		var p aptListPackage
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -133,7 +133,7 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 			if line == "" {
 				if p.PackageName != "" {
 					packageList = append(packageList, p)
-					p = Package{}
+					p = aptListPackage{}
 				}
 
 				continue
@@ -150,17 +150,17 @@ func buildPackagesList(repoList []string) ([]Package, error) {
 			switch key {
 			case "Package":
 				p.PackageName = value
-			case "Version":
+			case fieldVersion:
 				p.Version = value
-			case "Architecture":
+			case fieldArchitecture:
 				p.Architecture = value
 			case "Depends":
 				p.Depends = strings.Split(value, ",")
-			case "Size":
+			case fieldSize:
 				p.Size = value
 			case "Installed-Size":
 				p.InstalledSize = value
-			case "Description":
+			case fieldDescription:
 				p.Description = value
 			case "Section":
 				p.Section = value

@@ -59,6 +59,8 @@ func Load(ctx context.Context) (PackageManager, error) {
 		return loadUbuntuPackageManager(ctx, osInfo)
 	case DistributionCentOS:
 		return loadCentOSPackageManager(ctx, osInfo)
+	case DistributionArch:
+		return loadArchPackageManager(ctx, osInfo)
 	case DistributionWindows:
 		return NewWindowsPackageManager(ctx, osInfo)
 	}
@@ -117,6 +119,14 @@ func loadCentOSPackageManager(
 }
 
 //nolint:ireturn,nolintlint
+func loadArchPackageManager(
+	_ context.Context,
+	osinfo osinfo.Info,
+) (PackageManager, error) {
+	return newExtendedPacman(osinfo, &pacman{})
+}
+
+//nolint:ireturn,nolintlint
 func detectAndLoadPackageManager(
 	_ context.Context, osinfo osinfo.Info,
 ) (PackageManager, error) {
@@ -130,6 +140,10 @@ func detectAndLoadPackageManager(
 
 	if _, err := exec.LookPath("yum"); err == nil {
 		return newExtendedDNF(osinfo, &yum{})
+	}
+
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return newExtendedPacman(osinfo, &pacman{})
 	}
 
 	return nil, NewErrUnsupportedDistribution(string(osinfo.Distribution))

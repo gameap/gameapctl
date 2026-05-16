@@ -75,7 +75,7 @@ func Status(ctx context.Context, serviceName string) error {
 }
 
 //nolint:ireturn,nolintlint
-func Load(ctx context.Context) (srv Service, err error) {
+func Load(ctx context.Context) (Service, error) {
 	osInfo := contextInternal.OSInfoFromContext(ctx)
 
 	once.Do(func() {
@@ -85,33 +85,24 @@ func Load(ctx context.Context) (srv Service, err error) {
 			return
 		}
 
-		_, err = exec.LookPath("service")
-		if err == nil {
-			service = NewBasic()
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			service = NewSystemd()
 
 			return
 		}
 
-		_, err := exec.LookPath("systemctl")
-		if err == nil {
-			service = NewSystemd()
+		if _, err := exec.LookPath("service"); err == nil {
+			service = NewBasic()
 
 			return
 		}
 	})
 
-	if err != nil {
-		return nil, err
-	}
 	if service == nil {
-		err = NewErrUnsupportedDistribution(string(osInfo.Distribution))
-
-		return nil, err
+		return nil, NewErrUnsupportedDistribution(string(osInfo.Distribution))
 	}
 
-	srv = service
-
-	return srv, nil
+	return service, nil
 }
 
 type Systemd struct{}
