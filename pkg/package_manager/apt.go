@@ -87,6 +87,7 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 
 	var packageInfos []PackageInfo
+	var currentPackage *PackageInfo
 
 	for scanner.Scan() {
 		parts := strings.SplitN(scanner.Text(), ":", 2)
@@ -94,32 +95,47 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 			continue
 		}
 
-		info := PackageInfo{}
-
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 
 		switch key {
-		case "PackageInfo":
-			info.Name = value
-		case fieldArchitecture:
-			info.Architecture = value
-		case fieldVersion:
-			info.Version = value
-		case fieldSize:
-			info.Size = value
-		case fieldDescription:
-			info.Description = value
-		case "Installed-Size":
-			size, err := strconv.Atoi(value)
-			if err != nil {
-				// Ignore error
-				size = 0
+		case "Package":
+			if currentPackage != nil {
+				packageInfos = append(packageInfos, *currentPackage)
 			}
-			info.InstalledSizeKB = size
-		}
+			currentPackage = &PackageInfo{}
 
-		packageInfos = append(packageInfos, info)
+			currentPackage.Name = value
+		case fieldArchitecture:
+			if currentPackage != nil {
+				currentPackage.Architecture = value
+			}
+		case fieldVersion:
+			if currentPackage != nil {
+				currentPackage.Version = value
+			}
+		case fieldSize:
+			if currentPackage != nil {
+				currentPackage.Size = value
+			}
+		case fieldDescription:
+			if currentPackage != nil {
+				currentPackage.Description = value
+			}
+		case "Installed-Size":
+			if currentPackage != nil {
+				size, err := strconv.Atoi(value)
+				if err != nil {
+					// Ignore error
+					size = 0
+				}
+				currentPackage.InstalledSizeKB = size
+			}
+		}
+	}
+
+	if currentPackage != nil {
+		packageInfos = append(packageInfos, *currentPackage)
 	}
 
 	return packageInfos

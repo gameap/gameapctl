@@ -92,7 +92,7 @@ func (p *pacman) Install(_ context.Context, pack string, _ ...InstallOptions) er
 
 	cmd.Env = os.Environ()
 
-	log.Println('\n', cmd.String())
+	log.Println("\n", cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 
@@ -104,7 +104,7 @@ func (p *pacman) CheckForUpdates(_ context.Context) error {
 
 	cmd.Env = os.Environ()
 
-	log.Println('\n', cmd.String())
+	log.Println("\n", cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 
@@ -123,7 +123,7 @@ func (p *pacman) Remove(_ context.Context, packs ...string) error {
 
 	cmd.Env = os.Environ()
 
-	log.Println('\n', cmd.String())
+	log.Println("\n", cmd.String())
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 
