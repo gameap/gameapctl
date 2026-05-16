@@ -889,6 +889,10 @@ func enrollFlow(ctx context.Context, state daemonsInstallState) (daemonsInstallS
 		return state, errors.WithMessage(err, "failed to enroll daemon via connect URL")
 	}
 
+	if err := applySteamCMDPath(state.DaemonConfigFilePath, state.SteamCMDPath); err != nil {
+		return state, errors.WithMessage(err, "failed to set steamcmd_path in daemon config")
+	}
+
 	if state.Scope == gameap.ScopeUser && state.ProcessManager == processManagerSystemD {
 		if err := applyUserScopeProcessManager(state.DaemonConfigFilePath); err != nil {
 			return state, errors.WithMessage(err, "failed to set user scope on process manager in daemon config")
@@ -966,6 +970,41 @@ func applyWindowsNetworkServiceUser(configPath string) error {
 		return nil
 	}
 	raw["use_network_service_user"] = true
+
+	out, err := yaml.Marshal(raw)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal daemon config")
+	}
+
+	if err := os.WriteFile(configPath, out, 0600); err != nil {
+		return errors.Wrap(err, "failed to write daemon config")
+	}
+
+	return nil
+}
+
+func applySteamCMDPath(configPath, steamCMDPath string) error {
+	if strings.TrimSpace(steamCMDPath) == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to read daemon config")
+	}
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return errors.Wrap(err, "failed to parse daemon config")
+	}
+	if raw == nil {
+		raw = make(map[string]interface{})
+	}
+
+	if existing, _ := raw["steamcmd_path"].(string); strings.TrimSpace(existing) != "" {
+		return nil
+	}
+	raw["steamcmd_path"] = steamCMDPath
 
 	out, err := yaml.Marshal(raw)
 	if err != nil {
