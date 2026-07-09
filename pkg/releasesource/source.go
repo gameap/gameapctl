@@ -1,6 +1,8 @@
 package releasesource
 
 import (
+	"net/http"
+
 	"github.com/gameap/gameapctl/pkg/releasefinder"
 )
 
@@ -42,13 +44,15 @@ var githubReleasesPath = map[Component]string{
 	ComponentDaemon:    "/repos/gameap/daemon/releases",
 }
 
-func (s source) probeURL() string {
+func (s source) probeRequest() (string, string) {
 	if s.kind == kindGitHub {
-		return s.baseURL
+		// The rate_limit endpoint does not count against the REST API quota
+		// and does not support HEAD.
+		return http.MethodGet, s.baseURL + "/rate_limit"
 	}
 
 	// CDN root responds with 403, probe a real object instead.
-	return s.baseURL + "/" + string(ComponentGameAPCtl) + "/releases.json"
+	return http.MethodHead, s.baseURL + "/" + string(ComponentGameAPCtl) + "/releases.json"
 }
 
 func (s source) releasesURL(component Component) string {

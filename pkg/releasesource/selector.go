@@ -78,7 +78,10 @@ func (s *selector) findRelease(
 		}
 	}
 
-	if githubRateLimited {
+	// A content error (missing tag or platform asset) is a definitive answer
+	// from a complete mirror — waiting out the GitHub rate limit cannot
+	// improve on it.
+	if githubRateLimited && contentErr == nil {
 		if release, retryErr := s.retryGitHub(ctx, srcs, component, kernel, platform, opts); retryErr == nil {
 			return release, nil
 		}
@@ -240,7 +243,9 @@ func (s *selector) probeAndSort(ctx context.Context) []source {
 }
 
 func (s *selector) probe(ctx context.Context, src source) probeResult {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, src.probeURL(), nil)
+	method, probeURL := src.probeRequest()
+
+	req, err := http.NewRequestWithContext(ctx, method, probeURL, nil)
 	if err != nil {
 		log.Println("Release source", src.name, "probe failed:", err)
 
@@ -261,6 +266,14 @@ func (s *selector) probe(ctx context.Context, src source) probeResult {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Println("Release source", src.name, "responded with status", resp.StatusCode)
+
+		return probeResult{src: src}
+	}
+
+	// The rate_limit endpoint responds with 200 even when the quota is
+	// exhausted; deprioritize GitHub so a mirror is tried first.
+	if src.kind == kindGitHub && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		log.Println("Release source", src.name, "is rate limited")
 
 		return probeResult{src: src}
 	}
