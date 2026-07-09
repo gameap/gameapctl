@@ -64,22 +64,24 @@ const daemonReleasesJSON = `[
 
 func Test_findReleaseFromBytes(t *testing.T) {
 	tests := []struct {
-		name      string
-		json      string
-		os        string
-		arch      string
-		wantURL   string
-		wantTag   string
-		wantErr   bool
-		errSubstr string
+		name          string
+		json          string
+		os            string
+		arch          string
+		wantURL       string
+		wantTag       string
+		wantAssetName string
+		wantErr       bool
+		errSubstr     string
 	}{
 		{
-			name:    "amd64",
-			json:    daemonReleasesJSON,
-			os:      "linux",
-			arch:    "amd64",
-			wantURL: "https://github.com/gameap/daemon/releases/download/v3.2.0/gameap-daemon-v3.2.0-linux-amd64.tar.gz",
-			wantTag: "v3.2.0",
+			name:          "amd64",
+			json:          daemonReleasesJSON,
+			os:            "linux",
+			arch:          "amd64",
+			wantURL:       "https://github.com/gameap/daemon/releases/download/v3.2.0/gameap-daemon-v3.2.0-linux-amd64.tar.gz",
+			wantTag:       "v3.2.0",
+			wantAssetName: "gameap-daemon-v3.2.0-linux-amd64.tar.gz",
 		},
 		{
 			name:    "386",
@@ -181,6 +183,9 @@ func Test_findReleaseFromBytes(t *testing.T) {
 			require.NotNil(t, release)
 			assert.Equal(t, tt.wantURL, release.URL)
 			assert.Equal(t, tt.wantTag, release.Tag)
+			if tt.wantAssetName != "" {
+				assert.Equal(t, tt.wantAssetName, release.AssetName)
+			}
 		})
 	}
 }
@@ -654,6 +659,172 @@ func Test_FindWithOptions_listAddsPerPageQuery(t *testing.T) {
 
 	_, err := FindWithOptions(context.Background(), srv.URL, "linux", "amd64", FindOptions{})
 	require.NoError(t, err)
+}
+
+func Test_FindFromStaticList(t *testing.T) {
+	serve := func(t *testing.T, body string) *httptest.Server {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+
+		return srv
+	}
+
+	t.Run("list_mode_fetches_url_verbatim", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/gameap-daemon/releases.json", r.URL.Path)
+			assert.Empty(t, r.URL.RawQuery)
+			_, _ = w.Write([]byte(daemonReleasesJSON))
+		}))
+		defer srv.Close()
+
+		release, err := FindFromStaticList(
+			context.Background(), srv.URL+"/gameap-daemon/releases.json", "linux", "amd64", FindOptions{},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v3.2.0", release.Tag)
+		assert.Equal(t, "gameap-daemon-v3.2.0-linux-amd64.tar.gz", release.AssetName)
+	})
+
+	t.Run("exact_tag_found", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		release, err := FindFromStaticList(
+			context.Background(), srv.URL, "linux", "amd64", FindOptions{Tag: "v4.1.0"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.0", release.Tag)
+		assert.Equal(t, "https://example.com/v4.1.0-linux-amd64.tar.gz", release.URL)
+	})
+
+	t.Run("exact_tag_matches_prerelease_without_allow", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		release, err := FindFromStaticList(
+			context.Background(), srv.URL, "linux", "amd64", FindOptions{Tag: "v5.0.0-beta1"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v5.0.0-beta1", release.Tag)
+	})
+
+	t.Run("exact_tag_missing_returns_tag_not_found", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		_, err := FindFromStaticList(
+			context.Background(), srv.URL, "linux", "amd64", FindOptions{Tag: "v9.9.9"},
+		)
+		require.Error(t, err)
+
+		var notFound TagNotFoundError
+		require.ErrorAs(t, err, &notFound)
+		assert.Equal(t, "v9.9.9", notFound.Tag)
+	})
+
+	t.Run("exact_tag_without_platform_asset", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		_, err := FindFromStaticList(
+			context.Background(), srv.URL, "windows", "amd64", FindOptions{Tag: "v4.1.5"},
+		)
+		require.Error(t, err)
+
+		var notFound FailedToFindReleaseError
+		require.ErrorAs(t, err, &notFound)
+		assert.Equal(t, "v4.1.5", notFound.LatestTag)
+	})
+
+	t.Run("tag_prefix_picks_latest_in_line", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		release, err := FindFromStaticList(
+			context.Background(), srv.URL, "linux", "amd64", FindOptions{TagPrefix: "v4.1."},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.5", release.Tag)
+	})
+
+	t.Run("prerelease_filtered_in_list_mode", func(t *testing.T) {
+		srv := serve(t, releasesWithPrerelease)
+
+		release, err := FindFromStaticList(context.Background(), srv.URL, "linux", "amd64", FindOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "v4.1.5", release.Tag)
+	})
+
+	t.Run("non_200_fails_without_retry", func(t *testing.T) {
+		var reqCount atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			reqCount.Add(1)
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+
+		_, err := FindFromStaticList(context.Background(), srv.URL, "linux", "amd64", FindOptions{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "status code 403")
+		assert.False(t, IsRateLimitError(err))
+		assert.Equal(t, int32(1), reqCount.Load())
+	})
+}
+
+func Test_FindWithOptions_NoRetry(t *testing.T) {
+	var reqCount atomic.Int32
+	resetUnix := time.Now().Add(time.Hour).Unix()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reqCount.Add(1)
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetUnix, 10))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"message":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	_, err := FindWithOptions(context.Background(), srv.URL, "linux", "amd64", FindOptions{NoRetry: true})
+	require.Error(t, err)
+	assert.True(t, IsRateLimitError(err))
+	assert.Equal(t, int32(1), reqCount.Load())
+}
+
+func Test_IsRateLimitError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "rate_limit",
+			err:  rateLimitError{statusCode: 429, message: "rate limited"},
+			want: true,
+		},
+		{
+			name: "wrapped_rate_limit",
+			err:  errors.WithMessage(rateLimitError{statusCode: 403, message: "forbidden"}, "failed to find release"),
+			want: true,
+		},
+		{
+			name: "failed_to_find_release",
+			err:  FailedToFindReleaseError{OS: "linux", Arch: "amd64"},
+			want: false,
+		},
+		{
+			name: "plain_error",
+			err:  errors.New("some error"),
+			want: false,
+		},
+		{
+			name: "nil",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsRateLimitError(tt.err))
+		})
+	}
 }
 
 func Test_NormalizeTag(t *testing.T) {

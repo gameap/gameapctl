@@ -16,6 +16,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -75,9 +76,9 @@ type InstallConfig struct {
 	TagPrefix string
 
 	// PreResolvedRelease, when non-nil, is used directly by Install instead of
-	// querying GitHub again. Lets the caller resolve the release once and decide
-	// version-dependent settings (like GRPCEnabled) before installation.
-	PreResolvedRelease *releasefinder.Release
+	// querying the release source again. Lets the caller resolve the release once
+	// and decide version-dependent settings (like GRPCEnabled) before installation.
+	PreResolvedRelease *releasesource.Release
 }
 
 // ConfigEnvData represents the data for config.env template.
@@ -307,10 +308,11 @@ func generateRandomKey(length int) (string, error) {
 	return fmt.Sprintf("base64:%s", encoded), nil
 }
 
-// ResolveRelease queries GitHub for the GameAP release matching the given
-// install config (Tag/TagPrefix). Lets callers know the resolved tag before
-// running Install — useful for version-dependent decisions (e.g. enabling gRPC).
-func ResolveRelease(ctx context.Context, config InstallConfig) (*releasefinder.Release, error) {
+// ResolveRelease queries the best available release source for the GameAP
+// release matching the given install config (Tag/TagPrefix). Lets callers know
+// the resolved tag before running Install — useful for version-dependent
+// decisions (e.g. enabling gRPC).
+func ResolveRelease(ctx context.Context, config InstallConfig) (*releasesource.Release, error) {
 	opts := releasefinder.FindOptions{
 		Tag:       config.Tag,
 		TagPrefix: config.TagPrefix,
@@ -322,9 +324,9 @@ func ResolveRelease(ctx context.Context, config InstallConfig) (*releasefinder.R
 		}
 	}
 
-	release, err := releasefinder.FindWithOptions(
+	release, err := releasesource.FindRelease(
 		ctx,
-		"https://api.github.com/repos/gameap/gameap/releases",
+		releasesource.ComponentPanel,
 		runtime.GOOS,
 		runtime.GOARCH,
 		opts,
@@ -351,14 +353,13 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 	}
 
 	fmt.Println("Downloading binaries ...")
-	fmt.Println("Downloading from Git repository...")
 	fmt.Println("Release Tag:", release.Tag)
 
-	fmt.Println("Downloading from URL:", release.URL)
+	fmt.Println("Downloading from URL:", release.PrimaryURL())
 
-	err = utils.Download(
+	err = releasesource.Download(
 		ctx,
-		release.URL,
+		release,
 		tmpDir,
 	)
 	if err != nil {

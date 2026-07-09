@@ -11,7 +11,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
-	"github.com/gameap/gameapctl/pkg/utils"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/minio/selfupdate"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -82,7 +82,7 @@ func Handle(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Update available")
-	fmt.Printf("Downloading from %s \n", release.URL)
+	fmt.Printf("Downloading from %s \n", release.PrimaryURL())
 
 	f, err := os.CreateTemp("", "gameapctl")
 	if err != nil {
@@ -101,9 +101,9 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}()
 
-	err = utils.DownloadFile(
+	err = releasesource.DownloadFile(
 		ctx,
-		release.URL,
+		release,
 		f.Name(),
 	)
 	if err != nil {
@@ -126,7 +126,7 @@ func Handle(cliCtx *cli.Context) error {
 	return nil
 }
 
-func isUpdateAvailable(_ context.Context, release *releasefinder.Release) bool {
+func isUpdateAvailable(_ context.Context, release *releasesource.Release) bool {
 	return semver.Compare(release.Tag, gameap.Version) == +1
 }
 
@@ -163,10 +163,10 @@ func printDevVersionMessage() {
 	)
 }
 
-func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
-	release, err := releasefinder.FindWithOptions(
+func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasesource.Release, error) {
+	release, err := releasesource.FindRelease(
 		ctx,
-		"https://api.github.com/repos/gameap/gameapctl/releases",
+		releasesource.ComponentGameAPCtl,
 		runtime.GOOS,
 		runtime.GOARCH,
 		opts,

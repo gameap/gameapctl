@@ -34,6 +34,7 @@ import (
 	osinfo "github.com/gameap/gameapctl/pkg/os_info"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
@@ -638,13 +639,13 @@ func installDaemonBinaries(
 	}
 	state.ResolvedTag = release.Tag
 
-	err = utils.Download(
+	err = releasesource.Download(
 		ctx,
-		release.URL,
+		release,
 		daemonBinariesTmpDir,
 	)
 	if err != nil {
-		log.Println("Download url: ", release.URL)
+		log.Println("Download url: ", release.PrimaryURL())
 
 		return state, errors.WithMessage(err, "failed to download gameap-daemon binaries")
 	}
@@ -1425,16 +1426,16 @@ type DaemonConfig struct {
 	UseNetworkServiceUser bool `yaml:"use_network_service_user"`
 }
 
-func findDaemonRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
+func findDaemonRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasesource.Release, error) {
 	if opts.Tag != "" {
 		if norm, normErr := releasefinder.NormalizeTag(opts.Tag); normErr == nil && norm.HasPrereleaseSuffix() {
 			opts.AllowPrerelease = true
 		}
 	}
 
-	release, err := releasefinder.FindWithOptions(
+	release, err := releasesource.FindRelease(
 		ctx,
-		"https://api.github.com/repos/gameap/daemon/releases",
+		releasesource.ComponentDaemon,
 		runtime.GOOS,
 		runtime.GOARCH,
 		opts,

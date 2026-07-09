@@ -17,9 +17,12 @@ import (
 )
 
 type Release struct {
-	URL string
-	Tag string
+	URL       string
+	Tag       string
+	AssetName string
 }
+
+var httpClient = &http.Client{}
 
 // FindOptions controls how Find selects a release.
 type FindOptions struct {
@@ -29,6 +32,10 @@ type FindOptions struct {
 	TagPrefix string
 	// AllowPrerelease, when true, includes prerelease/draft releases in list-mode selection.
 	AllowPrerelease bool
+	// NoRetry disables the rate-limit retry loop. Mirror-aware callers set it
+	// to fail over to another source quickly instead of waiting for the
+	// GitHub rate-limit window.
+	NoRetry bool
 }
 
 // Find returns the latest stable release that has an asset matching the given kernel/platform.
@@ -49,10 +56,15 @@ func FindWithOptions(ctx context.Context, api, kernel, platform string, opts Fin
 
 	requestURL, mode := buildRequestURL(api, opts)
 
+	retries := maxRetries
+	if opts.NoRetry {
+		retries = 0
+	}
+
 	var lastErr error
 	backoff := initialBackoff
 
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
 			waitDuration := calculateWaitDuration(lastErr, backoff)
 			if waitDuration > 0 {
@@ -76,6 +88,39 @@ func FindWithOptions(ctx context.Context, api, kernel, platform string, opts Fin
 	}
 
 	return nil, errors.WithMessage(lastErr, "failed after retries")
+}
+
+// FindFromStaticList resolves a Release from a GitHub-format release list served
+// as a single static document at listURL (e.g. a CDN mirror of the GitHub
+// releases API). The URL is fetched verbatim (no pagination query, no per-tag
+// endpoint); opts.Tag is matched locally against the list. No retries are
+// performed — callers are expected to fail over to another source.
+func FindFromStaticList(ctx context.Context, listURL, kernel, platform string, opts FindOptions) (*Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create request")
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to get releases")
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to read response body")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("release list request failed with status code %d", resp.StatusCode)
+	}
+
+	if opts.Tag != "" {
+		return findReleaseByTagFromList(bodyBytes, kernel, platform, opts.Tag)
+	}
+
+	return findReleaseFromList(bodyBytes, kernel, platform, opts)
 }
 
 type fetchMode int
@@ -145,7 +190,7 @@ func fetchRelease(
 		return nil, errors.WithMessage(err, "failed to create request")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to get releases")
 	}
@@ -216,10 +261,15 @@ func handleErrorResponse(statusCode int, bodyBytes []byte, headers http.Header) 
 	return errors.New(errMsg)
 }
 
-func shouldRetry(err error) bool {
+// IsRateLimitError reports whether err was caused by GitHub API rate limiting.
+func IsRateLimitError(err error) bool {
 	var rateLimitErr rateLimitError
 
 	return errors.As(err, &rateLimitErr)
+}
+
+func shouldRetry(err error) bool {
+	return IsRateLimitError(err)
 }
 
 type FailedToFindReleaseError struct {
@@ -274,6 +324,28 @@ func findReleaseFromList(bodyBytes []byte, os, arch string, opts FindOptions) (*
 	return nil, FailedToFindReleaseError{OS: os, Arch: arch, LatestTag: firstEligibleTag}
 }
 
+// findReleaseByTagFromList matches the tag exactly, ignoring prerelease/draft
+// flags — the same semantics as the GitHub releases/tags/<tag> endpoint.
+func findReleaseByTagFromList(bodyBytes []byte, os, arch, tag string) (*Release, error) {
+	var r []releases
+	if err := json.Unmarshal(bodyBytes, &r); err != nil {
+		return nil, errors.WithMessage(err, "failed to decode releases list")
+	}
+
+	for _, release := range r {
+		if release.TagName != tag {
+			continue
+		}
+		if matched := matchAsset(release, os, arch); matched != nil {
+			return matched, nil
+		}
+
+		return nil, FailedToFindReleaseError{OS: os, Arch: arch, LatestTag: release.TagName}
+	}
+
+	return nil, TagNotFoundError{Tag: tag}
+}
+
 func findReleaseFromSingleResponse(bodyBytes []byte, os, arch string) (*Release, error) {
 	var release releases
 	if err := json.Unmarshal(bodyBytes, &release); err != nil {
@@ -291,8 +363,9 @@ func matchAsset(release releases, os, arch string) *Release {
 	for _, asset := range release.Assets {
 		if strings.Contains(asset.Name, release.TagName+"-"+os+"-"+arch+".") {
 			return &Release{
-				URL: asset.BrowserDownloadURL,
-				Tag: release.TagName,
+				URL:       asset.BrowserDownloadURL,
+				Tag:       release.TagName,
+				AssetName: asset.Name,
 			}
 		}
 	}
