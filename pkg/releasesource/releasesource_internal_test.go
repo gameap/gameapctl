@@ -288,6 +288,57 @@ func Test_findRelease_githubRateLimited_skipsToCDNQuickly(t *testing.T) {
 	assert.Equal(t, cdn.URL+"/gameap-daemon/v3.2.0/gameap-daemon-v3.2.0-linux-amd64.tar.gz", release.URLs[0])
 }
 
+func Test_orderedSources_rateLimitedGitHubGoesLast(t *testing.T) {
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/rate_limit", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(github.Close)
+
+	cdn := newProbeServer(t, 0)
+
+	sel := newSelector([]source{
+		{name: sourceNameGitHub, kind: kindGitHub, baseURL: github.URL},
+		{name: "cdn.gameap.com", kind: kindCDN, baseURL: cdn.URL},
+	})
+
+	ordered := sel.orderedSources(context.Background())
+	require.Len(t, ordered, 2)
+	assert.Equal(t, "cdn.gameap.com", ordered[0].name)
+	assert.Equal(t, sourceNameGitHub, ordered[1].name)
+}
+
+func Test_findRelease_rateLimitedGitHubSkipsWaitOnContentError(t *testing.T) {
+	var githubCount atomic.Int32
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		githubCount.Add(1)
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"message":"rate limited"}`))
+	}))
+	t.Cleanup(github.Close)
+
+	cdn := newReleasesServer(t)
+
+	sel := selectorWithOrder(
+		source{name: sourceNameGitHub, kind: kindGitHub, baseURL: github.URL},
+		source{name: "cdn.gameap.com", kind: kindCDN, baseURL: cdn.URL},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := sel.findRelease(ctx, ComponentDaemon, "linux", "amd64", releasefinder.FindOptions{Tag: "v9.9.9"})
+	require.Error(t, err)
+
+	var notFound releasefinder.TagNotFoundError
+	require.ErrorAs(t, err, &notFound)
+	assert.Equal(t, "v9.9.9", notFound.Tag)
+	assert.Equal(t, int32(1), githubCount.Load())
+}
+
 func Test_findRelease_allFailedAndRateLimited_retriesGitHubWithWait(t *testing.T) {
 	var githubCount atomic.Int32
 	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
