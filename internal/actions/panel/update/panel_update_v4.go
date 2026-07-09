@@ -18,6 +18,7 @@ import (
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -162,9 +163,9 @@ func downloadRelease(ctx context.Context, tag, tagPrefix string) (string, string
 		}
 	}
 
-	release, err := releasefinder.FindWithOptions(
+	release, err := releasesource.FindRelease(
 		ctx,
-		"https://api.github.com/repos/gameap/gameap/releases",
+		releasesource.ComponentPanel,
 		runtime.GOOS,
 		runtime.GOARCH,
 		opts,
@@ -174,9 +175,9 @@ func downloadRelease(ctx context.Context, tag, tagPrefix string) (string, string
 	}
 
 	log.Printf("Found release: %s\n", release.Tag)
-	log.Printf("Downloading from: %s\n", release.URL)
+	log.Printf("Downloading from: %s\n", release.PrimaryURL())
 
-	if err := utils.Download(ctx, release.URL, tmpDir); err != nil {
+	if err := releasesource.Download(ctx, release, tmpDir); err != nil {
 		return tmpDir, "", "", errors.WithMessage(err, "failed to download release")
 	}
 

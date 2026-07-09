@@ -15,6 +15,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/minio/selfupdate"
 	"github.com/pkg/errors"
@@ -109,9 +110,9 @@ func Handle(cliCtx *cli.Context) error {
 		}
 	}()
 
-	err = utils.Download(
+	err = releasesource.Download(
 		ctx,
-		release.URL,
+		release,
 		tmpDir,
 	)
 	if err != nil {
@@ -262,16 +263,16 @@ func revert(_ context.Context, path, backupPath string) error {
 	return errors.WithMessage(err, "failed to revert")
 }
 
-func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasefinder.Release, error) {
+func findRelease(ctx context.Context, opts releasefinder.FindOptions) (*releasesource.Release, error) {
 	if opts.Tag != "" {
 		if norm, normErr := releasefinder.NormalizeTag(opts.Tag); normErr == nil && norm.HasPrereleaseSuffix() {
 			opts.AllowPrerelease = true
 		}
 	}
 
-	release, err := releasefinder.FindWithOptions(
+	release, err := releasesource.FindRelease(
 		ctx,
-		"https://api.github.com/repos/gameap/daemon/releases",
+		releasesource.ComponentDaemon,
 		runtime.GOOS,
 		runtime.GOARCH,
 		opts,
