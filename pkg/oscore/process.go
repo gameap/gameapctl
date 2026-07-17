@@ -28,7 +28,7 @@ func FindProcessByName(ctx context.Context, processName string) (*process.Proces
 			continue
 		}
 
-		if name == processName {
+		if name == processName && processBelongsToCurrentUser(ctx, p) {
 			return p, nil
 		}
 	}

@@ -14,7 +14,7 @@ func ExecCommand(ctx context.Context, command string, args ...string) error {
 
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
-	log.Println('\n', cmd.String())
+	log.Println("\n" + cmd.String())
 
 	return cmd.Run()
 }
@@ -26,7 +26,7 @@ func ExecCommandWithOutput(ctx context.Context, command string, args ...string) 
 	buf.Grow(1024) //nolint:mnd
 	cmd.Stdout = buf
 	cmd.Stderr = log.Writer()
-	log.Println('\n', cmd.String())
+	log.Println("\n" + cmd.String())
 	err := cmd.Run()
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to run command %s", command)
