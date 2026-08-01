@@ -621,6 +621,43 @@ func binaryDirInPath(binaryPath string) bool {
 	return false
 }
 
+// updateCACertificatesCommand returns the distro command that refreshes the CA
+// trust store, or an empty string when the trust store tooling is not installed.
+func updateCACertificatesCommand() string {
+	for _, command := range []string{
+		"update-ca-certificates", // Debian, Ubuntu, etc.
+		"update-ca-trust",        // RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
+		"trust",                  // openSUSE, SLES, etc.
+	} {
+		if utils.IsCommandAvailable(command) {
+			return command
+		}
+	}
+
+	return ""
+}
+
+func refreshCATrustStore(ctx context.Context) error {
+	var err error
+
+	switch updateCACertificatesCommand() {
+	case "update-ca-certificates":
+		err = oscore.ExecCommand(ctx, "update-ca-certificates")
+	case "update-ca-trust":
+		err = oscore.ExecCommand(ctx, "update-ca-trust", "extract")
+	case "trust":
+		err = oscore.ExecCommand(ctx, "trust", "extract-compat")
+	default:
+		return errors.New("no known command found to update ca-certificates")
+	}
+
+	if err != nil {
+		return errors.WithMessage(err, "failed to update ca-certificates")
+	}
+
+	return nil
+}
+
 // installSystemDependenciesV4 installs the distro packages the installer relies on.
 // Every step here needs root. It reports whether the installer has to be re-run to
 // pick up freshly installed CA certificates.
@@ -636,68 +673,35 @@ func installSystemDependenciesV4(
 		return false, errors.WithMessage(err, "failed to check for updates")
 	}
 
-	if state.OSInfo.IsLinux() {
+	if state.OSInfo.IsLinux() && updateCACertificatesCommand() == "" {
 		fmt.Println("Checking for ca-certificates ...")
+		fmt.Println("Installing ca-certificates ...")
 
-		var updateCACommand string
-
-		switch {
-		case utils.IsCommandAvailable("update-ca-certificates"):
-			// Debian, Ubuntu, etc.
-			updateCACommand = "update-ca-certificates"
-		case utils.IsCommandAvailable("update-ca-trust"):
-			// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
-			updateCACommand = "update-ca-trust"
-		case utils.IsCommandAvailable("trust"):
-			// openSUSE, SLES, etc.
-			updateCACommand = "trust"
-		default:
-			return false, errors.New("no known command found to update ca-certificates")
+		if err := pm.Install(ctx, packagemanager.CACertificatesPackage); err != nil {
+			return false, errors.WithMessage(err, "failed to install ca-certificates")
 		}
 
-		if !utils.IsCommandAvailable(updateCACommand) {
-			fmt.Println("Installing ca-certificates ...")
-			if err := pm.Install(ctx, packagemanager.CACertificatesPackage); err != nil {
-				return false, errors.WithMessage(err, "failed to install ca-certificates")
-			}
-
-			var err error
-
-			switch {
-			case utils.IsCommandAvailable("update-ca-certificates"):
-				// Debian, Ubuntu, etc.
-				err = oscore.ExecCommand(ctx, "update-ca-certificates")
-			case utils.IsCommandAvailable("update-ca-trust"):
-				// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
-				err = oscore.ExecCommand(ctx, "update-ca-trust", "extract")
-			case utils.IsCommandAvailable("trust"):
-				// openSUSE, SLES, etc.
-				err = oscore.ExecCommand(ctx, "trust", "extract-compat")
-			default:
-				return false, errors.New("no known command found to update ca-certificates")
-			}
-			if err != nil {
-				return false, errors.WithMessage(err, "failed to update ca-certificates")
-			}
-
-			// Without reloading all certificates may not be applied.
-			// I had an error: `failed to install gameap: failed to install GameAP v4:
-			//   failed to download binaries: failed to find release:
-			//   failed to get releases: Get "https://api.github.com/repos/gameap/gameap/releases":
-			//   tls: failed to verify certificate: x509: certificate signed by unknown authority`
-			// I think the problem is that the current process still uses old certificates.
-			// I tried to time.Sleep(10 * time.Second) but it did not help.
-			// I didn't delve too deeply into the problem, so perhaps it's possible to avoid reloading.
-
-			// So now better to re-run the installer.
-
-			fmt.Println()
-			fmt.Println("Re-run the installer again to apply updated certificates:")
-
-			fmt.Println(cmdLineFromPanelInstallStateV4(state))
-
-			return true, nil
+		if err := refreshCATrustStore(ctx); err != nil {
+			return false, err
 		}
+
+		// Without reloading all certificates may not be applied.
+		// I had an error: `failed to install gameap: failed to install GameAP v4:
+		//   failed to download binaries: failed to find release:
+		//   failed to get releases: Get "https://api.github.com/repos/gameap/gameap/releases":
+		//   tls: failed to verify certificate: x509: certificate signed by unknown authority`
+		// I think the problem is that the current process still uses old certificates.
+		// I tried to time.Sleep(10 * time.Second) but it did not help.
+		// I didn't delve too deeply into the problem, so perhaps it's possible to avoid reloading.
+
+		// So now better to re-run the installer.
+
+		fmt.Println()
+		fmt.Println("Re-run the installer again to apply updated certificates:")
+
+		fmt.Println(cmdLineFromPanelInstallStateV4(state))
+
+		return true, nil
 	}
 
 	fmt.Println("Checking for curl ...")

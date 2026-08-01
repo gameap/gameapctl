@@ -12,7 +12,12 @@ import (
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
-	if paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope")); err == nil {
+	// Scope is informational here: the process lookup below works regardless of it,
+	// so a resolution failure must not hide the actual status.
+	paths, scopeErr := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if scopeErr != nil {
+		log.Println(errors.WithMessage(scopeErr, "failed to resolve installation scope"))
+	} else {
 		log.Println("Installation scope:", paths.Scope)
 	}
 

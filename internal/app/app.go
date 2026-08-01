@@ -574,20 +574,17 @@ func initLogFile(command string) string {
 	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05.000"))
 
 	for _, dir := range logDirCandidates() {
-		if dir == "" {
-			continue
+		if logfile, ok := setLogFile(dir, logname); ok {
+			return logfile
 		}
+	}
 
-		logfile := filepath.Clean(filepath.Join(dir, logname))
-
-		f, err := openLogFile(dir, logfile)
-		if err != nil {
-			continue
+	// A temporary directory is created only after every fixed location failed,
+	// so a successful run does not leave an unused one behind.
+	if tmpDir, err := os.MkdirTemp("", "gameapctl-log"); err == nil {
+		if logfile, ok := setLogFile(tmpDir, logname); ok {
+			return logfile
 		}
-
-		log.SetOutput(f)
-
-		return logfile
 	}
 
 	fmt.Println("Warning: failed to open a log file, logging to stderr")
@@ -595,39 +592,46 @@ func initLogFile(command string) string {
 	return ""
 }
 
-func openLogFile(dir, logfile string) (*os.File, error) {
+func setLogFile(dir, logname string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+
+	logfile := filepath.Clean(filepath.Join(dir, logname))
+
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, errors.Wrapf(err, "failed to create log directory %s", dir)
+		return "", false
 	}
 
-	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open log file %s", logfile)
+		return "", false
 	}
 
-	return f, nil
+	log.SetOutput(f)
+
+	return logfile, true
 }
 
-// logDirCandidates returns log directories in preference order. An unprivileged
-// user cannot write to the system-wide directory, so a state directory under
-// $HOME is tried before falling back to a temporary directory.
+// logDirCandidates returns fixed log directories in preference order. An
+// unprivileged user cannot write to the system-wide directory, so a state
+// directory under $HOME is tried first.
 func logDirCandidates() []string {
 	if runtime.GOOS == "windows" {
-		return append([]string{"C:\\gameap\\logs"}, tempLogDir())
+		return []string{"C:\\gameap\\logs"}
 	}
 
 	const systemLogDir = "/var/log/gameapctl"
 
 	if os.Geteuid() == 0 {
-		return []string{systemLogDir, tempLogDir()}
+		return []string{systemLogDir}
 	}
 
-	candidates := make([]string, 0, 3) //nolint:mnd
 	if stateDir := userStateDir(); stateDir != "" {
-		candidates = append(candidates, filepath.Join(stateDir, "gameapctl"))
+		return []string{filepath.Join(stateDir, "gameapctl"), systemLogDir}
 	}
 
-	return append(candidates, systemLogDir, tempLogDir())
+	return []string{systemLogDir}
 }
 
 func userStateDir() string {
@@ -641,15 +645,6 @@ func userStateDir() string {
 	}
 
 	return filepath.Join(homeDir, ".local", "state")
-}
-
-func tempLogDir() string {
-	dir, err := os.MkdirTemp("", "gameapctl-log")
-	if err != nil {
-		return ""
-	}
-
-	return dir
 }
 
 func selfUpdateFlags() []cli.Flag {

@@ -25,8 +25,10 @@ Pass `--scope=user` explicitly if the state file in `~/.gameapctl` was lost.
 * Linux with systemd.
 * A real login session, so that `systemctl --user` can reach the user bus: connect with
   `ssh user@host` or `machinectl shell user@`, not with `su` or `sudo -u`.
-* Lingering, so that the services survive logout and start at boot. The installer enables it;
-  if that fails, run `sudo loginctl enable-linger $USER`.
+* Lingering, so that the services survive logout and start at boot. The installer only
+  attempts to enable it and warns when that is denied (common over SSH, where polkit may
+  refuse it). Check with `loginctl show-user $USER --property=Linger`; if it prints
+  `Linger=no`, run `sudo loginctl enable-linger $USER`.
 
 ### File layout
 
@@ -49,9 +51,10 @@ are unaffected because the units use absolute paths, but to run `gameap` by name
 
 | Limitation | Reason |
 |---|---|
-| Ports below 1024 (80, 443) are unavailable; the panel defaults to 8025 | A systemd user unit cannot be granted `CAP_NET_BIND_SERVICE` |
-| No database server is installed; SQLite is the default | `apt`/`dnf` and system services require root. `--database=mysql\|postgres` is only accepted together with `--database-host`/`--database-password` of an existing server |
-| System packages are not installed | The panel needs none of them: downloads, archive extraction, SQLite and password hashing are all in-process. Building with `--github` still needs `git`, `go` and `npm` preinstalled |
+| Ports below 1024 (80, 443) are normally unavailable; the panel defaults to 8025 | A systemd user unit cannot be granted `CAP_NET_BIND_SERVICE`. The installer probes the port rather than rejecting anything below 1024, so low ports still work where an administrator lowered `net.ipv4.ip_unprivileged_port_start` |
+| No database server is installed; SQLite is the default | `apt`/`dnf` and system services require root. `--database=mysql\|postgres` is only accepted for an existing server, described by `--database-host`, `--database-name`, `--database-username` and `--database-password` (plus `--database-port` for a non-default port) |
+| System packages are not installed for the panel | It needs none of them: downloads, archive extraction, SQLite and password hashing are all in-process. Building with `--github` still needs `git`, `go` and `npm` preinstalled |
+| The daemon has prerequisites of its own | `curl` and `gpg` must be preinstalled (plus `tmux` or `docker` if the process manager is overridden to one of them). SteamCMD additionally needs the 32-bit libraries `lib32gcc`, `lib32stdc++6` and `lib32z1` on a 64-bit system; the installer only warns about all of these |
 | Let's Encrypt `http-01` is unavailable; use `--challenge=dns-01` | The challenge requires port 80 |
 | The `gameap` system user and group are not created | Everything runs as the current user |
 

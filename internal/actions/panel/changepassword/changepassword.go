@@ -53,12 +53,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.New("password cannot be empty")
 	}
 
-	opts := Options{}
-	if paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope")); err == nil {
-		opts.ConfigPath = paths.ConfigFilePath
+	paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if err != nil {
+		return err
 	}
 
-	return ChangePassword(ctx, username, password, opts)
+	return ChangePassword(ctx, username, password, Options{ConfigPath: paths.ConfigFilePath})
 }
 
 // Options overrides the location of config.env, which differs between

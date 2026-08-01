@@ -53,8 +53,12 @@ func uninstallGameAP(ctx context.Context, paths gameap.PanelPaths, removeData bo
 
 //nolint:nestif
 func uninstallDaemon(ctx context.Context, paths gameap.DaemonPaths, removeData bool) error {
+	// Nothing to uninstall is not a failure: aborting here would skip the remaining
+	// data and service cleanup of the whole uninstall.
 	if !utils.IsFileExists(paths.DaemonFilePath) && !utils.IsCommandAvailable("gameap-daemon") {
-		return errors.Errorf("gameap-daemon binary not found at %s", paths.DaemonFilePath)
+		fmt.Printf("GameAP Daemon binary not found at %s, nothing to uninstall\n", paths.DaemonFilePath)
+
+		return nil
 	}
 
 	fmt.Println("Disabling GameAP Daemon systemd service...")

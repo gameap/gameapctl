@@ -3,7 +3,6 @@ package install
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -189,7 +188,8 @@ func checkSELinuxV4(ctx context.Context, state panelInstallStateV4) (panelInstal
 	}
 
 	if enabled && state.Scope == gameap.ScopeUser {
-		log.Println(
+		fmt.Println()
+		fmt.Println(
 			"Warning: SELinux is enabled. gameapctl cannot change SELinux settings in user scope; " +
 				"if the panel fails to start, adjust the policy manually.",
 		)
