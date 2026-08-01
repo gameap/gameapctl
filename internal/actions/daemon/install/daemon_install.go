@@ -93,32 +93,6 @@ func warnIfBinaryMissing(name string) {
 
 const linuxOS = "linux"
 
-func resolveScope(opts InstallOptions) (string, error) {
-	scope := opts.Scope
-	if scope == "" {
-		scope = gameap.ScopeSystem
-	}
-
-	switch scope {
-	case gameap.ScopeSystem:
-		return gameap.ScopeSystem, nil
-	case gameap.ScopeUser:
-		if runtime.GOOS != linuxOS {
-			return "", errors.Errorf(
-				"--scope=user requires Linux with systemd (current OS: %s)",
-				runtime.GOOS,
-			)
-		}
-
-		return gameap.ScopeUser, nil
-	default:
-		return "", errors.Errorf(
-			"unknown --scope value %q (expected %q or %q)",
-			opts.Scope, gameap.ScopeSystem, gameap.ScopeUser,
-		)
-	}
-}
-
 type UnableToSetupNodeError string
 
 func (e UnableToSetupNodeError) Error() string {
@@ -224,7 +198,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return errEmptyToken
 	}
 
-	scope, err := resolveScope(opts)
+	scope, err := gameap.ResolveScope(opts.Scope)
 	if err != nil {
 		return err
 	}
@@ -279,9 +253,11 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	fmt.Println("Checking for updates ...")
-	if err = pm.CheckForUpdates(ctx); err != nil {
-		return errors.WithMessage(err, "failed to check for updates")
+	if state.Scope != gameap.ScopeUser {
+		fmt.Println("Checking for updates ...")
+		if err = pm.CheckForUpdates(ctx); err != nil {
+			return errors.WithMessage(err, "failed to check for updates")
+		}
 	}
 
 	fmt.Println("Defining process manager ...")

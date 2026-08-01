@@ -1,10 +1,5 @@
 package gameap
 
-const (
-	ScopeSystem = "system"
-	ScopeUser   = "user"
-)
-
 type DaemonPaths struct {
 	Scope string
 

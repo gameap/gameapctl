@@ -6,13 +6,20 @@ import (
 	"log"
 	"os"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
-func Restart(ctx context.Context) error {
+func Restart(ctx context.Context, opts ...Options) error {
+	o := firstOptions(opts)
+
+	if o.scope() == gameap.ScopeUser {
+		return restartPanelSystemdScope(ctx, gameap.ScopeUser)
+	}
+
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
@@ -20,27 +27,33 @@ func Restart(ctx context.Context) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = restartSystemd(ctx)
+		err = restartPanelSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
-		err = restartProcess(ctx)
+		err = restartProcess(ctx, gameap.ScopeSystem)
 	}
 
 	return err
 }
 
-func restartSystemd(ctx context.Context) error {
-	_, err := os.Stat(systemdConfigPath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
+func restartPanelSystemdScope(ctx context.Context, scope string) error {
+	paths, err := gameap.PanelPathsForScope(scope)
+	if err != nil {
+		return errors.WithMessage(err, "failed to resolve panel paths")
+	}
+
+	_, statErr := os.Stat(paths.SystemdUnitPath)
+	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
 		return errors.WithMessagef(
-			err,
+			statErr,
 			"gameap service configuration file %s not found",
-			systemdConfigPath,
+			paths.SystemdUnitPath,
 		)
 	}
-	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap service configuration")
+	if statErr != nil {
+		return errors.WithMessage(statErr, "failed to stat gameap service configuration")
 	}
-	err = service.Restart(ctx, "gameap")
+
+	err = systemd.Restart(ctx, paths.Scope, panelServiceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}
@@ -48,7 +61,7 @@ func restartSystemd(ctx context.Context) error {
 	return nil
 }
 
-func restartProcess(ctx context.Context) error {
+func restartProcess(ctx context.Context, scope string) error {
 	p, err := oscore.FindProcessByName(ctx, processName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to find gameap process")
@@ -60,7 +73,7 @@ func restartProcess(ctx context.Context) error {
 		}
 	}
 
-	err = startFork(ctx)
+	err = startFork(ctx, scope)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap")
 	}

@@ -7,11 +7,10 @@ import (
 )
 
 const (
-	defaultDataDir        = gameap.DefaultDataPath
-	defaultBinaryPath     = gameap.DefaultBinaryPath
-	defaultSystemdUnitDir = "/etc/systemd/system"
-	defaultUser           = "gameap"
-	defaultGroup          = "gameap"
+	defaultDataDir    = gameap.DefaultDataPath
+	defaultBinaryPath = gameap.DefaultBinaryPath
+	defaultUser       = "gameap"
+	defaultGroup      = "gameap"
 )
 
 const (

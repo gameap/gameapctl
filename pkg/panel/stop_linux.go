@@ -7,9 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +18,13 @@ const (
 	defaultTerminateWaitTimeout = 30 * time.Second
 )
 
-func Stop(ctx context.Context) error {
+func Stop(ctx context.Context, opts ...Options) error {
+	o := firstOptions(opts)
+
+	if o.scope() == gameap.ScopeUser {
+		return stopPanelSystemdScope(ctx, gameap.ScopeUser)
+	}
+
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
@@ -25,7 +32,7 @@ func Stop(ctx context.Context) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = stopDaemonSystemd(ctx)
+		err = stopPanelSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
 		err = stopProcess(ctx)
 	}
@@ -37,18 +44,23 @@ func Stop(ctx context.Context) error {
 	return nil
 }
 
-func stopDaemonSystemd(ctx context.Context) error {
-	_, err := os.Stat(systemdConfigPath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		log.Printf("gameap systemd configuration file %s not found, nothing to stop\n", systemdConfigPath)
+func stopPanelSystemdScope(ctx context.Context, scope string) error {
+	paths, err := gameap.PanelPathsForScope(scope)
+	if err != nil {
+		return errors.WithMessage(err, "failed to resolve panel paths")
+	}
+
+	_, statErr := os.Stat(paths.SystemdUnitPath)
+	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
+		log.Printf("gameap systemd configuration file %s not found, nothing to stop\n", paths.SystemdUnitPath)
 
 		return nil
 	}
-	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap service configuration")
+	if statErr != nil {
+		return errors.WithMessage(statErr, "failed to stat gameap service configuration")
 	}
 
-	err = service.Stop(ctx, "gameap")
+	err = systemd.Stop(ctx, paths.Scope, panelServiceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to stop gameap")
 	}

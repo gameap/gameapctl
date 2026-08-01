@@ -11,7 +11,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
@@ -55,19 +55,11 @@ func restartDaemonSystemdScope(ctx context.Context, scope string) error {
 		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
 	}
 
-	if err := restartSystemdService(ctx, paths.Scope); err != nil {
+	if err := systemd.Restart(ctx, paths.Scope, daemonServiceName); err != nil {
 		return errors.WithMessage(err, "failed to restart gameap-daemon")
 	}
 
 	return nil
-}
-
-func restartSystemdService(ctx context.Context, scope string) error {
-	if scope == gameap.ScopeUser {
-		return oscore.ExecCommand(ctx, "systemctl", "--user", "restart", daemonServiceName)
-	}
-
-	return service.Restart(ctx, daemonServiceName)
 }
 
 func restartDaemonProcess(ctx context.Context) error {

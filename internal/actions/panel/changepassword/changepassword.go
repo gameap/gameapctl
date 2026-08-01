@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
@@ -52,13 +53,32 @@ func Handle(cliCtx *cli.Context) error {
 		return errors.New("password cannot be empty")
 	}
 
-	return ChangePassword(ctx, username, password)
+	opts := Options{}
+	if paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope")); err == nil {
+		opts.ConfigPath = paths.ConfigFilePath
+	}
+
+	return ChangePassword(ctx, username, password, opts)
+}
+
+// Options overrides the location of config.env, which differs between
+// installation scopes.
+type Options struct {
+	ConfigPath string
+}
+
+func firstOptions(opts []Options) Options {
+	if len(opts) > 0 {
+		return opts[0]
+	}
+
+	return Options{}
 }
 
 // ChangePassword changes the password for a user in the GameAP v4 database.
 // It reads the database configuration from config.env, connects to the database,
 // verifies the user exists, hashes the password, and updates it in the database.
-func ChangePassword(ctx context.Context, username, password string) error {
+func ChangePassword(ctx context.Context, username, password string, opts ...Options) error {
 	if username == "" {
 		return errors.New("username cannot be empty")
 	}
@@ -67,8 +87,10 @@ func ChangePassword(ctx context.Context, username, password string) error {
 		return errors.New("password cannot be empty")
 	}
 
-	// Get config file path
-	configPath := getConfigPath()
+	configPath := firstOptions(opts).ConfigPath
+	if configPath == "" {
+		configPath = getConfigPath()
+	}
 	log.Printf("Reading config from: %s\n", configPath)
 
 	// Parse config.env file

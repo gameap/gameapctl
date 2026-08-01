@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/pkg/fixer"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -23,7 +25,7 @@ func filterAndCheckHostV4(state panelInstallStateV4) (panelInstallStateV4, error
 	state.Host = strings.TrimRight(state.Host, "/?&")
 
 	if state.Port == "" {
-		state.Port = "80"
+		state.Port = defaultPortForScope(state.Scope)
 	}
 
 	if strings.ContainsAny(state.Host, "/?&") {
@@ -50,7 +52,7 @@ func filterAndCheckHostV4(state panelInstallStateV4) (panelInstallStateV4, error
 
 func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	if state.Port == "" {
-		state.Port = "80"
+		state.Port = defaultPortForScope(state.Scope)
 	}
 
 	// Check if an existing GameAP panel is already running on this port.
@@ -74,6 +76,17 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 	listenAddr := resolveListenAddress(state.Host, state.Port)
 	listener, err := net.Listen("tcp", net.JoinHostPort(listenAddr, state.Port))
 	if err != nil {
+		// Probing rather than comparing against 1024: the port is bindable when the
+		// administrator lowered net.ipv4.ip_unprivileged_port_start.
+		if state.Scope == gameap.ScopeUser && errors.Is(err, syscall.EACCES) {
+			return state, errors.Errorf(
+				"port %s cannot be bound by an unprivileged process; "+
+					"use a port >= 1024 (default for user scope: %s), put a reverse proxy in front, "+
+					"or install with --scope=system",
+				state.Port, defaultPortForScope(gameap.ScopeUser),
+			)
+		}
+
 		warningErr := warningV4(ctx, state,
 			fmt.Sprintf(
 				"Port %s is already in use. "+
@@ -173,6 +186,15 @@ func checkSELinuxV4(ctx context.Context, state panelInstallStateV4) (panelInstal
 	enabled, err := fixer.IsSELinuxEnabled(ctx)
 	if err != nil {
 		return state, err
+	}
+
+	if enabled && state.Scope == gameap.ScopeUser {
+		log.Println(
+			"Warning: SELinux is enabled. gameapctl cannot change SELinux settings in user scope; " +
+				"if the panel fails to start, adjust the policy manually.",
+		)
+
+		return state, nil
 	}
 
 	if enabled {

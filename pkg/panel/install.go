@@ -28,6 +28,9 @@ const (
 
 // InstallConfig represents the configuration for GameAP v4 installation.
 type InstallConfig struct {
+	// Scope selects between a system-wide installation and a rootless one under $HOME.
+	Scope string
+
 	// Config paths
 	ConfigDirectory string
 	DataDirectory   string
@@ -102,10 +105,13 @@ type ConfigEnvData struct {
 // Configure sets up GameAP v4 configuration: creates user/group, directories, config.env,
 // and platform-specific setup (e.g. systemd unit). Does not download binaries.
 func Configure(ctx context.Context, config InstallConfig) error {
+	config, err := applyScopeDefaults(config)
+	if err != nil {
+		return err
+	}
+
 	config = applyConfigDefaults(config)
 	config = preserveExistingSecrets(config)
-
-	var err error
 
 	if config.EncryptionKey == "" {
 		config.EncryptionKey, err = generateRandomKey(randomKeyLength)
@@ -121,7 +127,7 @@ func Configure(ctx context.Context, config InstallConfig) error {
 	}
 
 	//nolint:nestif
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" && config.scope() != gameap.ScopeUser {
 		fmt.Println("Creating GameAP user and group ...")
 
 		if err := oscore.CreateGroup(ctx, config.Group); err != nil {
@@ -141,6 +147,8 @@ func Configure(ctx context.Context, config InstallConfig) error {
 
 			fmt.Println("User already exists")
 		}
+	} else if config.scope() == gameap.ScopeUser {
+		fmt.Println("Skipping GameAP user and group creation in user scope ...")
 	}
 
 	fmt.Println("Creating directories ...")
@@ -159,6 +167,11 @@ func Configure(ctx context.Context, config InstallConfig) error {
 // Install installs GameAP v4: configures and downloads binaries.
 // Returns the resolved release tag (e.g. "v4.1.2") that was actually downloaded.
 func Install(ctx context.Context, config InstallConfig) (string, error) {
+	config, err := applyScopeDefaults(config)
+	if err != nil {
+		return "", err
+	}
+
 	if err := Configure(ctx, config); err != nil {
 		return "", err
 	}
@@ -171,7 +184,32 @@ func Install(ctx context.Context, config InstallConfig) (string, error) {
 	return resolvedTag, nil
 }
 
-func applyConfigDefaults(config InstallConfig) InstallConfig {
+func (c InstallConfig) scope() string {
+	return gameap.ScopeOrDefault(c.Scope)
+}
+
+// applyScopeDefaults fills paths and ownership from the installation scope. In user
+// scope User and Group stay empty: there is no dedicated account and nothing to chown to.
+func applyScopeDefaults(config InstallConfig) (InstallConfig, error) {
+	if config.scope() == gameap.ScopeUser {
+		paths, err := gameap.UserPanelPaths()
+		if err != nil {
+			return config, errors.WithMessage(err, "failed to resolve user panel paths")
+		}
+
+		if config.ConfigDirectory == "" {
+			config.ConfigDirectory = paths.ConfigDir
+		}
+		if config.DataDirectory == "" {
+			config.DataDirectory = paths.DataDir
+		}
+		if config.BinaryPath == "" {
+			config.BinaryPath = paths.BinaryPath
+		}
+
+		return config, nil
+	}
+
 	if config.ConfigDirectory == "" {
 		config.ConfigDirectory = defaultConfigDir
 	}
@@ -187,6 +225,11 @@ func applyConfigDefaults(config InstallConfig) InstallConfig {
 	if config.Group == "" {
 		config.Group = defaultGroup
 	}
+
+	return config, nil
+}
+
+func applyConfigDefaults(config InstallConfig) InstallConfig {
 	if config.HTTPHost == "" {
 		config.HTTPHost = "0.0.0.0"
 	}
@@ -259,6 +302,10 @@ func createConfigEnv(ctx context.Context, config InstallConfig) error {
 		return errors.WithMessage(err, "failed to write config.env file")
 	}
 
+	if config.scope() == gameap.ScopeUser {
+		return nil
+	}
+
 	if err := oscore.ChownRecursive(ctx, configPath, config.User, config.Group); err != nil {
 		return errors.WithMessage(err, "failed to set ownership for config.env")
 	}
@@ -281,6 +328,10 @@ func createDirectories(ctx context.Context, config InstallConfig) error {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return errors.WithMessagef(err, "failed to create directory %s", dir)
 		}
+	}
+
+	if config.scope() == gameap.ScopeUser {
+		return nil
 	}
 
 	// Set ownership
@@ -376,9 +427,13 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 			return "", errors.WithMessage(err, "failed to stat file")
 		}
 
-		err = utils.Move(fp, gameap.DefaultBinaryPath)
+		err = utils.Move(fp, config.BinaryPath)
 		if err != nil {
 			return "", errors.WithMessage(err, "failed to move gameap binaries")
+		}
+
+		if err = os.Chmod(config.BinaryPath, 0755); err != nil {
+			return "", errors.Wrap(err, "failed to set executable permissions")
 		}
 
 		binariesInstalled = true

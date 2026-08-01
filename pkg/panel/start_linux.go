@@ -9,21 +9,28 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
-const (
-	systemdConfigPath = "/etc/systemd/system/gameap.service"
-)
+const panelServiceName = "gameap"
 
-func Start(ctx context.Context) error {
+func Start(ctx context.Context, opts ...Options) error {
+	o := firstOptions(opts)
+
+	// DetectInit reads /proc/1/exe, which an unprivileged user cannot do, so in user
+	// scope the init system must not be probed at all.
+	if o.scope() == gameap.ScopeUser {
+		return startPanelSystemdScope(ctx, gameap.ScopeUser)
+	}
+
 	init, err := runhelper.DetectInit(ctx)
 	if err != nil {
 		log.Println("Failed to detect init:", err)
@@ -31,9 +38,9 @@ func Start(ctx context.Context) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = startSystemd(ctx)
+		err = startPanelSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
-		err = startFork(ctx)
+		err = startFork(ctx, gameap.ScopeSystem)
 	}
 
 	if err != nil {
@@ -43,16 +50,21 @@ func Start(ctx context.Context) error {
 	return nil
 }
 
-func startSystemd(ctx context.Context) error {
-	_, err := os.Stat(systemdConfigPath)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		return ErrGameAPNotInstalled
-	}
+func startPanelSystemdScope(ctx context.Context, scope string) error {
+	paths, err := gameap.PanelPathsForScope(scope)
 	if err != nil {
-		return errors.WithMessage(err, "failed to stat gameap service configuration")
+		return errors.WithMessage(err, "failed to resolve panel paths")
 	}
 
-	err = service.Start(ctx, "gameap")
+	_, statErr := os.Stat(paths.SystemdUnitPath)
+	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
+		return ErrGameAPNotInstalled
+	}
+	if statErr != nil {
+		return errors.WithMessage(statErr, "failed to stat gameap service configuration")
+	}
+
+	err = systemd.Start(ctx, paths.Scope, panelServiceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap")
 	}
@@ -102,8 +114,13 @@ func readEnvFromFile(configPath string) ([]string, error) {
 	return envVars, nil
 }
 
-func startFork(ctx context.Context) error {
+func startFork(ctx context.Context, scope string) error {
 	log.Println("Starting GameAP (fork)")
+
+	paths, err := gameap.PanelPathsForScope(scope)
+	if err != nil {
+		return errors.WithMessage(err, "failed to resolve panel paths")
+	}
 
 	proc, err := oscore.FindProcessByName(ctx, processName)
 	if err != nil {
@@ -114,14 +131,14 @@ func startFork(ctx context.Context) error {
 		return errors.New("gameap is already running")
 	}
 
-	exePath, err := exec.LookPath("gameap")
+	exePath, err := lookupPanelBinary(paths)
 	if err != nil {
-		return errors.WithMessage(err, "failed to lookup gameap path")
+		return err
 	}
 	log.Println("Found", exePath)
 
-	if _, err := os.Stat(defaultDataDir); errors.Is(err, fs.ErrNotExist) {
-		err := os.Mkdir(defaultDataDir, 0755)
+	if _, err := os.Stat(paths.DataDir); errors.Is(err, fs.ErrNotExist) {
+		err := os.MkdirAll(paths.DataDir, 0755)
 		if err != nil {
 			return errors.WithMessage(err, "failed to create work path")
 		}
@@ -139,20 +156,20 @@ func startFork(ctx context.Context) error {
 		}
 	}(devNull)
 
-	envVars, err := readEnvFromFile(filepath.Join(defaultConfigDir, "config.env"))
+	envVars, err := readEnvFromFile(paths.ConfigFilePath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to read environment variables")
 	}
 
 	attr := os.ProcAttr{
-		Dir: defaultDataDir,
+		Dir: paths.DataDir,
 		Env: envVars,
 		Sys: &syscall.SysProcAttr{
 			Setsid: true, // Create a new session and detach from terminal
 		},
 		Files: []*os.File{devNull, devNull, devNull},
 	}
-	p, err := os.StartProcess(exePath, []string{}, &attr)
+	p, err := os.StartProcess(exePath, []string{exePath}, &attr)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to start process"))
 
@@ -176,11 +193,17 @@ func startFork(ctx context.Context) error {
 	return nil
 }
 
-type SystemdUnitConfig struct {
-	User             string
-	Group            string
-	WorkingDirectory string
-	ExecStart        string
-	EnvironmentFile  string
-	ReadWritePaths   string
+// lookupPanelBinary prefers the scope specific path over PATH: ~/.local/bin is
+// frequently missing from PATH in non-login shells.
+func lookupPanelBinary(paths gameap.PanelPaths) (string, error) {
+	if utils.IsFileExists(paths.BinaryPath) {
+		return paths.BinaryPath, nil
+	}
+
+	exePath, err := exec.LookPath(processName)
+	if err != nil {
+		return "", errors.WithMessage(err, "failed to lookup gameap path")
+	}
+
+	return exePath, nil
 }

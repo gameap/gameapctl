@@ -6,6 +6,55 @@ You can use gameapctl to install, upgrade, inspect and manage GameAP, and view l
 
 gameapctl is available for Linux, macOS and Windows.
 
+## Rootless installation (user scope)
+
+On Linux both the panel and the daemon can be installed without root, into the current
+user's home directory, managed by systemd user units:
+
+```bash
+gameapctl panel install --scope=user --host=<host> --database=sqlite
+gameapctl daemon install --scope=user --connect=grpc://<host>:31718/<setup-key>
+```
+
+The scope is recorded at install time, so the other commands (`start`, `stop`, `restart`,
+`status`, `upgrade`, `uninstall`, `change-password`, `letsencrypt`) pick it up automatically.
+Pass `--scope=user` explicitly if the state file in `~/.gameapctl` was lost.
+
+### Requirements
+
+* Linux with systemd.
+* A real login session, so that `systemctl --user` can reach the user bus: connect with
+  `ssh user@host` or `machinectl shell user@`, not with `su` or `sudo -u`.
+* Lingering, so that the services survive logout and start at boot. The installer enables it;
+  if that fails, run `sudo loginctl enable-linger $USER`.
+
+### File layout
+
+| | system scope | user scope |
+|---|---|---|
+| Panel config | `/etc/gameap/config.env` | `~/.config/gameap/config.env` |
+| Panel data | `/var/lib/gameap` | `~/.local/share/gameap` |
+| Panel binary | `/usr/bin/gameap` | `~/.local/bin/gameap` |
+| Panel unit | `/etc/systemd/system/gameap.service` | `~/.config/systemd/user/gameap.service` |
+| Daemon config | `/etc/gameap-daemon/gameap-daemon.yaml` | `~/.config/gameap-daemon/gameap-daemon.yaml` |
+| Daemon work dir | `/srv/gameap` | `~/gameap` |
+| Daemon binary | `/usr/bin/gameap-daemon` | `~/.local/bin/gameap-daemon` |
+| Daemon unit | `/etc/systemd/system/gameap-daemon.service` | `~/.config/systemd/user/gameap-daemon.service` |
+
+Note that `~/.local/bin` is frequently missing from `PATH` in non-login shells. The services
+are unaffected because the units use absolute paths, but to run `gameap` by name add it:
+`export PATH="$HOME/.local/bin:$PATH"`.
+
+### Limitations
+
+| Limitation | Reason |
+|---|---|
+| Ports below 1024 (80, 443) are unavailable; the panel defaults to 8025 | A systemd user unit cannot be granted `CAP_NET_BIND_SERVICE` |
+| No database server is installed; SQLite is the default | `apt`/`dnf` and system services require root. `--database=mysql\|postgres` is only accepted together with `--database-host`/`--database-password` of an existing server |
+| System packages are not installed | The panel needs none of them: downloads, archive extraction, SQLite and password hashing are all in-process. Building with `--github` still needs `git`, `go` and `npm` preinstalled |
+| Let's Encrypt `http-01` is unavailable; use `--challenge=dns-01` | The challenge requires port 80 |
+| The `gameap` system user and group are not created | Everything runs as the current user |
+
 ## Supported OS
 
 Autotests were performed on the following operating systems. 

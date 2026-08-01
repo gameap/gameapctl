@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"golang.org/x/term"
@@ -21,7 +22,7 @@ type askedParamsV4 struct {
 }
 
 //nolint:gocognit,cyclop
-func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV4, error) {
+func askUserV4(ctx context.Context, needToAsk map[string]struct{}, scope string) (askedParamsV4, error) {
 	var err error
 	result := askedParamsV4{}
 
@@ -61,15 +62,23 @@ func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV
 	}
 
 	if _, ok := needToAsk["database"]; ok { //nolint:nestif
-		result.database, err = askDatabaseType(ctx)
+		result.database, err = askDatabaseType(ctx, scope)
 		if err != nil {
 			return result, err
 		}
 
 		if result.database == postgresDatabase || result.database == mysqlDatabase {
-			result.existingDatabase, err = askDatabaseInstallationType(ctx, result.database)
-			if err != nil {
-				return result, err
+			if scope == gameap.ScopeUser {
+				// A database server cannot be installed without root, so the only
+				// remaining option is an already running one.
+				fmt.Println("In user scope a new database server cannot be installed; " +
+					"enter the connection details of an existing server.")
+				result.existingDatabase = true
+			} else {
+				result.existingDatabase, err = askDatabaseInstallationType(ctx, result.database)
+				if err != nil {
+					return result, err
+				}
 			}
 		}
 
@@ -84,12 +93,19 @@ func askUserV4(ctx context.Context, needToAsk map[string]struct{}) (askedParamsV
 	return result, nil
 }
 
-func askDatabaseType(ctx context.Context) (string, error) {
+func askDatabaseType(ctx context.Context, scope string) (string, error) {
 	fmt.Println("Select database to install and configure")
 	fmt.Println("")
-	fmt.Println("1) PostgreSQL (Recommended)")
-	fmt.Println("2) MySQL")
-	fmt.Println("3) SQLite")
+
+	if scope == gameap.ScopeUser {
+		fmt.Println("1) PostgreSQL (connect to an existing server)")
+		fmt.Println("2) MySQL (connect to an existing server)")
+		fmt.Println("3) SQLite (Recommended for user scope)")
+	} else {
+		fmt.Println("1) PostgreSQL (Recommended)")
+		fmt.Println("2) MySQL")
+		fmt.Println("3) SQLite")
+	}
 	fmt.Println("4) None. Do not install a database")
 
 	num, err := utils.Ask(

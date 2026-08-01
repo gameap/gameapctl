@@ -7,98 +7,92 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/gameap"
-	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
 
-const (
-	systemdServicePath       = "/etc/systemd/system/gameap.service"
-	daemonSystemdServicePath = "/etc/systemd/system/gameap-daemon.service"
-)
-
-func uninstallGameAP(ctx context.Context, removeData bool) error {
+func uninstallGameAP(ctx context.Context, paths gameap.PanelPaths, removeData bool) error {
 	fmt.Println("Disabling GameAP systemd service...")
-	if err := oscore.ExecCommand(ctx, "systemctl", "disable", "gameap"); err != nil {
+	if err := systemd.Run(ctx, paths.Scope, "disable", "gameap"); err != nil {
 		log.Println(errors.WithMessage(err, "failed to disable gameap service"))
 	}
 
-	if utils.IsFileExists(systemdServicePath) {
+	if utils.IsFileExists(paths.SystemdUnitPath) {
 		fmt.Println("Removing GameAP systemd service file...")
-		if err := os.Remove(systemdServicePath); err != nil {
-			log.Println(errors.WithMessagef(err, "failed to remove %s", systemdServicePath))
+		if err := os.Remove(paths.SystemdUnitPath); err != nil {
+			log.Println(errors.WithMessagef(err, "failed to remove %s", paths.SystemdUnitPath))
 		}
 	}
 
 	fmt.Println("Reloading systemd daemon...")
-	if err := oscore.ExecCommand(ctx, "systemctl", "daemon-reload"); err != nil {
+	if err := systemd.Run(ctx, paths.Scope, "daemon-reload"); err != nil {
 		log.Println(errors.WithMessage(err, "failed to reload systemd daemon"))
 	}
 
 	if removeData {
 		fmt.Println("Removing GameAP binary...")
-		binaryPath := gameap.DefaultBinaryPath
-		if utils.IsFileExists(binaryPath) {
-			if err := os.Remove(binaryPath); err != nil {
-				log.Println(errors.WithMessagef(err, "failed to remove %s", binaryPath))
+		if utils.IsFileExists(paths.BinaryPath) {
+			if err := os.Remove(paths.BinaryPath); err != nil {
+				log.Println(errors.WithMessagef(err, "failed to remove %s", paths.BinaryPath))
 			}
 		}
+	}
+
+	if paths.Scope == gameap.ScopeUser {
+		fmt.Println("Lingering is left enabled: other user services may depend on it. " +
+			"To disable it: loginctl disable-linger $USER")
 	}
 
 	return nil
 }
 
 //nolint:nestif
-func uninstallDaemon(ctx context.Context, removeData bool) error {
-	_, err := exec.LookPath("gameap-daemon")
-	if err != nil {
-		return errors.WithMessage(err, "failed to find gameap-daemon binary in PATH")
+func uninstallDaemon(ctx context.Context, paths gameap.DaemonPaths, removeData bool) error {
+	if !utils.IsFileExists(paths.DaemonFilePath) && !utils.IsCommandAvailable("gameap-daemon") {
+		return errors.Errorf("gameap-daemon binary not found at %s", paths.DaemonFilePath)
 	}
 
 	fmt.Println("Disabling GameAP Daemon systemd service...")
-	if err := oscore.ExecCommand(ctx, "systemctl", "disable", "gameap-daemon"); err != nil {
+	if err := systemd.Run(ctx, paths.Scope, "disable", "gameap-daemon"); err != nil {
 		log.Println(errors.WithMessage(err, "failed to disable gameap-daemon service"))
 	}
 
-	if utils.IsFileExists(daemonSystemdServicePath) {
+	if utils.IsFileExists(paths.SystemdUnitPath) {
 		fmt.Println("Removing GameAP Daemon systemd service file...")
-		if err := os.Remove(daemonSystemdServicePath); err != nil {
-			log.Println(errors.WithMessagef(err, "failed to remove %s", daemonSystemdServicePath))
+		if err := os.Remove(paths.SystemdUnitPath); err != nil {
+			log.Println(errors.WithMessagef(err, "failed to remove %s", paths.SystemdUnitPath))
 		}
 	}
 
 	fmt.Println("Reloading systemd daemon...")
-	if err := oscore.ExecCommand(ctx, "systemctl", "daemon-reload"); err != nil {
+	if err := systemd.Run(ctx, paths.Scope, "daemon-reload"); err != nil {
 		log.Println(errors.WithMessage(err, "failed to reload systemd daemon"))
 	}
 
 	if removeData {
 		fmt.Println("Removing GameAP Daemon binary...")
-		daemonPath := gameap.DefaultDaemonFilePath
-		if utils.IsFileExists(daemonPath) {
-			if err := os.Remove(daemonPath); err != nil {
-				log.Println(errors.WithMessagef(err, "failed to remove %s", daemonPath))
+		if utils.IsFileExists(paths.DaemonFilePath) {
+			if err := os.Remove(paths.DaemonFilePath); err != nil {
+				log.Println(errors.WithMessagef(err, "failed to remove %s", paths.DaemonFilePath))
 			}
 		}
 
 		fmt.Println("Removing GameAP Daemon configuration...")
-		daemonConfigPath := gameap.DefaultDaemonConfigFilePath
-		if utils.IsFileExists(daemonConfigPath) {
-			if err := os.Remove(daemonConfigPath); err != nil {
-				log.Println(errors.WithMessagef(err, "failed to remove %s", daemonConfigPath))
+		if utils.IsFileExists(paths.DaemonConfigFilePath) {
+			if err := os.Remove(paths.DaemonConfigFilePath); err != nil {
+				log.Println(errors.WithMessagef(err, "failed to remove %s", paths.DaemonConfigFilePath))
 			}
 		}
 
 		fmt.Println("Removing GameAP Daemon certificates...")
-		daemonCertPath := gameap.DefaultDaemonCertPath
-		if utils.IsFileExists(daemonCertPath) {
-			if err := os.RemoveAll(daemonCertPath); err != nil {
-				log.Println(errors.WithMessagef(err, "failed to remove %s", daemonCertPath))
+		if utils.IsFileExists(paths.CertsPath) {
+			if err := os.RemoveAll(paths.CertsPath); err != nil {
+				log.Println(errors.WithMessagef(err, "failed to remove %s", paths.CertsPath))
 			}
 		}
 	}
@@ -106,18 +100,18 @@ func uninstallDaemon(ctx context.Context, removeData bool) error {
 	return nil
 }
 
-func removeData(_ context.Context) error {
-	state, err := gameapctl.LoadPanelInstallState(context.Background())
+func removeData(ctx context.Context, paths gameap.PanelPaths) error {
+	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to load panel install state"))
 	}
 
-	configDir := gameap.DefaultConfigFilePath
+	configDir := paths.ConfigDir
 	if state.ConfigDirectory != "" {
 		configDir = state.ConfigDirectory
 	}
 
-	dataDir := gameap.DefaultDataPath
+	dataDir := paths.DataDir
 	if state.DataDirectory != "" {
 		dataDir = state.DataDirectory
 	}
@@ -145,6 +139,12 @@ func removePlatformDatabase(
 	state gameapctl.PanelInstallState,
 ) error {
 	if !state.DatabaseWasInstalled {
+		return nil
+	}
+
+	if state.Scope == gameap.ScopeUser {
+		fmt.Println("No database server was installed by gameapctl in user scope, nothing to remove")
+
 		return nil
 	}
 

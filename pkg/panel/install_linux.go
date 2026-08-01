@@ -1,34 +1,45 @@
 package panel
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
-	"text/template"
 
-	"github.com/gameap/gameapctl/pkg/oscore"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/runhelper"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
 // Install installs GameAP v4.
 func install(ctx context.Context, config InstallConfig) error {
-	init, err := runhelper.DetectInit(ctx)
+	paths, err := gameap.PanelPathsForScope(config.scope())
 	if err != nil {
-		log.Println("Failed to detect init:", err)
+		return errors.WithMessage(err, "failed to resolve panel paths")
 	}
 
-	if init == runhelper.InitSystemd {
-		fmt.Println("Creating systemd unit file ...")
-
-		if err := createSystemdUnit(ctx, config); err != nil {
-			return errors.WithMessage(err, "failed to create systemd unit file")
+	// In user scope the init system is never probed: DetectInit reads /proc/1/exe,
+	// which is not readable by an unprivileged user. systemd.InstallUnit reports a
+	// missing user manager on its own.
+	if paths.Scope != gameap.ScopeUser {
+		init, err := runhelper.DetectInit(ctx)
+		if err != nil {
+			log.Println("Failed to detect init:", err)
 		}
-	} else {
-		fmt.Println("Init system not detected or unsupported, skipping systemd unit creation")
+
+		if init != runhelper.InitSystemd {
+			fmt.Println("Init system not detected or unsupported, skipping systemd unit creation")
+			fmt.Println("GameAP v4 installation completed successfully")
+
+			return nil
+		}
+	}
+
+	fmt.Println("Creating systemd unit file ...")
+
+	if err := createSystemdUnit(ctx, config, paths); err != nil {
+		return errors.WithMessage(err, "failed to create systemd unit file")
 	}
 
 	fmt.Println("GameAP v4 installation completed successfully")
@@ -36,45 +47,24 @@ func install(ctx context.Context, config InstallConfig) error {
 	return nil
 }
 
-func createSystemdUnit(ctx context.Context, config InstallConfig) error {
-	tmpl, err := template.New("systemd.unit").Parse(systemdUnitTemplate)
-	if err != nil {
-		return errors.WithMessage(err, "failed to parse systemd unit template")
-	}
-
+func createSystemdUnit(ctx context.Context, config InstallConfig, paths gameap.PanelPaths) error {
 	readWritePaths := fmt.Sprintf("%s %s", config.DataDirectory, config.FilesLocalBasePath)
 	if config.LegacyPath != "" {
 		readWritePaths = fmt.Sprintf("%s %s", readWritePaths, config.LegacyPath)
 	}
 
-	data := SystemdUnitConfig{
+	unit, err := renderSystemdUnit(SystemdUnitConfig{
+		Scope:            paths.Scope,
 		User:             config.User,
 		Group:            config.Group,
 		WorkingDirectory: config.DataDirectory,
 		ExecStart:        config.BinaryPath,
 		EnvironmentFile:  filepath.Join(config.ConfigDirectory, "config.env"),
 		ReadWritePaths:   readWritePaths,
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return errors.WithMessage(err, "failed to execute systemd unit template")
-	}
-
-	unitPath := filepath.Join(defaultSystemdUnitDir, "gameap.service")
-	if err := os.WriteFile(unitPath, buf.Bytes(), 0600); err != nil {
-		return errors.WithMessage(err, "failed to write systemd unit file")
-	}
-
-	// Reload systemd daemon
-	if err = oscore.ExecCommand(ctx, "systemctl", "daemon-reload"); err != nil {
-		return errors.WithMessage(err, "failed to reload systemd daemon")
-	}
-
-	err = oscore.ExecCommand(ctx, "systemctl", "enable", "gameap")
+	})
 	if err != nil {
-		return errors.WithMessage(err, "failed to enable gameap service")
+		return err
 	}
 
-	return nil
+	return systemd.InstallUnit(ctx, paths.Scope, paths.SystemdUnitPath, unit)
 }

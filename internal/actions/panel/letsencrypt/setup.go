@@ -8,9 +8,10 @@ import (
 	"os"
 	"strings"
 
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/panel"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -32,7 +33,12 @@ type setupParams struct {
 func Setup(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
-	params, err := collectSetupParams(cliCtx)
+	paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if err != nil {
+		return err
+	}
+
+	params, err := collectSetupParams(cliCtx, paths)
 	if err != nil {
 		return err
 	}
@@ -41,7 +47,17 @@ func Setup(cliCtx *cli.Context) error {
 		return err
 	}
 
-	configPath := ConfigPath()
+	// http-01 needs the ACME server to reach port 80, which an unprivileged process
+	// cannot bind, and there is no root to put a reverse proxy in front.
+	if paths.Scope == gameap.ScopeUser && params.challengeType == ChallengeHTTP01 {
+		return errors.New(
+			"the http-01 challenge requires port 80, which is not available with --scope=user; " +
+				"use --challenge=dns-01, forward /.well-known/acme-challenge/* from a " +
+				"system-level reverse proxy, or reinstall the panel with --scope=system",
+		)
+	}
+
+	configPath := paths.ConfigFilePath
 
 	lines, _, err := readEnv(configPath)
 	if err != nil {
@@ -57,13 +73,13 @@ func Setup(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to write config")
 	}
 
-	if !utils.IsCommandAvailable("gameap") {
-		return errors.WithMessage(panel.ErrGameAPNotInstalled, "gameap binary not found in PATH")
+	if err := panelpkg.CheckBinaryInstalled(paths); err != nil {
+		return err
 	}
 
 	log.Println("config.env updated. Restarting gameap ...")
 
-	if err := panel.Restart(ctx); err != nil {
+	if err := panel.Restart(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}
 
@@ -87,7 +103,7 @@ func Setup(cliCtx *cli.Context) error {
 	return nil
 }
 
-func collectSetupParams(cliCtx *cli.Context) (setupParams, error) {
+func collectSetupParams(cliCtx *cli.Context, paths gameap.PanelPaths) (setupParams, error) {
 	p := setupParams{
 		domains:       splitAndTrim(cliCtx.String("domains")),
 		email:         strings.TrimSpace(cliCtx.String("email")),
@@ -101,7 +117,7 @@ func collectSetupParams(cliCtx *cli.Context) (setupParams, error) {
 		return p, nil
 	}
 
-	configPath := ConfigPath()
+	configPath := paths.ConfigFilePath
 	log.Printf("Reading config from: %s\n", configPath)
 
 	_, values, err := readEnv(configPath)

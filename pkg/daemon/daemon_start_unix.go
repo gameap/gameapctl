@@ -13,9 +13,8 @@ import (
 	"syscall"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
-	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
@@ -62,46 +61,15 @@ func startDaemonSystemdScope(ctx context.Context, scope string) error {
 		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
 	}
 
-	if err := startSystemdService(ctx, paths.Scope); err != nil {
+	if err := systemd.Start(ctx, paths.Scope, daemonServiceName); err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
 
 	return nil
 }
 
-func startSystemdService(ctx context.Context, scope string) error {
-	if scope == gameap.ScopeUser {
-		return oscore.ExecCommand(ctx, "systemctl", "--user", "start", daemonServiceName)
-	}
-
-	return service.Start(ctx, daemonServiceName)
-}
-
 func daemonConfigureSystemd(ctx context.Context, paths gameap.DaemonPaths) error {
-	log.Println("Writing systemd service configuration to", paths.SystemdUnitPath)
-
-	if err := os.MkdirAll(paths.SystemdUnitDir, 0755); err != nil {
-		return errors.Wrap(err, "failed to create systemd unit directory")
-	}
-
-	//nolint:gosec // systemd unit files must be world-readable
-	if err := os.WriteFile(paths.SystemdUnitPath, []byte(renderDaemonUnit(paths)), 0644); err != nil {
-		return errors.WithMessage(err, "failed to write service configuration")
-	}
-
-	if err := runSystemctl(ctx, paths.Scope, "daemon-reload"); err != nil {
-		return errors.WithMessage(err, "failed to reload systemctl")
-	}
-
-	if err := runSystemctl(ctx, paths.Scope, "enable", daemonServiceName); err != nil {
-		return errors.WithMessage(err, "failed to enable gameap-daemon service")
-	}
-
-	if paths.Scope == gameap.ScopeUser {
-		enableLinger(ctx)
-	}
-
-	return nil
+	return systemd.InstallUnit(ctx, paths.Scope, paths.SystemdUnitPath, []byte(renderDaemonUnit(paths)))
 }
 
 func renderDaemonUnit(paths gameap.DaemonPaths) string {
@@ -128,22 +96,6 @@ func renderDaemonUnit(paths gameap.DaemonPaths) string {
 	}
 
 	return b.String()
-}
-
-func runSystemctl(ctx context.Context, scope string, args ...string) error {
-	return oscore.ExecCommand(ctx, "systemctl", buildSystemctlArgs(scope, args...)...)
-}
-
-func buildSystemctlArgs(scope string, args ...string) []string {
-	if scope == gameap.ScopeUser {
-		out := make([]string, 0, len(args)+1)
-		out = append(out, "--user")
-		out = append(out, args...)
-
-		return out
-	}
-
-	return args
 }
 
 type daemonAlreadyRunningError int

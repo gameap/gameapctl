@@ -3,8 +3,8 @@ package letsencrypt
 import (
 	"log"
 
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/panel"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -12,7 +12,12 @@ import (
 func Disable(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
-	configPath := ConfigPath()
+	paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if err != nil {
+		return err
+	}
+
+	configPath := paths.ConfigFilePath
 	log.Printf("Reading config from: %s\n", configPath)
 
 	lines, _, err := readEnv(configPath)
@@ -36,13 +41,13 @@ func Disable(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to write config")
 	}
 
-	if !utils.IsCommandAvailable("gameap") {
-		return errors.WithMessage(panel.ErrGameAPNotInstalled, "gameap binary not found in PATH")
+	if err := panelpkg.CheckBinaryInstalled(paths); err != nil {
+		return err
 	}
 
 	log.Println("ACME disabled in config.env. Restarting gameap ...")
 
-	if err := panel.Restart(ctx); err != nil {
+	if err := panel.Restart(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}
 

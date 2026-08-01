@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -19,6 +20,8 @@ import (
 const (
 	randomLength = 32
 )
+
+const panelBuildOutputDirMode = 0755
 
 func GenerateEncryptionKey(ctx context.Context, dir string) error {
 	fmt.Println("Generating encryption key ...")
@@ -248,14 +251,23 @@ func BuildStylesV4(_ context.Context, path string) error {
 	return nil
 }
 
-func BuildGoPanel(_ context.Context, path string) error {
+func BuildGoPanel(_ context.Context, path, outputPath string) error {
 	log.Println("Building go app...")
+
+	if outputPath == "" {
+		outputPath = gameap.DefaultBinaryPath
+	}
+
+	if dir := filepath.Dir(outputPath); dir != "" {
+		if err := os.MkdirAll(dir, panelBuildOutputDirMode); err != nil {
+			return errors.Wrapf(err, "failed to create output directory %s", dir)
+		}
+	}
 
 	cmdPath := filepath.Join(path, "cmd", "gameap")
 
-	//nolint:gosec // DefaultBinaryPath is a compile-time constant
-	cmd := exec.Command("go", "build", "-o", filepath.Dir(gameap.DefaultBinaryPath), ".")
-	log.Println('\n', cmd.String())
+	cmd := exec.Command("go", "build", "-o", outputPath, ".")
+	log.Println("\n", cmd.String())
 	cmd.Dir = cmdPath
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()

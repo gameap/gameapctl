@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -45,7 +46,12 @@ func Handle(cliCtx *cli.Context) error {
 		return errV3UpgradeNotSupported
 	}
 
-	currentMajorVersion, err := detectMajorVersion(ctx)
+	paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if err != nil {
+		return err
+	}
+
+	currentMajorVersion, err := detectMajorVersion(ctx, paths)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
 	}
@@ -74,7 +80,7 @@ func Handle(cliCtx *cli.Context) error {
 		return handleV3toV4(cliCtx)
 	}
 
-	return handleV4(cliCtx, norm.Full, norm.Prefix)
+	return handleV4(cliCtx, paths, norm.Full, norm.Prefix)
 }
 
 // detectMajorVersion detects the major version of the installed panel.
@@ -83,7 +89,7 @@ func Handle(cliCtx *cli.Context) error {
 // 2. v4-specific file system markers (config.env, gameap binary, data directory)
 // 3. v3-specific file system markers (artisan, .env files)
 // Returns the detected version or an error if version cannot be determined.
-func detectMajorVersion(ctx context.Context) (version, error) {
+func detectMajorVersion(ctx context.Context, paths gameap.PanelPaths) (version, error) {
 	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err == nil && state.Version != "" {
 		switch {
@@ -106,9 +112,9 @@ func detectMajorVersion(ctx context.Context) (version, error) {
 		}
 	}
 
-	if utils.IsFileExists(gameap.DefaultConfigFilePath) ||
-		utils.IsFileExists(gameap.DefaultBinaryPath) ||
-		utils.IsFileExists(gameap.DefaultDataPath) {
+	if utils.IsFileExists(paths.ConfigFilePath) ||
+		utils.IsFileExists(paths.BinaryPath) ||
+		utils.IsFileExists(paths.DataDir) {
 		return versionV4, nil
 	}
 
