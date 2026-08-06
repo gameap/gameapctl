@@ -55,7 +55,7 @@ are unaffected because the units use absolute paths, but to run `gameap` by name
 | No database server is installed; SQLite is the default | `apt`/`dnf` and system services require root. `--database=mysql\|postgres` is only accepted for an existing server, described by `--database-host`, `--database-name`, `--database-username` and `--database-password` (plus `--database-port` for a non-default port) |
 | System packages are not installed for the panel | It needs none of them: downloads, archive extraction, SQLite and password hashing are all in-process. Building with `--github` still needs `git`, `go` and `npm` preinstalled |
 | The daemon has prerequisites of its own | `curl` and `gpg` must be preinstalled (plus `tmux` or `docker` if the process manager is overridden to one of them). SteamCMD additionally needs the 32-bit libraries `lib32gcc`, `lib32stdc++6` and `lib32z1` on a 64-bit system; the installer only warns about all of these |
-| Let's Encrypt `http-01` is unavailable; use `--challenge=dns-01` | The challenge requires port 80 |
+| Let's Encrypt `http-01` is unavailable with `--scope=user`; use `--challenge=dns-01` | The challenge requires port 80; a system-scope install can use `http-01` when port 80 is publicly reachable |
 | The `gameap` system user and group are not created | Everything runs as the current user |
 
 ## Supported OS
