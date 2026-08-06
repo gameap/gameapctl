@@ -71,6 +71,10 @@ func startDaemonSystemdScope(ctx context.Context, scope string) error {
 
 func startSystemdService(ctx context.Context, scope string) error {
 	if scope == gameap.ScopeUser {
+		if err := runSystemctl(ctx, scope, "reset-failed", daemonServiceName); err != nil {
+			log.Println("Failed to reset gameap-daemon failed state:", err)
+		}
+
 		return oscore.ExecCommand(ctx, "systemctl", "--user", "start", daemonServiceName)
 	}
 

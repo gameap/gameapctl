@@ -36,10 +36,10 @@ func install(ctx context.Context, config InstallConfig) error {
 	return nil
 }
 
-func createSystemdUnit(ctx context.Context, config InstallConfig) error {
+func renderSystemdUnit(config InstallConfig) ([]byte, error) {
 	tmpl, err := template.New("systemd.unit").Parse(systemdUnitTemplate)
 	if err != nil {
-		return errors.WithMessage(err, "failed to parse systemd unit template")
+		return nil, errors.WithMessage(err, "failed to parse systemd unit template")
 	}
 
 	readWritePaths := fmt.Sprintf("%s %s", config.DataDirectory, config.FilesLocalBasePath)
@@ -58,11 +58,20 @@ func createSystemdUnit(ctx context.Context, config InstallConfig) error {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return errors.WithMessage(err, "failed to execute systemd unit template")
+		return nil, errors.WithMessage(err, "failed to execute systemd unit template")
+	}
+
+	return buf.Bytes(), nil
+}
+
+func createSystemdUnit(ctx context.Context, config InstallConfig) error {
+	unit, err := renderSystemdUnit(config)
+	if err != nil {
+		return err
 	}
 
 	unitPath := filepath.Join(defaultSystemdUnitDir, "gameap.service")
-	if err := os.WriteFile(unitPath, buf.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(unitPath, unit, 0600); err != nil {
 		return errors.WithMessage(err, "failed to write systemd unit file")
 	}
 

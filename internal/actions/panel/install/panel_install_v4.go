@@ -475,6 +475,8 @@ func HandleV4(cliCtx *cli.Context) error {
 		fmt.Println("  gameapctl panel start")
 		fmt.Println("  gameapctl panel change-password")
 		fmt.Println()
+		printRebootRecommendation()
+		fmt.Println()
 		fmt.Println("---------------------------------")
 
 		return nil
@@ -483,7 +485,7 @@ func HandleV4(cliCtx *cli.Context) error {
 	fmt.Println("Starting GameAP ...")
 	err = panel.Start(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to start GameAP")
+		return errors.WithMessage(err, "failed to start GameAP after installation")
 	}
 
 	err = waitForPanelHealthCheck(
@@ -557,9 +559,18 @@ func HandleV4(cliCtx *cli.Context) error {
 		fmt.Println("Host: http://" + state.Host + ":" + state.Port)
 	}
 	fmt.Println()
+	printRebootRecommendation()
+	fmt.Println()
 	fmt.Println("---------------------------------")
 
 	return nil
+}
+
+// The apt operations run with needrestart suspended (see aptEnv), so services
+// keep using pre-upgrade libraries until restarted; the operator decides when.
+func printRebootRecommendation() {
+	fmt.Println("If system packages were upgraded during installation,")
+	fmt.Println("a reboot is recommended to apply library updates.")
 }
 
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
@@ -1193,7 +1204,7 @@ func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (pane
 	defer removeConfigEnvVar(configPath, daemonSetupTokenEnv)
 
 	if err := panel.Start(ctx); err != nil {
-		return state, errors.WithMessage(err, "failed to start GameAP")
+		return state, errors.WithMessage(err, "failed to start GameAP for daemon enrollment")
 	}
 
 	defer func() {
@@ -1284,7 +1295,7 @@ func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelI
 	defer removeConfigEnvVar(configPath, daemonSetupKeyEnv)
 
 	if err := panel.Start(ctx); err != nil {
-		return state, errors.WithMessage(err, "failed to start GameAP")
+		return state, errors.WithMessage(err, "failed to start GameAP for daemon gRPC enrollment")
 	}
 
 	defer func() {

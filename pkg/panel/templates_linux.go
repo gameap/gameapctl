@@ -3,9 +3,11 @@ package panel
 const systemdUnitTemplate = `[Unit]
 Description=GameAP - Game Server Control Panel
 Documentation=https://docs.gameap.com
-After=network.target
+After=network.target network-online.target postgresql.service mysql.service mariadb.service
 Wants=network-online.target
 Requires=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -29,8 +31,6 @@ TimeoutStopSec=30
 # Restart policy
 Restart=always
 RestartSec=5
-StartLimitInterval=60
-StartLimitBurst=3
 
 # Environment configuration
 EnvironmentFile={{.EnvironmentFile}}
