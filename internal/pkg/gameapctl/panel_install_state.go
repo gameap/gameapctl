@@ -15,6 +15,7 @@ const (
 
 type PanelInstallState struct {
 	Version              string `json:"version"`
+	Scope                string `json:"scope,omitempty"`
 	Host                 string `json:"host"`
 	HostIP               string `json:"hostIp"`
 	Port                 string `json:"port"`

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -246,6 +245,16 @@ func Run(args []string) {
 								Usage: "Path to GameAP root directory",
 							},
 							&cli.StringFlag{
+								Name:    "scope",
+								EnvVars: []string{"SCOPE"},
+								Value:   "system",
+								Usage: "Installation scope: 'system' (default, requires root; unit in /etc/systemd/system, " +
+									"binary in /usr/bin, config in /etc/gameap, data in /var/lib/gameap) or 'user' " +
+									"(rootless: systemd user unit, binary in ~/.local/bin, config in ~/.config/gameap, " +
+									"data in ~/.local/share/gameap; Linux only). In user scope ports below 1024 and " +
+									"automatic database server installation are unavailable.",
+							},
+							&cli.StringFlag{
 								Name: "host",
 							},
 							&cli.StringFlag{
@@ -306,27 +315,40 @@ func Run(args []string) {
 						Name:   "start",
 						Usage:  "Start GameAP",
 						Action: panelstart.Handle,
+						Flags: []cli.Flag{
+							panelScopeFlag(),
+						},
 					},
 					{
 						Name:   "stop",
 						Usage:  "Stop GameAP",
 						Action: panelstop.Handle,
+						Flags: []cli.Flag{
+							panelScopeFlag(),
+						},
 					},
 					{
 						Name:   "restart",
 						Usage:  "Restart GameAP",
 						Action: panelrestart.Handle,
+						Flags: []cli.Flag{
+							panelScopeFlag(),
+						},
 					},
 					{
 						Name:   "status",
 						Usage:  "GameAP Status",
 						Action: panelstatus.Handle,
+						Flags: []cli.Flag{
+							panelScopeFlag(),
+						},
 					},
 					{
 						Name:    "upgrade",
 						Aliases: []string{"update", "u"},
 						Usage:   "Update panel to a new version",
 						Flags: []cli.Flag{
+							panelScopeFlag(),
 							&cli.StringFlag{
 								Name: "version",
 								Usage: "Upgrade to specific GameAP release tag (e.g. 4.2.0, 4.2.0beta1). " +
@@ -357,6 +379,7 @@ func Run(args []string) {
 						Name:  "uninstall",
 						Usage: "Uninstall GameAP panel. ",
 						Flags: []cli.Flag{
+							panelScopeFlag(),
 							&cli.BoolFlag{
 								Name:  "with-daemon",
 								Usage: "Uninstall Daemon",
@@ -385,6 +408,9 @@ func Run(args []string) {
 						Description: "Change password for a user in GameAP v4 database",
 						Action:      panelchangepassword.Handle,
 						ArgsUsage:   "<username> [password]",
+						Flags: []cli.Flag{
+							panelScopeFlag(),
+						},
 					},
 					{
 						Name:  "letsencrypt",
@@ -403,6 +429,7 @@ func Run(args []string) {
 									"supports wildcard domains.",
 								Action: panelletsencrypt.Setup,
 								Flags: []cli.Flag{
+									panelScopeFlag(),
 									&cli.StringFlag{
 										Name:  "challenge",
 										Usage: "Challenge type: http-01 (default) or dns-01",
@@ -439,6 +466,7 @@ func Run(args []string) {
 								Description: "Removes ACME_* keys from config.env and restarts gameap service.",
 								Action:      panelletsencrypt.Disable,
 								Flags: []cli.Flag{
+									panelScopeFlag(),
 									&cli.BoolFlag{
 										Name:  "purge-certs",
 										Usage: "Also delete stored certificate material (not yet implemented)",
@@ -533,38 +561,90 @@ func Run(args []string) {
 	}
 }
 
+// panelScopeFlag overrides the scope auto-detected from the install state, for
+// installations whose state file was lost or that belong to another user.
+func panelScopeFlag() *cli.StringFlag {
+	return &cli.StringFlag{
+		Name:  "scope",
+		Usage: "Override the installation scope (system|user). Default: auto-detected from the install state.",
+	}
+}
+
 func initLogFile(command string) string {
 	logname := fmt.Sprintf("%s_%s.log", command, time.Now().Format("2006-01-02_15-04-05.000"))
 
-	logpath := ""
-
-	if runtime.GOOS == "windows" {
-		logpath = "C:\\gameap\\logs\\"
-	} else {
-		logpath = "/var/log/gameapctl/"
-	}
-
-	if _, err := os.Stat(logpath); errors.Is(err, fs.ErrNotExist) {
-		err = os.Mkdir(logpath, 0755)
-		if err != nil {
-			logpath, err = os.MkdirTemp("", "gameapctl-log")
-			if err != nil {
-				log.Fatalf("Failed to init log: %s", err)
-			}
+	for _, dir := range logDirCandidates() {
+		if logfile, ok := setLogFile(dir, logname); ok {
+			return logfile
 		}
 	}
 
-	f, err := os.OpenFile(
-		filepath.Clean(logpath+string(os.PathSeparator)+logname),
-		os.O_RDWR|os.O_CREATE|os.O_APPEND,
-		0666,
-	)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
+	// A temporary directory is created only after every fixed location failed,
+	// so a successful run does not leave an unused one behind.
+	if tmpDir, err := os.MkdirTemp("", "gameapctl-log"); err == nil {
+		if logfile, ok := setLogFile(tmpDir, logname); ok {
+			return logfile
+		}
 	}
+
+	fmt.Println("Warning: failed to open a log file, logging to stderr")
+
+	return ""
+}
+
+func setLogFile(dir, logname string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+
+	logfile := filepath.Clean(filepath.Join(dir, logname))
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", false
+	}
+
+	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return "", false
+	}
+
 	log.SetOutput(f)
 
-	return filepath.Clean(logpath + string(os.PathSeparator) + logname)
+	return logfile, true
+}
+
+// logDirCandidates returns fixed log directories in preference order. An
+// unprivileged user cannot write to the system-wide directory, so a state
+// directory under $HOME is tried first.
+func logDirCandidates() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"C:\\gameap\\logs"}
+	}
+
+	const systemLogDir = "/var/log/gameapctl"
+
+	if os.Geteuid() == 0 {
+		return []string{systemLogDir}
+	}
+
+	if stateDir := userStateDir(); stateDir != "" {
+		return []string{filepath.Join(stateDir, "gameapctl"), systemLogDir}
+	}
+
+	return []string{systemLogDir}
+}
+
+func userStateDir() string {
+	if stateDir := os.Getenv("XDG_STATE_HOME"); stateDir != "" {
+		return stateDir
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	return filepath.Join(homeDir, ".local", "state")
 }
 
 func selfUpdateFlags() []cli.Flag {

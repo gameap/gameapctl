@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/panel"
-	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -14,13 +14,18 @@ import (
 func Handle(cliCtx *cli.Context) error {
 	ctx := cliCtx.Context
 
-	if !utils.IsCommandAvailable("gameap") {
-		return errors.WithMessage(panel.ErrGameAPNotInstalled, "gameap binary not found in PATH")
+	paths, err := panelpkg.ResolveScope(ctx, cliCtx.String("scope"))
+	if err != nil {
+		return err
+	}
+
+	if err := panelpkg.CheckBinaryInstalled(paths); err != nil {
+		return err
 	}
 
 	fmt.Println("Restarting GameAP ...")
 
-	err := panel.Restart(cliCtx.Context)
+	err = panel.Restart(ctx, panel.Options{Scope: paths.Scope})
 	if err != nil {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}

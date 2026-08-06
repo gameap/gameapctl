@@ -20,9 +20,10 @@ import (
 
 const (
 	defaultServicesConfigPath = "C:\\gameap\\services"
+	daemonServiceName         = "GameAP Daemon"
 )
 
-func uninstallGameAP(ctx context.Context, removeData bool) error {
+func uninstallGameAP(ctx context.Context, _ gameap.PanelPaths, removeData bool) error {
 	serviceName := "GameAP"
 
 	if service.IsExists(ctx, serviceName) {
@@ -54,7 +55,7 @@ func uninstallGameAP(ctx context.Context, removeData bool) error {
 }
 
 //nolint:nestif
-func uninstallDaemon(ctx context.Context, removeData bool) error {
+func uninstallDaemon(ctx context.Context, _ gameap.DaemonPaths, removeData bool) error {
 	if service.IsExists(ctx, daemonServiceName) {
 		fmt.Printf("Deleting service: %s\n", daemonServiceName)
 		if err := oscore.ExecCommand(ctx, "sc", "delete", daemonServiceName); err != nil {
@@ -107,8 +108,8 @@ func uninstallDaemon(ctx context.Context, removeData bool) error {
 	return nil
 }
 
-func removeData(_ context.Context) error {
-	state, err := gameapctl.LoadPanelInstallState(context.Background())
+func removeData(ctx context.Context, _ gameap.PanelPaths) error {
+	state, err := gameapctl.LoadPanelInstallState(ctx)
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to load panel install state"))
 	}

@@ -75,24 +75,12 @@ func SetupGameAPFromGithubV4(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
 	branch string,
+	outputPath string,
+	userScope bool,
 ) error {
-	var err error
-
-	fmt.Println("Installing git ...")
-	if err = pm.Install(ctx, packagemanager.GitPackage); err != nil {
-		return errors.WithMessage(err, "failed to install git")
+	if err := ensureGithubBuildToolsV4(ctx, pm, userScope); err != nil {
+		return err
 	}
-
-	fmt.Println("Installing nodejs ...")
-	if err = pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
-		return errors.WithMessage(err, "failed to install nodejs")
-	}
-
-	fmt.Println("Installing golang ...")
-	if err = pm.Install(ctx, packagemanager.GOPackage); err != nil {
-		return errors.WithMessage(err, "failed to install golang")
-	}
-	packagemanager.UpdateEnvPath(ctx)
 
 	path, err := os.MkdirTemp("", "gameapctl")
 	if err != nil {
@@ -119,10 +107,44 @@ func SetupGameAPFromGithubV4(
 	}
 
 	fmt.Println("Building gameap ...")
-	err = BuildGoPanel(ctx, path)
+	err = BuildGoPanel(ctx, path, outputPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to build game ap")
 	}
+
+	return nil
+}
+
+func ensureGithubBuildToolsV4(ctx context.Context, pm packagemanager.PackageManager, userScope bool) error {
+	if userScope {
+		for _, tool := range []string{"git", "go", "npm"} {
+			if !utils.IsCommandAvailable(tool) {
+				return errors.Errorf(
+					"%s is required to build GameAP from GitHub in user scope; "+
+						"please install it manually (e.g. via sudo) and retry",
+					tool,
+				)
+			}
+		}
+
+		return nil
+	}
+
+	fmt.Println("Installing git ...")
+	if err := pm.Install(ctx, packagemanager.GitPackage); err != nil {
+		return errors.WithMessage(err, "failed to install git")
+	}
+
+	fmt.Println("Installing nodejs ...")
+	if err := pm.Install(ctx, packagemanager.NodeJSPackage); err != nil {
+		return errors.WithMessage(err, "failed to install nodejs")
+	}
+
+	fmt.Println("Installing golang ...")
+	if err := pm.Install(ctx, packagemanager.GOPackage); err != nil {
+		return errors.WithMessage(err, "failed to install golang")
+	}
+	packagemanager.UpdateEnvPath(ctx)
 
 	return nil
 }

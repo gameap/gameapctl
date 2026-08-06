@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -40,12 +41,15 @@ type panelInstallStateV4 struct {
 	NonInteractive bool
 	SkipWarnings   bool
 
+	Scope string
+
 	HTTPS            bool
 	Host             string
 	HostIP           string
 	Port             string
 	ConfigDirectory  string
 	DataDirectory    string
+	BinaryPath       string
 	AdminPassword    string
 	Database         string
 	ExistingDatabase bool
@@ -82,6 +86,19 @@ func restorePreviousStateV4(ctx context.Context, state panelInstallStateV4) pane
 	}
 
 	if !isPrevStateV4(prevState.Version) {
+		return state
+	}
+
+	// Credentials and secrets belong to the scope they were created in: config.env
+	// of the other scope is a different file, so reusing them would silently
+	// regenerate ENCRYPTION_KEY/AUTH_SECRET against an existing database.
+	if gameap.ScopeOrDefault(prevState.Scope) != gameap.ScopeOrDefault(state.Scope) {
+		fmt.Printf(
+			"Previous installation used the %s scope, now installing with the %s scope. "+
+				"Previous credentials will not be reused.\n",
+			gameap.ScopeOrDefault(prevState.Scope), gameap.ScopeOrDefault(state.Scope),
+		)
+
 		return state
 	}
 
@@ -124,6 +141,12 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	state.NonInteractive = cliCtx.Bool("non-interactive")
 	state.SkipWarnings = cliCtx.Bool("skip-warnings")
 
+	scope, err := gameap.ResolveScope(cliCtx.String("scope"))
+	if err != nil {
+		return state, err
+	}
+	state.Scope = scope
+
 	state.Host = cliCtx.String("host")
 	state.Port = cliCtx.String("port")
 	state.Database = cliCtx.String("database")
@@ -155,9 +178,9 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 			return state, errors.New("--version is mutually exclusive with --github, --branch and --develop")
 		}
 
-		norm, err := releasefinder.NormalizeTag(state.VersionInput)
-		if err != nil {
-			return state, err
+		norm, normErr := releasefinder.NormalizeTag(state.VersionInput)
+		if normErr != nil {
+			return state, normErr
 		}
 		if releasefinder.IsMajorV3(norm) {
 			return state, errV3InstallNotSupported
@@ -171,10 +194,52 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 		state.Branch = "main"
 	}
 
-	state.ConfigDirectory = filepath.Dir(gameap.DefaultConfigFilePath)
-	state.DataDirectory = gameap.DefaultDataPath
+	paths, err := gameap.PanelPathsForScope(state.Scope)
+	if err != nil {
+		return state, errors.WithMessage(err, "failed to resolve panel paths for scope")
+	}
+	state.ConfigDirectory = paths.ConfigDir
+	state.DataDirectory = paths.DataDir
+	state.BinaryPath = paths.BinaryPath
+
+	if state.Port == "" {
+		state.Port = defaultPortForScope(state.Scope)
+	}
 
 	return state, nil
+}
+
+// defaultPortForScope returns 8025 in user scope: an unprivileged process cannot
+// bind port 80 and there is no way to grant it CAP_NET_BIND_SERVICE.
+func defaultPortForScope(scope string) string {
+	if scope == gameap.ScopeUser {
+		return "8025"
+	}
+
+	return "80"
+}
+
+// validateDatabaseForScope rejects the database types whose installation requires
+// root. Connecting to an already running server stays available in every scope.
+func validateDatabaseForScope(state panelInstallStateV4) error {
+	if state.Scope != gameap.ScopeUser {
+		return nil
+	}
+
+	if state.Database != postgresDatabase && state.Database != mysqlDatabase {
+		return nil
+	}
+
+	if state.ExistingDatabase {
+		return nil
+	}
+
+	return errors.Errorf(
+		"--database=%s installs a database server, which is not possible with --scope=user; "+
+			"use --database=sqlite, connect to an existing server with --database-host/--database-port/"+
+			"--database-name/--database-username/--database-password, or install with --scope=system",
+		state.Database,
+	)
 }
 
 func isPrevStateV4(version string) bool {
@@ -197,6 +262,10 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to load panel install state")
 	}
 
+	if err = panel.CheckScope(state.Scope); err != nil {
+		return err
+	}
+
 	fmt.Printf(
 		"Detected operating system as %s/%s (%s).\n",
 		state.OSInfo.Distribution,
@@ -215,7 +284,7 @@ func HandleV4(cliCtx *cli.Context) error {
 		if state.Database == "" {
 			needToAsk["database"] = struct{}{}
 		}
-		answers, err := askUserV4(ctx, needToAsk)
+		answers, err := askUserV4(ctx, needToAsk, state.Scope)
 		if err != nil {
 			return err
 		}
@@ -240,11 +309,20 @@ func HandleV4(cliCtx *cli.Context) error {
 	}
 
 	if state.Database == "" {
-		return errEmptyDatabase
+		if state.Scope != gameap.ScopeUser {
+			return errEmptyDatabase
+		}
+
+		fmt.Println("No database selected, using SQLite ...")
+		state.Database = sqliteDatabase
+	}
+
+	if err = validateDatabaseForScope(state); err != nil {
+		return err
 	}
 
 	if state.Port == "" {
-		state.Port = "80"
+		state.Port = defaultPortForScope(state.Scope)
 	}
 
 	state, err = filterAndCheckHostV4(state)
@@ -282,95 +360,17 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check selinux")
 	}
 
-	fmt.Println("Checking for updates ...")
-	if err = pm.CheckForUpdates(ctx); err != nil {
-		return errors.WithMessage(err, "failed to check for updates")
-	}
-
-	//nolint:nestif
-	if state.OSInfo.IsLinux() {
-		fmt.Println("Checking for ca-certificates ...")
-
-		var updateCACommand string
-
-		switch {
-		case utils.IsCommandAvailable("update-ca-certificates"):
-			// Debian, Ubuntu, etc.
-			updateCACommand = "update-ca-certificates"
-		case utils.IsCommandAvailable("update-ca-trust"):
-			// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
-			updateCACommand = "update-ca-trust"
-		case utils.IsCommandAvailable("trust"):
-			// openSUSE, SLES, etc.
-			updateCACommand = "trust"
-		default:
-			return errors.New("no known command found to update ca-certificates")
+	if state.Scope == gameap.ScopeUser {
+		// Nothing the panel needs in user scope comes from a system package: downloads,
+		// archive extraction, SQLite and password hashing are all in-process.
+		fmt.Println("Skipping system package installation in user scope ...")
+	} else {
+		rerunRequired, depErr := installSystemDependenciesV4(ctx, pm, state)
+		if depErr != nil {
+			return depErr
 		}
-
-		if !utils.IsCommandAvailable(updateCACommand) {
-			fmt.Println("Installing ca-certificates ...")
-			if err = pm.Install(ctx, packagemanager.CACertificatesPackage); err != nil {
-				return errors.WithMessage(err, "failed to install curl")
-			}
-
-			switch {
-			case utils.IsCommandAvailable("update-ca-certificates"):
-				// Debian, Ubuntu, etc.
-				err = oscore.ExecCommand(ctx, "update-ca-certificates")
-			case utils.IsCommandAvailable("update-ca-trust"):
-				// RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
-				err = oscore.ExecCommand(ctx, "update-ca-trust", "extract")
-			case utils.IsCommandAvailable("trust"):
-				// openSUSE, SLES, etc.
-				err = oscore.ExecCommand(ctx, "trust", "extract-compat")
-			default:
-				return errors.New("no known command found to update ca-certificates")
-			}
-			if err != nil {
-				return errors.WithMessage(err, "failed to update ca-certificates")
-			}
-
-			// Without reloading all certificates may not be applied.
-			// I had an error: `failed to install gameap: failed to install GameAP v4:
-			//   failed to download binaries: failed to find release:
-			//   failed to get releases: Get "https://api.github.com/repos/gameap/gameap/releases":
-			//   tls: failed to verify certificate: x509: certificate signed by unknown authority`
-			// I think the problem is that the current process still uses old certificates.
-			// I tried to time.Sleep(10 * time.Second) but it did not help.
-			// I didn't delve too deeply into the problem, so perhaps it's possible to avoid reloading.
-
-			// So now better to re-run the installer.
-
-			fmt.Println()
-			fmt.Println("Re-run the installer again to apply updated certificates:")
-
-			fmt.Println(cmdLineFromPanelInstallStateV4(state))
-
+		if rerunRequired {
 			return nil
-		}
-	}
-
-	fmt.Println("Checking for curl ...")
-	if !utils.IsCommandAvailable("curl") {
-		fmt.Println("Installing curl ...")
-		if err = pm.Install(ctx, packagemanager.CurlPackage); err != nil {
-			return errors.WithMessage(err, "failed to install curl")
-		}
-	}
-
-	fmt.Println("Checking for gpg ...")
-	if !utils.IsCommandAvailable("gpg") {
-		fmt.Println("Installing gpg ...")
-		if err = pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
-			return errors.WithMessage(err, "failed to install gpg")
-		}
-	}
-
-	fmt.Println("Checking for tar ...")
-	if !utils.IsCommandAvailable("tar") {
-		fmt.Println("Installing tar ...")
-		if err = pm.Install(ctx, packagemanager.TarPackage); err != nil {
-			return errors.WithMessage(err, "failed to install tar")
 		}
 	}
 
@@ -475,7 +475,7 @@ func HandleV4(cliCtx *cli.Context) error {
 		fmt.Println("  gameapctl panel start")
 		fmt.Println("  gameapctl panel change-password")
 		fmt.Println()
-		printRebootRecommendation()
+		printRebootRecommendation(state.Scope)
 		fmt.Println()
 		fmt.Println("---------------------------------")
 
@@ -483,7 +483,7 @@ func HandleV4(cliCtx *cli.Context) error {
 	}
 
 	fmt.Println("Starting GameAP ...")
-	err = panel.Start(ctx)
+	err = panel.Start(ctx, panel.Options{Scope: state.Scope})
 	if err != nil {
 		return errors.WithMessage(err, "failed to start GameAP after installation")
 	}
@@ -506,7 +506,7 @@ func HandleV4(cliCtx *cli.Context) error {
 	saveStateCheckpointV4(cliCtx.Context, state)
 
 	if daemonInstalled {
-		err = daemon.Start(ctx)
+		err = daemon.Start(ctx, daemon.Options{Scope: state.Scope})
 		if err != nil {
 			fmt.Println("Failed to start daemon: ", err.Error())
 			log.Println(errors.WithMessage(err, "failed to start GameAP daemon"))
@@ -559,16 +559,188 @@ func HandleV4(cliCtx *cli.Context) error {
 		fmt.Println("Host: http://" + state.Host + ":" + state.Port)
 	}
 	fmt.Println()
-	printRebootRecommendation()
+
+	printUserScopeSummaryV4(ctx, state)
+
+	printRebootRecommendation(state.Scope)
 	fmt.Println()
 	fmt.Println("---------------------------------")
 
 	return nil
 }
 
+func printUserScopeSummaryV4(ctx context.Context, state panelInstallStateV4) {
+	if state.Scope != gameap.ScopeUser {
+		return
+	}
+
+	fmt.Println("Installation scope: user (rootless)")
+	fmt.Println()
+	fmt.Println("Service management:")
+	fmt.Println("  systemctl --user status gameap")
+	fmt.Println("  systemctl --user restart gameap")
+	fmt.Println("  journalctl --user -u gameap -f")
+	fmt.Println()
+
+	if !lingerEnabled(ctx) {
+		fmt.Println("Lingering is disabled: the panel will stop when you log out and will not start at boot.")
+		fmt.Println("  sudo loginctl enable-linger $USER")
+		fmt.Println()
+	}
+
+	fmt.Println("GameAP binary:", state.BinaryPath)
+	if !binaryDirInPath(state.BinaryPath) {
+		fmt.Printf("  %s is not in PATH, add it with: export PATH=%q:$PATH\n",
+			filepath.Dir(state.BinaryPath), filepath.Dir(state.BinaryPath))
+	}
+	fmt.Println()
+	fmt.Println("Ports below 1024 (80/443) cannot be used in user scope.")
+	fmt.Println("Let's Encrypt http-01 is unavailable, use: gameapctl panel letsencrypt setup --challenge=dns-01")
+	fmt.Println()
+}
+
+func lingerEnabled(ctx context.Context) bool {
+	u, err := user.Current()
+	if err != nil {
+		return false
+	}
+
+	out, err := oscore.ExecCommandWithOutput(ctx, "loginctl", "show-user", u.Username, "--property=Linger")
+	if err != nil {
+		return false
+	}
+
+	return strings.Contains(out, "Linger=yes")
+}
+
+func binaryDirInPath(binaryPath string) bool {
+	binDir := filepath.Dir(binaryPath)
+
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == binDir {
+			return true
+		}
+	}
+
+	return false
+}
+
+// updateCACertificatesCommand returns the distro command that refreshes the CA
+// trust store, or an empty string when the trust store tooling is not installed.
+func updateCACertificatesCommand() string {
+	for _, command := range []string{
+		"update-ca-certificates", // Debian, Ubuntu, etc.
+		"update-ca-trust",        // RHEL, CentOS, AlmaLinux, RockyLinux, Fedora, etc.
+		"trust",                  // openSUSE, SLES, etc.
+	} {
+		if utils.IsCommandAvailable(command) {
+			return command
+		}
+	}
+
+	return ""
+}
+
+func refreshCATrustStore(ctx context.Context) error {
+	var err error
+
+	switch updateCACertificatesCommand() {
+	case "update-ca-certificates":
+		err = oscore.ExecCommand(ctx, "update-ca-certificates")
+	case "update-ca-trust":
+		err = oscore.ExecCommand(ctx, "update-ca-trust", "extract")
+	case "trust":
+		err = oscore.ExecCommand(ctx, "trust", "extract-compat")
+	default:
+		return errors.New("no known command found to update ca-certificates")
+	}
+
+	if err != nil {
+		return errors.WithMessage(err, "failed to update ca-certificates")
+	}
+
+	return nil
+}
+
+// installSystemDependenciesV4 installs the distro packages the installer relies on.
+// Every step here needs root. It reports whether the installer has to be re-run to
+// pick up freshly installed CA certificates.
+func installSystemDependenciesV4(
+	ctx context.Context,
+	pm packagemanager.PackageManager,
+	state panelInstallStateV4,
+) (bool, error) {
+	fmt.Println("Checking for updates ...")
+	if err := pm.CheckForUpdates(ctx); err != nil {
+		return false, errors.WithMessage(err, "failed to check for updates")
+	}
+
+	if state.OSInfo.IsLinux() && updateCACertificatesCommand() == "" {
+		fmt.Println("Checking for ca-certificates ...")
+		fmt.Println("Installing ca-certificates ...")
+
+		if err := pm.Install(ctx, packagemanager.CACertificatesPackage); err != nil {
+			return false, errors.WithMessage(err, "failed to install ca-certificates")
+		}
+
+		if err := refreshCATrustStore(ctx); err != nil {
+			return false, err
+		}
+
+		// Without reloading all certificates may not be applied.
+		// I had an error: `failed to install gameap: failed to install GameAP v4:
+		//   failed to download binaries: failed to find release:
+		//   failed to get releases: Get "https://api.github.com/repos/gameap/gameap/releases":
+		//   tls: failed to verify certificate: x509: certificate signed by unknown authority`
+		// I think the problem is that the current process still uses old certificates.
+		// I tried to time.Sleep(10 * time.Second) but it did not help.
+		// I didn't delve too deeply into the problem, so perhaps it's possible to avoid reloading.
+
+		// So now better to re-run the installer.
+
+		fmt.Println()
+		fmt.Println("Re-run the installer again to apply updated certificates:")
+
+		fmt.Println(cmdLineFromPanelInstallStateV4(state))
+
+		return true, nil
+	}
+
+	fmt.Println("Checking for curl ...")
+	if !utils.IsCommandAvailable("curl") {
+		fmt.Println("Installing curl ...")
+		if err := pm.Install(ctx, packagemanager.CurlPackage); err != nil {
+			return false, errors.WithMessage(err, "failed to install curl")
+		}
+	}
+
+	fmt.Println("Checking for gpg ...")
+	if !utils.IsCommandAvailable("gpg") {
+		fmt.Println("Installing gpg ...")
+		if err := pm.Install(ctx, packagemanager.GnuPGPackage); err != nil {
+			return false, errors.WithMessage(err, "failed to install gpg")
+		}
+	}
+
+	fmt.Println("Checking for tar ...")
+	if !utils.IsCommandAvailable("tar") {
+		fmt.Println("Installing tar ...")
+		if err := pm.Install(ctx, packagemanager.TarPackage); err != nil {
+			return false, errors.WithMessage(err, "failed to install tar")
+		}
+	}
+
+	return false, nil
+}
+
 // The apt operations run with needrestart suspended (see aptEnv), so services
 // keep using pre-upgrade libraries until restarted; the operator decides when.
-func printRebootRecommendation() {
+// User scope installs no system packages, so there is nothing to advise there.
+func printRebootRecommendation(scope string) {
+	if scope == gameap.ScopeUser {
+		return
+	}
+
 	fmt.Println("If system packages were upgraded during installation,")
 	fmt.Println("a reboot is recommended to apply library updates.")
 }
@@ -609,7 +781,9 @@ func installGameAPFromGithubV4(
 		state.GRPCPort = gameap.DefaultGRPCPort
 	}
 
-	if err := panelpkg.SetupGameAPFromGithubV4(ctx, pm, state.Branch); err != nil {
+	if err := panelpkg.SetupGameAPFromGithubV4(
+		ctx, pm, state.Branch, state.BinaryPath, state.Scope == gameap.ScopeUser,
+	); err != nil {
 		return state, errors.WithMessage(err, "failed to setup GameAP from github")
 	}
 
@@ -662,8 +836,10 @@ func buildDatabaseURLV4(state panelInstallStateV4) string {
 
 func buildPanelInstallConfigV4(state panelInstallStateV4) panel.InstallConfig {
 	return panel.InstallConfig{
+		Scope:           state.Scope,
 		ConfigDirectory: state.ConfigDirectory,
 		DataDirectory:   state.DataDirectory,
+		BinaryPath:      state.BinaryPath,
 		HTTPHost:        state.Host,
 		HTTPPort:        state.Port,
 		DatabaseDriver:  state.Database,
@@ -1203,12 +1379,12 @@ func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (pane
 	}
 	defer removeConfigEnvVar(configPath, daemonSetupTokenEnv)
 
-	if err := panel.Start(ctx); err != nil {
+	if err := panel.Start(ctx, panel.Options{Scope: state.Scope}); err != nil {
 		return state, errors.WithMessage(err, "failed to start GameAP for daemon enrollment")
 	}
 
 	defer func() {
-		if err := panel.Stop(ctx); err != nil {
+		if err := panel.Stop(ctx, panel.Options{Scope: state.Scope}); err != nil {
 			log.Println(errors.WithMessage(err, "failed to stop GameAP"))
 		}
 	}()
@@ -1265,6 +1441,7 @@ func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (pane
 	err = daemoninstall.Install(ctx, daemoninstall.InstallOptions{
 		Host:  host,
 		Token: createToken,
+		Scope: state.Scope,
 	})
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon")
@@ -1294,12 +1471,12 @@ func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelI
 	}
 	defer removeConfigEnvVar(configPath, daemonSetupKeyEnv)
 
-	if err := panel.Start(ctx); err != nil {
+	if err := panel.Start(ctx, panel.Options{Scope: state.Scope}); err != nil {
 		return state, errors.WithMessage(err, "failed to start GameAP for daemon gRPC enrollment")
 	}
 
 	defer func() {
-		if err := panel.Stop(ctx); err != nil {
+		if err := panel.Stop(ctx, panel.Options{Scope: state.Scope}); err != nil {
 			log.Println(errors.WithMessage(err, "failed to stop GameAP"))
 		}
 	}()
@@ -1320,6 +1497,7 @@ func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelI
 
 	if err := daemoninstall.Install(ctx, daemoninstall.InstallOptions{
 		ConnectURL: connectURL,
+		Scope:      state.Scope,
 	}); err != nil {
 		return state, errors.WithMessage(err, "failed to install daemon via gRPC enrollment")
 	}
@@ -1450,7 +1628,10 @@ func updateAdminPasswordv4(ctx context.Context, state panelInstallStateV4) (pane
 		}
 	}
 
-	err = changepassword.ChangePassword(ctx, "admin", state.AdminPassword)
+	err = changepassword.ChangePassword(
+		ctx, "admin", state.AdminPassword,
+		changepassword.Options{ConfigPath: filepath.Join(state.ConfigDirectory, "config.env")},
+	)
 	if err != nil {
 		return state, errors.WithMessage(err, "failed to change admin password")
 	}
@@ -1469,6 +1650,9 @@ func cmdLineFromPanelInstallStateV4(state panelInstallStateV4) string {
 	}
 
 	sb.WriteString("panel install")
+	if state.Scope == gameap.ScopeUser {
+		sb.WriteString(" --scope=user")
+	}
 	if state.VersionInput != "" {
 		sb.WriteString(" --version=")
 		sb.WriteString(state.VersionInput)
@@ -1519,6 +1703,7 @@ func savePanelInstallationDetailsV4(ctx context.Context, state panelInstallState
 
 	return gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
 		Version:              version,
+		Scope:                state.Scope,
 		Host:                 state.Host,
 		HostIP:               state.HostIP,
 		Port:                 state.Port,

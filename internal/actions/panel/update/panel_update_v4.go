@@ -30,7 +30,7 @@ const (
 	healthCheckDelay   = 2 * time.Second
 )
 
-func handleV4(cliCtx *cli.Context, tag, tagPrefix string) error {
+func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix string) error {
 	ctx := cliCtx.Context
 
 	fromGithub := cliCtx.Bool("github")
@@ -55,7 +55,7 @@ func handleV4(cliCtx *cli.Context, tag, tagPrefix string) error {
 	}
 
 	if fromGithub {
-		return handleV4FromGithub(ctx, branch)
+		return handleV4FromGithub(ctx, paths, branch)
 	}
 
 	log.Println("Downloading GameAP release...")
@@ -70,23 +70,23 @@ func handleV4(cliCtx *cli.Context, tag, tagPrefix string) error {
 	}()
 
 	log.Println("Stopping GameAP...")
-	if err := panel.Stop(ctx); err != nil {
+	if err := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to stop GameAP")
 	}
 
 	log.Println("Backing up and replacing binary...")
-	backupPath := gameap.DefaultBinaryPath + backupSuffix
-	if err := backupAndReplace(downloadedBinary, gameap.DefaultBinaryPath, backupPath); err != nil {
+	backupPath := paths.BinaryPath + backupSuffix
+	if err := backupAndReplace(downloadedBinary, paths.BinaryPath, backupPath); err != nil {
 		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
 	log.Println("Starting GameAP...")
-	if err := panel.Start(ctx); err != nil {
+	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to start GameAP")
 	}
 
 	log.Println("Checking if new version is working...")
-	httpHost, httpPort, httpsEnabled, err := readConfigEnv()
+	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
 	if err != nil {
 		log.Printf("Warning: failed to read config.env: %v\n", err)
 
@@ -99,15 +99,15 @@ func handleV4(cliCtx *cli.Context, tag, tagPrefix string) error {
 		log.Printf("Health check failed: %v\n", err)
 		log.Println("Rolling back to previous version...")
 
-		if stopErr := panel.Stop(ctx); stopErr != nil {
+		if stopErr := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); stopErr != nil {
 			log.Printf("Failed to stop GameAP during rollback: %v\n", stopErr)
 		}
 
-		if err := restoreBackupV4(backupPath, gameap.DefaultBinaryPath); err != nil {
+		if err := restoreBackupV4(backupPath, paths.BinaryPath); err != nil {
 			return errors.WithMessage(err, "failed to restore backup")
 		}
 
-		if startErr := panel.Start(ctx); startErr != nil {
+		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
 			return errors.WithMessage(startErr, "failed to start GameAP after rollback")
 		}
 
@@ -240,9 +240,7 @@ func restoreBackupV4(backupPath, currentBinary string) error {
 }
 
 // readConfigEnv reads HTTP_HOST and HTTP_PORT from config.env.
-func readConfigEnv() (host, port string, httpsEnabled bool, err error) {
-	configPath := gameap.DefaultConfigFilePath
-
+func readConfigEnv(configPath string) (host, port string, httpsEnabled bool, err error) {
 	file, err := os.Open(configPath)
 	if err != nil {
 		return "", "", false, errors.WithMessage(err, "failed to open config file")
@@ -318,7 +316,7 @@ func checkHealth(ctx context.Context, host, port string, httpsEnabled bool) erro
 	return errors.New("health check failed after multiple retries")
 }
 
-func handleV4FromGithub(ctx context.Context, branch string) error {
+func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch string) error {
 	log.Printf("Upgrading GameAP from GitHub (branch: %s)...\n", branch)
 
 	pm, err := packagemanager.Load(ctx)
@@ -326,31 +324,33 @@ func handleV4FromGithub(ctx context.Context, branch string) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	backupPath := gameap.DefaultBinaryPath + backupSuffix
-	if _, statErr := os.Stat(gameap.DefaultBinaryPath); statErr == nil {
+	backupPath := paths.BinaryPath + backupSuffix
+	if _, statErr := os.Stat(paths.BinaryPath); statErr == nil {
 		log.Println("Backing up current binary...")
-		if err := utils.Copy(gameap.DefaultBinaryPath, backupPath); err != nil {
+		if err := utils.Copy(paths.BinaryPath, backupPath); err != nil {
 			return errors.WithMessage(err, "failed to create backup")
 		}
 	}
 
 	log.Println("Stopping GameAP...")
-	if err := panel.Stop(ctx); err != nil {
+	if err := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to stop GameAP")
 	}
 
 	log.Println("Building GameAP from source...")
-	if err := installpkg.SetupGameAPFromGithubV4(ctx, pm, branch); err != nil {
+	if err := installpkg.SetupGameAPFromGithubV4(
+		ctx, pm, branch, paths.BinaryPath, paths.Scope == gameap.ScopeUser,
+	); err != nil {
 		log.Printf("Build failed: %v\n", err)
 
 		if _, statErr := os.Stat(backupPath); statErr == nil {
 			log.Println("Restoring backup...")
-			if restoreErr := restoreBackupV4(backupPath, gameap.DefaultBinaryPath); restoreErr != nil {
+			if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
 				log.Printf("Failed to restore backup: %v\n", restoreErr)
 			}
 		}
 
-		if startErr := panel.Start(ctx); startErr != nil {
+		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
 			log.Printf("Failed to start GameAP after build failure: %v\n", startErr)
 		}
 
@@ -358,12 +358,12 @@ func handleV4FromGithub(ctx context.Context, branch string) error {
 	}
 
 	log.Println("Starting GameAP...")
-	if err := panel.Start(ctx); err != nil {
+	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to start GameAP")
 	}
 
 	log.Println("Checking if new version is working...")
-	httpHost, httpPort, httpsEnabled, err := readConfigEnv()
+	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
 	if err != nil {
 		log.Printf("Warning: failed to read config.env: %v\n", err)
 
@@ -376,15 +376,15 @@ func handleV4FromGithub(ctx context.Context, branch string) error {
 		log.Printf("Health check failed: %v\n", err)
 		log.Println("Rolling back to previous version...")
 
-		if stopErr := panel.Stop(ctx); stopErr != nil {
+		if stopErr := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); stopErr != nil {
 			log.Printf("Failed to stop GameAP during rollback: %v\n", stopErr)
 		}
 
-		if restoreErr := restoreBackupV4(backupPath, gameap.DefaultBinaryPath); restoreErr != nil {
+		if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
 			return errors.WithMessage(restoreErr, "failed to restore backup")
 		}
 
-		if startErr := panel.Start(ctx); startErr != nil {
+		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
 			return errors.WithMessage(startErr, "failed to start GameAP after rollback")
 		}
 

@@ -40,13 +40,3 @@ func TestRenderDaemonUnit_User(t *testing.T) {
 	assert.Contains(t, unit, "WantedBy=default.target")
 	assert.NotContains(t, unit, "WantedBy=multi-user.target")
 }
-
-func TestBuildSystemctlArgs_System(t *testing.T) {
-	got := buildSystemctlArgs(gameap.ScopeSystem, "daemon-reload")
-	assert.Equal(t, []string{"daemon-reload"}, got)
-}
-
-func TestBuildSystemctlArgs_User(t *testing.T) {
-	got := buildSystemctlArgs(gameap.ScopeUser, "enable", "gameap-daemon")
-	assert.Equal(t, []string{"--user", "enable", "gameap-daemon"}, got)
-}

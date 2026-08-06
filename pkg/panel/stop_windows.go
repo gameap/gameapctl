@@ -7,7 +7,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Stop(ctx context.Context) error {
+func Stop(ctx context.Context, opts ...Options) error {
+	if err := checkScopeSupported(opts); err != nil {
+		return err
+	}
+
 	err := service.Stop(ctx, serviceName)
 	if err != nil {
 		return errors.WithMessage(err, "failed to execute stop gameap command")

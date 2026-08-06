@@ -1,6 +1,8 @@
-package daemon
+package panel
 
-import "github.com/gameap/gameapctl/pkg/gameap"
+import (
+	"github.com/gameap/gameapctl/pkg/gameap"
+)
 
 type Options struct {
 	Scope string

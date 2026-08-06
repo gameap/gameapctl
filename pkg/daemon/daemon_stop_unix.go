@@ -12,7 +12,7 @@ import (
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/runhelper"
-	"github.com/gameap/gameapctl/pkg/service"
+	"github.com/gameap/gameapctl/pkg/systemd"
 	"github.com/pkg/errors"
 )
 
@@ -65,19 +65,11 @@ func stopDaemonSystemdScope(ctx context.Context, scope string) error {
 		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
 	}
 
-	if err := stopSystemdService(ctx, paths.Scope); err != nil {
+	if err := systemd.Stop(ctx, paths.Scope, daemonServiceName); err != nil {
 		return errors.WithMessage(err, "failed to stop gameap-daemon")
 	}
 
 	return nil
-}
-
-func stopSystemdService(ctx context.Context, scope string) error {
-	if scope == gameap.ScopeUser {
-		return oscore.ExecCommand(ctx, "systemctl", "--user", "stop", daemonServiceName)
-	}
-
-	return service.Stop(ctx, daemonServiceName)
 }
 
 func stopDaemonProcess(ctx context.Context) error {
