@@ -4,6 +4,7 @@ package panel
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
@@ -11,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRenderSystemdUnit_System(t *testing.T) {
+func renderSystemUnitForTest(t *testing.T) string {
+	t.Helper()
+
 	paths := gameap.SystemPanelPaths()
 
 	unit, err := renderSystemdUnit(SystemdUnitConfig{
@@ -25,7 +28,12 @@ func TestRenderSystemdUnit_System(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rendered := string(unit)
+	return string(unit)
+}
+
+func TestRenderSystemdUnit_System(t *testing.T) {
+	rendered := renderSystemUnitForTest(t)
+
 	assert.Contains(t, rendered, "User=gameap")
 	assert.Contains(t, rendered, "Group=gameap")
 	assert.Contains(t, rendered, "AmbientCapabilities=CAP_NET_BIND_SERVICE")
@@ -33,6 +41,30 @@ func TestRenderSystemdUnit_System(t *testing.T) {
 	assert.Contains(t, rendered, "Requires=network.target")
 	assert.Contains(t, rendered, "ReadWritePaths=/var/lib/gameap /var/lib/gameap/files")
 	assert.Contains(t, rendered, "WantedBy=multi-user.target")
+}
+
+func TestRenderSystemdUnit_System_StartLimitInUnitSection(t *testing.T) {
+	rendered := renderSystemUnitForTest(t)
+
+	assert.Contains(t, rendered, "StartLimitIntervalSec=60")
+	assert.Contains(t, rendered, "StartLimitBurst=5")
+	assert.NotContains(t, rendered, "StartLimitInterval=60\n")
+	assert.NotContains(t, rendered, "StartLimitBurst=3")
+
+	serviceSectionIndex := strings.Index(rendered, "[Service]")
+	require.Positive(t, serviceSectionIndex)
+	assert.Less(t, strings.Index(rendered, "StartLimitIntervalSec=60"), serviceSectionIndex)
+	assert.Less(t, strings.Index(rendered, "StartLimitBurst=5"), serviceSectionIndex)
+}
+
+func TestRenderSystemdUnit_System_DatabaseOrdering(t *testing.T) {
+	rendered := renderSystemUnitForTest(t)
+
+	assert.Contains(
+		t,
+		rendered,
+		"After=network.target network-online.target postgresql.service mysql.service mariadb.service",
+	)
 }
 
 func TestRenderSystemdUnit_User(t *testing.T) {

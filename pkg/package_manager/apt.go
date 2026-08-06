@@ -23,6 +23,17 @@ const (
 
 type apt struct{}
 
+// NEEDRESTART_SUSPEND disables the needrestart apt hook, which on Ubuntu
+// automatically restarts services (including gameap and its database) after
+// library upgrades and can interrupt an ongoing installation.
+func aptEnv() []string {
+	return append(
+		os.Environ(),
+		"DEBIAN_FRONTEND=noninteractive",
+		"NEEDRESTART_SUSPEND=1",
+	)
+}
+
 // Search list packages available in the system that match the search
 // pattern.
 func (apt *apt) Search(_ context.Context, packName string) ([]PackageInfo, error) {
@@ -66,8 +77,7 @@ func (apt *apt) searchAptCache(_ context.Context, packName string) ([]PackageInf
 		"show",
 		packName,
 	)
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = aptEnv()
 
 	out, err := cmd.CombinedOutput()
 	log.Print(string(out))
@@ -146,8 +156,7 @@ func parseAPTCacheShowOutput(out []byte) []PackageInfo {
 func (apt *apt) CheckForUpdates(_ context.Context) error {
 	cmd := exec.Command("apt-get", "update", "-q")
 
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = aptEnv()
 
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
@@ -164,8 +173,7 @@ func (apt *apt) Install(_ context.Context, pack string, _ ...InstallOptions) err
 	args := []string{"install", "-y", pack}
 	cmd := exec.Command("apt-get", args...)
 
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = aptEnv()
 
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
@@ -185,8 +193,7 @@ func (apt *apt) Remove(_ context.Context, packs ...string) error {
 	}
 	cmd := exec.Command("apt-get", args...)
 
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = aptEnv()
 
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()
@@ -206,8 +213,7 @@ func (apt *apt) Purge(_ context.Context, packs ...string) error {
 	}
 	cmd := exec.Command("apt-get", args...)
 
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "DEBIAN_FRONTEND=noninteractive")
+	cmd.Env = aptEnv()
 
 	log.Println('\n', cmd.String())
 	cmd.Stderr = log.Writer()

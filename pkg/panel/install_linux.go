@@ -47,12 +47,16 @@ func install(ctx context.Context, config InstallConfig) error {
 	return nil
 }
 
-func createSystemdUnit(ctx context.Context, config InstallConfig, paths gameap.PanelPaths) error {
+func panelReadWritePaths(config InstallConfig) string {
 	readWritePaths := fmt.Sprintf("%s %s", config.DataDirectory, config.FilesLocalBasePath)
 	if config.LegacyPath != "" {
 		readWritePaths = fmt.Sprintf("%s %s", readWritePaths, config.LegacyPath)
 	}
 
+	return readWritePaths
+}
+
+func createSystemdUnit(ctx context.Context, config InstallConfig, paths gameap.PanelPaths) error {
 	unit, err := renderSystemdUnit(SystemdUnitConfig{
 		Scope:            paths.Scope,
 		User:             config.User,
@@ -60,7 +64,7 @@ func createSystemdUnit(ctx context.Context, config InstallConfig, paths gameap.P
 		WorkingDirectory: config.DataDirectory,
 		ExecStart:        config.BinaryPath,
 		EnvironmentFile:  filepath.Join(config.ConfigDirectory, "config.env"),
-		ReadWritePaths:   readWritePaths,
+		ReadWritePaths:   panelReadWritePaths(config),
 	})
 	if err != nil {
 		return err

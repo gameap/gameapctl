@@ -49,6 +49,8 @@ func Run(ctx context.Context, scope string, args ...string) error {
 
 func Start(ctx context.Context, scope, unitName string) error {
 	if scope == gameap.ScopeUser {
+		resetFailed(ctx, scope, unitName)
+
 		return Run(ctx, scope, "start", unitName)
 	}
 
@@ -65,10 +67,21 @@ func Stop(ctx context.Context, scope, unitName string) error {
 
 func Restart(ctx context.Context, scope, unitName string) error {
 	if scope == gameap.ScopeUser {
+		resetFailed(ctx, scope, unitName)
+
 		return Run(ctx, scope, "restart", unitName)
 	}
 
 	return service.Restart(ctx, unitName)
+}
+
+// Clears the failed state and the start rate-limit counter, so an explicit
+// start is not rejected with "start-limit-hit" after previous crash-loop
+// restarts. Best effort: an error for a not-loaded unit is expected.
+func resetFailed(ctx context.Context, scope, unitName string) {
+	if err := Run(ctx, scope, "reset-failed", unitName); err != nil {
+		log.Printf("Failed to reset %s failed state: %v", unitName, err)
+	}
 }
 
 // InstallUnit writes the unit file, reloads the manager and enables the unit.
