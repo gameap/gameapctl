@@ -179,15 +179,11 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	}
 
 	if opts.ConnectURL != "" {
-		connInfo, err := ParseConnectURL(opts.ConnectURL)
+		resolvedURL, err := resolveConnectAddress(ctx, defaultResolveDeps(), opts.ConnectURL)
 		if err != nil {
-			return errors.WithMessage(err, "invalid connect URL")
-		}
-
-		fmt.Printf("Checking gRPC connection to %s ...\n", connInfo.Address())
-		if err := daemonpkg.CheckGRPCConnectivity(connInfo.Address()); err != nil {
 			return err
 		}
+		opts.ConnectURL = resolvedURL
 	}
 
 	if opts.ConnectURL == "" && opts.Host == "" {
@@ -1281,6 +1277,26 @@ func (h *WeightStructHeap) Pop() interface{} {
 	return x
 }
 
+//nolint:mnd // address preference weights, higher is better
+func ipPreferenceWeight(ip string) int {
+	switch {
+	case utils.IsIPv6(ip):
+		return 0
+	case strings.HasPrefix(ip, "127."):
+		return 100
+	case strings.HasPrefix(ip, "169."):
+		return 200
+	case strings.HasPrefix(ip, "172."):
+		return 300
+	case strings.HasPrefix(ip, "10."):
+		return 400
+	case strings.HasPrefix(ip, "192.168"):
+		return 500
+	default:
+		return 1000
+	}
+}
+
 func chooseBestIP(ips []string) (string, error) {
 	if len(ips) == 0 {
 		return "0.0.0.0", nil
@@ -1290,22 +1306,7 @@ func chooseBestIP(ips []string) (string, error) {
 	heap.Init(&h)
 
 	for _, ip := range ips {
-		switch {
-		case utils.IsIPv6(ip):
-			heap.Push(&h, WeightStruct{ip, 0})
-		case ip[:4] == "127.":
-			heap.Push(&h, WeightStruct{ip, 100})
-		case ip[:4] == "169.":
-			heap.Push(&h, WeightStruct{ip, 200})
-		case ip[:4] == "172.":
-			heap.Push(&h, WeightStruct{ip, 300})
-		case ip[:3] == "10.":
-			heap.Push(&h, WeightStruct{ip, 400})
-		case ip[:7] == "192.168":
-			heap.Push(&h, WeightStruct{ip, 500})
-		default:
-			heap.Push(&h, WeightStruct{ip, 1000})
-		}
+		heap.Push(&h, WeightStruct{ip, ipPreferenceWeight(ip)})
 	}
 
 	p, ok := heap.Pop(&h).(WeightStruct)
