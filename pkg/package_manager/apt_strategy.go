@@ -261,7 +261,7 @@ func (s *aptStrategy) addPHPRepositories(ctx context.Context) (bool, error) {
 
 	if osInfo.Distribution == DistributionUbuntu {
 		cmd := exec.Command("add-apt-repository", "ppa:ondrej/php")
-		cmd.Env = append(cmd.Env, "LC_ALL=C.UTF-8")
+		cmd.Env = append(aptEnv(), "LC_ALL=C.UTF-8")
 		cmd.Stderr = log.Writer()
 		cmd.Stdout = log.Writer()
 		err := cmd.Run()

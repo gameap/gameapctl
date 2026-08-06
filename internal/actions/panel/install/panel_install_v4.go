@@ -483,7 +483,7 @@ func HandleV4(cliCtx *cli.Context) error {
 	fmt.Println("Starting GameAP ...")
 	err = panel.Start(ctx)
 	if err != nil {
-		return errors.WithMessage(err, "failed to start GameAP")
+		return errors.WithMessage(err, "failed to start GameAP after installation")
 	}
 
 	err = waitForPanelHealthCheck(
@@ -556,6 +556,9 @@ func HandleV4(cliCtx *cli.Context) error {
 	} else {
 		fmt.Println("Host: http://" + state.Host + ":" + state.Port)
 	}
+	fmt.Println()
+	fmt.Println("If system packages were upgraded during installation,")
+	fmt.Println("a reboot is recommended to apply library updates.")
 	fmt.Println()
 	fmt.Println("---------------------------------")
 
@@ -1193,7 +1196,7 @@ func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (pane
 	defer removeConfigEnvVar(configPath, daemonSetupTokenEnv)
 
 	if err := panel.Start(ctx); err != nil {
-		return state, errors.WithMessage(err, "failed to start GameAP")
+		return state, errors.WithMessage(err, "failed to start GameAP for daemon enrollment")
 	}
 
 	defer func() {
@@ -1284,7 +1287,7 @@ func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelI
 	defer removeConfigEnvVar(configPath, daemonSetupKeyEnv)
 
 	if err := panel.Start(ctx); err != nil {
-		return state, errors.WithMessage(err, "failed to start GameAP")
+		return state, errors.WithMessage(err, "failed to start GameAP for daemon gRPC enrollment")
 	}
 
 	defer func() {

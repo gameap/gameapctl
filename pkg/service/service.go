@@ -5,6 +5,7 @@ import (
 	"log"
 	"log/slog"
 	"os/exec"
+	"strings"
 	"sync"
 
 	contextInternal "github.com/gameap/gameapctl/internal/context"
@@ -112,12 +113,33 @@ func NewSystemd() *Systemd {
 }
 
 func (s *Systemd) Start(_ context.Context, serviceName string) error {
+	s.resetFailed(serviceName)
+
 	cmd := exec.Command("systemctl", "start", serviceName)
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
 	slog.Debug(cmd.String())
 
 	return cmd.Run()
+}
+
+// Clears the failed state and the start rate-limit counter, so an explicit
+// start is not rejected with "start-limit-hit" after previous restarts
+// (e.g. needrestart-driven or crash-loop ones). Best effort: an error for a
+// not-loaded unit is expected and ignored.
+func (s *Systemd) resetFailed(serviceName string) {
+	cmd := exec.Command("systemctl", "reset-failed", serviceName)
+	slog.Debug(cmd.String())
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Debug(
+			"systemctl reset-failed skipped",
+			slog.String("service", serviceName),
+			slog.String("output", strings.TrimSpace(string(out))),
+			slog.String("err", err.Error()),
+		)
+	}
 }
 
 func (s *Systemd) Stop(_ context.Context, serviceName string) error {
@@ -130,6 +152,8 @@ func (s *Systemd) Stop(_ context.Context, serviceName string) error {
 }
 
 func (s *Systemd) Restart(_ context.Context, serviceName string) error {
+	s.resetFailed(serviceName)
+
 	cmd := exec.Command("systemctl", "restart", serviceName)
 	cmd.Stderr = log.Writer()
 	cmd.Stdout = log.Writer()
