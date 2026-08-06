@@ -95,6 +95,40 @@ func Test_ParseConnectURL(t *testing.T) {
 	}
 }
 
+func Test_ConnectInfo_URL(t *testing.T) {
+	tests := []struct {
+		name string
+		info ConnectInfo
+		want string
+	}{
+		{
+			name: "ipv4",
+			info: ConnectInfo{Host: "10.73.43.20", Port: 31718, SetupKey: "abc123"},
+			want: "grpc://10.73.43.20:31718/abc123",
+		},
+		{
+			name: "hostname",
+			info: ConnectInfo{Host: "panel.example.com", Port: 9090, SetupKey: "key"},
+			want: "grpc://panel.example.com:9090/key",
+		},
+		{
+			name: "ipv6 is bracketed",
+			info: ConnectInfo{Host: "fd00::5", Port: 31718, SetupKey: "key"},
+			want: "grpc://[fd00::5]:31718/key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.info.URL())
+
+			parsed, err := ParseConnectURL(tt.info.URL())
+			require.NoError(t, err)
+			assert.Equal(t, tt.info, parsed)
+		})
+	}
+}
+
 func Test_ConnectInfo_Address(t *testing.T) {
 	tests := []struct {
 		name string
