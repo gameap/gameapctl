@@ -661,8 +661,6 @@ func refreshCATrustStore(ctx context.Context) error {
 // installSystemDependenciesV4 installs the distro packages the installer relies on.
 // Every step here needs root. It reports whether the installer has to be re-run to
 // pick up freshly installed CA certificates.
-//
-//nolint:nestif
 func installSystemDependenciesV4(
 	ctx context.Context,
 	pm packagemanager.PackageManager,
