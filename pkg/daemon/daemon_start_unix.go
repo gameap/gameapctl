@@ -113,8 +113,12 @@ func renderDaemonUnit(paths gameap.DaemonPaths) string {
 
 	b.WriteString("[Unit]\n")
 	b.WriteString("Description=GameAP Daemon\n\n")
-	b.WriteString("Wants=network-online.target\n")
-	b.WriteString("After=network.target network-online.target\n\n")
+	// network targets exist only in the system manager; in a user unit they
+	// reference nothing and provide no ordering
+	if paths.Scope == gameap.ScopeSystem {
+		b.WriteString("Wants=network-online.target\n")
+		b.WriteString("After=network.target network-online.target\n\n")
+	}
 
 	b.WriteString("[Service]\n")
 	if paths.Scope == gameap.ScopeSystem {
