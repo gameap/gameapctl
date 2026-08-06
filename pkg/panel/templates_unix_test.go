@@ -92,6 +92,8 @@ func TestRenderSystemdUnit_User(t *testing.T) {
 		"ReadWritePaths",
 		"PIDFile",
 		"Requires=",
+		"Wants=network-online.target",
+		"After=network.target network-online.target",
 		"multi-user.target",
 	} {
 		assert.NotContains(t, rendered, forbidden, "directive %q breaks a systemd --user unit", forbidden)

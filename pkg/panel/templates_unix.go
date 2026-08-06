@@ -99,8 +99,6 @@ WantedBy=multi-user.target
 const systemdUserUnitTemplate = `[Unit]
 Description=GameAP - Game Server Control Panel
 Documentation=https://docs.gameap.com
-Wants=network-online.target
-After=network.target network-online.target
 
 [Service]
 Type=simple
