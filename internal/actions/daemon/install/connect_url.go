@@ -56,3 +56,7 @@ func ParseConnectURL(rawURL string) (ConnectInfo, error) {
 func (c ConnectInfo) Address() string {
 	return net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port)))
 }
+
+func (c ConnectInfo) URL() string {
+	return "grpc://" + c.Address() + "/" + c.SetupKey
+}
