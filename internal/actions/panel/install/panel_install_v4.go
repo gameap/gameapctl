@@ -475,8 +475,6 @@ func HandleV4(cliCtx *cli.Context) error {
 		fmt.Println("  gameapctl panel start")
 		fmt.Println("  gameapctl panel change-password")
 		fmt.Println()
-		printRebootRecommendation(state.Scope)
-		fmt.Println()
 		fmt.Println("---------------------------------")
 
 		return nil
@@ -562,7 +560,6 @@ func HandleV4(cliCtx *cli.Context) error {
 
 	printUserScopeSummaryV4(ctx, state)
 
-	printRebootRecommendation(state.Scope)
 	fmt.Println()
 	fmt.Println("---------------------------------")
 
@@ -731,18 +728,6 @@ func installSystemDependenciesV4(
 	}
 
 	return false, nil
-}
-
-// The apt operations run with needrestart suspended (see aptEnv), so services
-// keep using pre-upgrade libraries until restarted; the operator decides when.
-// User scope installs no system packages, so there is nothing to advise there.
-func printRebootRecommendation(scope string) {
-	if scope == gameap.ScopeUser {
-		return
-	}
-
-	fmt.Println("If system packages were upgraded during installation,")
-	fmt.Println("a reboot is recommended to apply library updates.")
 }
 
 func installGameAPV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
