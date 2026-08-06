@@ -52,7 +52,9 @@ func resolveConnectAddress(ctx context.Context, deps resolveDeps, rawURL string)
 
 	result, err := deps.probe(ctx, info.Address(), primaryProbeTimeout)
 	if err != nil {
-		return resolveUnreachableHost(ctx, deps, info, err)
+		suggestLocalPanel(ctx, deps, info)
+
+		return "", err
 	}
 
 	if result.Leaf == nil {
@@ -108,14 +110,14 @@ func rewriteToCoveredCandidate(
 	)
 }
 
-// resolveUnreachableHost handles the case when the connect host does not answer
-// at all, e.g. the panel is on this same machine behind a NAT without hairpin
-// support. A panel listening on a local address with a certificate covering it
-// is a safe replacement: enrollment against a wrong panel would fail on the
-// setup key anyway.
-func resolveUnreachableHost(
-	ctx context.Context, deps resolveDeps, info ConnectInfo, dialErr error,
-) (string, error) {
+// suggestLocalPanel handles the case when the connect host does not answer at
+// all, e.g. the panel is on this same machine behind a NAT without hairpin
+// support. With the original host down there is no trusted certificate to
+// anchor a rewrite to (the probe does not verify what a local listener
+// presents), so a discovered panel is only suggested, never used
+// automatically: the operator confirms it by re-running the installation with
+// the printed address.
+func suggestLocalPanel(ctx context.Context, deps resolveDeps, info ConnectInfo) {
 	for _, candidate := range localProbeCandidates(deps.localIPs(), info.Host) {
 		candInfo := ConnectInfo{Host: candidate, Port: info.Port, SetupKey: info.SetupKey}
 
@@ -129,16 +131,15 @@ func resolveUnreachableHost(
 		}
 
 		deps.printf(
-			"WARNING: the panel is unreachable at %s, but a panel was found locally at %s.\n"+
-				"Assuming the panel runs on this machine behind a NAT without hairpin support; "+
-				"using %s instead.\n",
+			"WARNING: the panel is unreachable at %s, but a gRPC server with a certificate\n"+
+				"covering %s answers on this machine. If the panel runs here (e.g. behind a\n"+
+				"NAT without hairpin support), re-run the installation with:\n"+
+				"  gameapctl daemon install --connect=%s\n",
 			info.Address(), candInfo.Address(), candInfo.URL(),
 		)
 
-		return candInfo.URL(), nil
+		return
 	}
-
-	return "", dialErr
 }
 
 func certCoversHost(cert *x509.Certificate, host string) bool {

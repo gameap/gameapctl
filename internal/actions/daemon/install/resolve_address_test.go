@@ -133,14 +133,14 @@ func Test_resolveConnectAddress(t *testing.T) {
 			wantProbeCalls: 1,
 		},
 		{
-			name:   "unreachable host, panel found locally",
+			name:   "unreachable host, local panel only suggested",
 			rawURL: "grpc://158.160.157.244:31718/key",
 			outcomes: map[string]probeOutcome{
 				"10.73.43.20:31718": {result: tlsResult(panelCert, nil)},
 			},
 			localIPs:        localIPs,
-			want:            "grpc://10.73.43.20:31718/key",
-			wantOutContains: "unreachable at 158.160.157.244:31718",
+			wantErrContains: "cannot reach gRPC server at 158.160.157.244:31718",
+			wantOutContains: "--connect=grpc://10.73.43.20:31718/key",
 		},
 		{
 			name:            "unreachable host, no local panel",
@@ -176,6 +176,10 @@ func Test_resolveConnectAddress(t *testing.T) {
 
 			got, err := resolveConnectAddress(context.Background(), deps, tt.rawURL)
 
+			if tt.wantOutContains != "" {
+				assert.Contains(t, out.String(), tt.wantOutContains)
+			}
+
 			if tt.wantErrIs != nil || tt.wantErrContains != "" {
 				require.Error(t, err)
 				if tt.wantErrIs != nil {
@@ -192,9 +196,6 @@ func Test_resolveConnectAddress(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 			if tt.wantProbeCalls > 0 {
 				require.Len(t, calls, tt.wantProbeCalls)
-			}
-			if tt.wantOutContains != "" {
-				assert.Contains(t, out.String(), tt.wantOutContains)
 			}
 		})
 	}

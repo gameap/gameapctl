@@ -1306,15 +1306,15 @@ func ipPreferenceWeight(ip string) int {
 	switch {
 	case utils.IsIPv6(ip):
 		return 0
-	case ip[:4] == "127.":
+	case strings.HasPrefix(ip, "127."):
 		return 100
-	case ip[:4] == "169.":
+	case strings.HasPrefix(ip, "169."):
 		return 200
-	case ip[:4] == "172.":
+	case strings.HasPrefix(ip, "172."):
 		return 300
-	case ip[:3] == "10.":
+	case strings.HasPrefix(ip, "10."):
 		return 400
-	case ip[:7] == "192.168":
+	case strings.HasPrefix(ip, "192.168"):
 		return 500
 	default:
 		return 1000
