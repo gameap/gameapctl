@@ -23,6 +23,13 @@ const (
 
 const sourceNameGitHub = "github"
 
+// GameAP CDN host names; also the source names and the keys of the
+// CDNAvailability result.
+const (
+	CDNGameAPCom = "cdn.gameap.com"
+	CDNGameAPRu  = "cdn.gameap.ru"
+)
+
 type source struct {
 	name    string
 	kind    sourceKind
@@ -32,8 +39,8 @@ type source struct {
 func defaultSources() []source {
 	return []source{
 		{name: sourceNameGitHub, kind: kindGitHub, baseURL: "https://api.github.com"},
-		{name: "cdn.gameap.com", kind: kindCDN, baseURL: "https://cdn.gameap.com"},
-		{name: "cdn.gameap.ru", kind: kindCDN, baseURL: "https://cdn.gameap.ru"},
+		{name: CDNGameAPCom, kind: kindCDN, baseURL: "https://" + CDNGameAPCom},
+		{name: CDNGameAPRu, kind: kindCDN, baseURL: "https://" + CDNGameAPRu},
 	}
 }
 

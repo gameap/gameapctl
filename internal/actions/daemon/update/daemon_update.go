@@ -68,6 +68,8 @@ func Handle(cliCtx *cli.Context) error {
 		scope = daemonState.Scope
 	}
 
+	setupCDNReplacements(ctx, scope)
+
 	if fromGithub {
 		return handleFromGithub(ctx, branch, scope)
 	}
@@ -187,6 +189,20 @@ func Handle(cliCtx *cli.Context) error {
 	fmt.Println("Updated successfully")
 
 	return nil
+}
+
+// setupCDNReplacements adds remote repository replacements for unreachable
+// CDNs to the daemon config before the daemon is restarted. Never fatal.
+func setupCDNReplacements(ctx context.Context, scope string) {
+	paths, err := gameap.DaemonPathsForScope(scope)
+	if err != nil {
+		log.Printf("Warning: failed to resolve daemon paths for CDN setup: %v\n", err)
+
+		return
+	}
+
+	fmt.Println("Checking GameAP CDN availability ...")
+	daemonpkg.SetupCDNReplacements(ctx, paths.DaemonConfigFilePath)
 }
 
 func updateDaemonStateVersion(ctx context.Context, resolvedTag string) {

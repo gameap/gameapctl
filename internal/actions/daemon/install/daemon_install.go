@@ -388,6 +388,9 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return err
 	}
 
+	fmt.Println("Checking GameAP CDN availability ...")
+	daemonpkg.SetupCDNReplacements(ctx, state.DaemonConfigFilePath)
+
 	if saveErr := gameapctl.SaveDaemonInstallState(ctx, gameapctl.DaemonInstallState{
 		Host:           state.Host,
 		ConnectURL:     state.ConnectURL,
