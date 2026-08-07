@@ -182,7 +182,7 @@ func candidateHostsFromCert(cert *x509.Certificate, localIPs []string, origHost 
 		}
 	}
 
-	var dnsSAN []string
+	dnsSAN := make([]string, 0, len(cert.DNSNames))
 	hasLocalhost := false
 	for _, name := range cert.DNSNames {
 		if strings.Contains(name, "*") || strings.EqualFold(name, origHost) {
