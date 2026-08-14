@@ -305,7 +305,7 @@ func handleFromGithub(ctx context.Context, branch, scope string) error {
 
 	userScope := scope == gameap.ScopeUser
 
-	gameapDaemonPath, err := resolveDaemonBinaryPath(scope, userScope)
+	gameapDaemonPath, err := resolveDaemonBinaryPath(scope)
 	if err != nil {
 		return err
 	}
@@ -380,23 +380,15 @@ func handleFromGithub(ctx context.Context, branch, scope string) error {
 	return nil
 }
 
-// resolveDaemonBinaryPath resolves the gameap-daemon binary path for the given scope.
-func resolveDaemonBinaryPath(scope string, userScope bool) (string, error) {
-	if userScope {
-		paths, err := gameap.DaemonPathsForScope(scope)
-		if err != nil {
-			return "", errors.WithMessage(err, "failed to resolve daemon paths")
-		}
-
-		return paths.DaemonFilePath, nil
-	}
-
-	lookPath, err := exec.LookPath("gameap-daemon")
+// resolveDaemonBinaryPath resolves the gameap-daemon binary path for the given scope,
+// keeping it consistent with the path configured in the systemd unit ExecStart.
+func resolveDaemonBinaryPath(scope string) (string, error) {
+	paths, err := gameap.DaemonPathsForScope(scope)
 	if err != nil {
-		lookPath = gameap.DefaultDaemonFilePath
+		return "", errors.WithMessage(err, "failed to resolve daemon paths")
 	}
 
-	return lookPath, nil
+	return paths.DaemonFilePath, nil
 }
 
 // applyBuiltBinary replaces the daemon binary with the freshly built one,

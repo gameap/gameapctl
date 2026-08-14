@@ -61,8 +61,8 @@ installed without forcing the operator to re-supply the same flags.
 
 ### GitHub source flow (`--github`)
 
-1. Resolve `gameap-daemon` binary path (falls back to
-   `gameap.DefaultDaemonFilePath` if not on `PATH`).
+1. Resolve `gameap-daemon` binary path via `gameap.DaemonPathsForScope` — the
+   same path the systemd unit's `ExecStart` points to.
 2. Load the OS package manager (non-user scope only).
 3. Call `SetupDaemonFromGithub` with a temporary output path while the daemon
    keeps running, which:

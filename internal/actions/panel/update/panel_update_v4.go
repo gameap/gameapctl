@@ -355,12 +355,33 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 	log.Println("Backing up and replacing binary...")
 	backupPath := paths.BinaryPath + backupSuffix
 	if err := backupAndReplace(builtBinary, paths.BinaryPath, backupPath); err != nil {
+		// The previous binary is still in place: either the backup could not be
+		// created and the binary was never touched, or the failed replacement was
+		// already rolled back from the backup. Restart it directly.
+		log.Printf("Failed to replace binary: %v\n", err)
+		log.Println("Restarting GameAP with the previous binary...")
+
+		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
+			return errors.WithMessage(startErr, "failed to restart GameAP after replace failure")
+		}
+
 		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
 	log.Println("Starting GameAP...")
 	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
-		return errors.WithMessage(err, "failed to start GameAP")
+		log.Printf("Failed to start GameAP: %v\n", err)
+		log.Println("Restoring backup...")
+
+		if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
+			return errors.WithMessage(restoreErr, "failed to restore backup after start failure")
+		}
+
+		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
+			return errors.WithMessage(startErr, "failed to start GameAP after restoring backup")
+		}
+
+		return errors.New("new binary failed to start, rolled back to previous version")
 	}
 
 	log.Println("Checking if new version is working...")
