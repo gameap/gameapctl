@@ -305,20 +305,39 @@ func handleFromGithub(ctx context.Context, branch, scope string) error {
 
 	userScope := scope == gameap.ScopeUser
 
-	var gameapDaemonPath string
-	if userScope {
-		paths, pathsErr := gameap.DaemonPathsForScope(scope)
-		if pathsErr != nil {
-			return errors.WithMessage(pathsErr, "failed to resolve daemon paths")
+	gameapDaemonPath, err := resolveDaemonBinaryPath(scope, userScope)
+	if err != nil {
+		return err
+	}
+
+	var pm packagemanager.PackageManager
+	if !userScope {
+		loadedPM, err := packagemanager.Load(ctx)
+		if err != nil {
+			return errors.WithMessage(err, "failed to load package manager")
 		}
-		gameapDaemonPath = paths.DaemonFilePath
-	} else {
-		lookPath, lookErr := exec.LookPath("gameap-daemon")
-		if lookErr != nil {
-			gameapDaemonPath = gameap.DefaultDaemonFilePath
-		} else {
-			gameapDaemonPath = lookPath
+		pm = loadedPM
+	}
+
+	// Build into a temporary file while the daemon is still running to minimize downtime.
+	tmpBuildDir, err := os.MkdirTemp("", "gameap-daemon-build-*")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temporary build directory")
+	}
+	defer func() {
+		if removeErr := os.RemoveAll(tmpBuildDir); removeErr != nil {
+			log.Printf("Failed to remove temporary build directory %s: %v\n", tmpBuildDir, removeErr)
 		}
+	}()
+
+	builtBinary := filepath.Join(tmpBuildDir, "gameap-daemon")
+	if runtime.GOOS == "windows" {
+		builtBinary += ".exe"
+	}
+
+	fmt.Println("Building daemon from GitHub source...")
+	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, branch, builtBinary, userScope); err != nil {
+		return errors.WithMessage(err, "failed to build daemon from github")
 	}
 
 	backupPath := filepath.Join(os.TempDir(), "gameap-daemon-backup")
@@ -340,31 +359,9 @@ func handleFromGithub(ctx context.Context, branch, scope string) error {
 		return errors.WithMessage(err, "failed to stop daemon")
 	}
 
-	var pm packagemanager.PackageManager
-	if !userScope {
-		loadedPM, err := packagemanager.Load(ctx)
-		if err != nil {
-			return errors.WithMessage(err, "failed to load package manager")
-		}
-		pm = loadedPM
-	}
-
-	fmt.Println("Building daemon from GitHub source...")
-	if err := daemonpkg.SetupDaemonFromGithub(ctx, pm, branch, gameapDaemonPath, userScope); err != nil {
-		log.Printf("Build failed: %v\n", err)
-
-		if _, statErr := os.Stat(backupPath); statErr == nil {
-			fmt.Println("Reverting...")
-			if revertErr := revert(ctx, gameapDaemonPath, backupPath); revertErr != nil {
-				log.Printf("Failed to revert: %v\n", revertErr)
-			}
-		}
-
-		if startErr := startDaemon(ctx, scope); startErr != nil {
-			log.Printf("Failed to start daemon after build failure: %v\n", startErr)
-		}
-
-		return errors.WithMessage(err, "failed to build daemon from github")
+	fmt.Println("Updating...")
+	if err := applyBuiltBinary(ctx, builtBinary, gameapDaemonPath, backupPath, scope); err != nil {
+		return err
 	}
 
 	fmt.Println("Starting daemon...")
@@ -379,6 +376,55 @@ func handleFromGithub(ctx context.Context, branch, scope string) error {
 	}
 
 	fmt.Println("Updated successfully from GitHub")
+
+	return nil
+}
+
+// resolveDaemonBinaryPath resolves the gameap-daemon binary path for the given scope.
+func resolveDaemonBinaryPath(scope string, userScope bool) (string, error) {
+	if userScope {
+		paths, err := gameap.DaemonPathsForScope(scope)
+		if err != nil {
+			return "", errors.WithMessage(err, "failed to resolve daemon paths")
+		}
+
+		return paths.DaemonFilePath, nil
+	}
+
+	lookPath, err := exec.LookPath("gameap-daemon")
+	if err != nil {
+		lookPath = gameap.DefaultDaemonFilePath
+	}
+
+	return lookPath, nil
+}
+
+// applyBuiltBinary replaces the daemon binary with the freshly built one,
+// reverting from backup and restarting the old version on failure.
+func applyBuiltBinary(ctx context.Context, builtBinary, daemonPath, backupPath, scope string) error {
+	f, err := os.Open(builtBinary)
+	if err != nil {
+		return errors.WithMessage(err, "failed to open built binary")
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Printf("Failed to close built binary file: %v\n", closeErr)
+		}
+	}()
+
+	err = selfupdate.Apply(f, selfupdate.Options{
+		TargetPath: daemonPath,
+	})
+	if err != nil {
+		fmt.Println("Update failed, reverting...")
+		if _, statErr := os.Stat(backupPath); statErr == nil {
+			if revertErr := revertFromBackup(ctx, daemonPath, backupPath, scope); revertErr != nil {
+				return errors.WithMessage(revertErr, "failed to revert after update failure")
+			}
+		}
+
+		return errors.WithMessage(err, "failed to update")
+	}
 
 	return nil
 }

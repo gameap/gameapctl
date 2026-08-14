@@ -324,12 +324,27 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
-	backupPath := paths.BinaryPath + backupSuffix
-	if _, statErr := os.Stat(paths.BinaryPath); statErr == nil {
-		log.Println("Backing up current binary...")
-		if err := utils.Copy(paths.BinaryPath, backupPath); err != nil {
-			return errors.WithMessage(err, "failed to create backup")
+	// Build into a temporary file while GameAP is still running to minimize downtime.
+	tmpBuildDir, err := os.MkdirTemp("", "gameap-build-*")
+	if err != nil {
+		return errors.WithMessage(err, "failed to create temporary build directory")
+	}
+	defer func() {
+		if removeErr := os.RemoveAll(tmpBuildDir); removeErr != nil {
+			log.Printf("Failed to remove temporary build directory: %v\n", removeErr)
 		}
+	}()
+
+	builtBinary := filepath.Join(tmpBuildDir, "gameap")
+	if runtime.GOOS == "windows" {
+		builtBinary += ".exe"
+	}
+
+	log.Println("Building GameAP from source...")
+	if err := installpkg.SetupGameAPFromGithubV4(
+		ctx, pm, branch, builtBinary, paths.Scope == gameap.ScopeUser,
+	); err != nil {
+		return errors.WithMessage(err, "failed to build GameAP from github")
 	}
 
 	log.Println("Stopping GameAP...")
@@ -337,24 +352,10 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 		return errors.WithMessage(err, "failed to stop GameAP")
 	}
 
-	log.Println("Building GameAP from source...")
-	if err := installpkg.SetupGameAPFromGithubV4(
-		ctx, pm, branch, paths.BinaryPath, paths.Scope == gameap.ScopeUser,
-	); err != nil {
-		log.Printf("Build failed: %v\n", err)
-
-		if _, statErr := os.Stat(backupPath); statErr == nil {
-			log.Println("Restoring backup...")
-			if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
-				log.Printf("Failed to restore backup: %v\n", restoreErr)
-			}
-		}
-
-		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
-			log.Printf("Failed to start GameAP after build failure: %v\n", startErr)
-		}
-
-		return errors.WithMessage(err, "failed to build GameAP from github")
+	log.Println("Backing up and replacing binary...")
+	backupPath := paths.BinaryPath + backupSuffix
+	if err := backupAndReplace(builtBinary, paths.BinaryPath, backupPath); err != nil {
+		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
 	log.Println("Starting GameAP...")

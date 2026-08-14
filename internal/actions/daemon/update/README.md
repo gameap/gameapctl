@@ -63,14 +63,22 @@ installed without forcing the operator to re-supply the same flags.
 
 1. Resolve `gameap-daemon` binary path (falls back to
    `gameap.DefaultDaemonFilePath` if not on `PATH`).
-2. **Backup** existing binary if present.
-3. **Stop** the daemon.
-4. Load the OS package manager and call `SetupDaemonFromGithub`, which:
+2. Load the OS package manager (non-user scope only).
+3. Call `SetupDaemonFromGithub` with a temporary output path while the daemon
+   keeps running, which:
    * Installs `git` and `go` if missing.
    * Clones `gameap/daemon` at the requested branch into a temp dir.
-   * Runs `go build` and writes the binary to `gameap.DefaultDaemonFilePath`.
-5. On build failure, revert from backup and try to start the old binary.
-6. **Start** the daemon. On failure, revert from backup and restart.
+   * Runs `go build` and writes the binary to the temporary path.
+
+   On build failure the daemon was never stopped — the error is returned as is.
+4. **Backup** existing binary if present.
+5. **Stop** the daemon and verify the process is gone.
+6. **Apply** the built binary in place via `selfupdate.Apply`. On failure,
+   revert from backup, restart the old version and abort.
+7. **Start** the daemon. On failure, revert from backup and restart.
+
+Building before stopping keeps the downtime at stop + replace + start instead
+of the full source build.
 
 The GitHub flow does not update `DaemonInstallState.Version` because there is
 no release tag.
