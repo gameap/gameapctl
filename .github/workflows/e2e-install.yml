@@ -1,0 +1,499 @@
+name: E2E Install
+
+on:
+  schedule:
+    # Two runs a day, in the middle of the 12h rotation slots (which start at
+    # 00:00 and 12:00 UTC) so scheduler jitter cannot shift the chosen combo.
+    - cron: '0 3 * * *'
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+    inputs:
+      os:
+        description: 'OS (auto = rotation pick, all = every OS)'
+        type: choice
+        default: auto
+        options: [auto, all, debian-12, debian-13, ubuntu-24.04, ubuntu-26.04]
+      database:
+        description: 'Database (auto = rotation pick, all = every database)'
+        type: choice
+        default: auto
+        options: [auto, all, postgres, mysql, sqlite]
+      panel_version:
+        description: 'Panel release tag to install (e.g. 4.4.1). Empty = latest stable.'
+        type: string
+        default: ''
+      panel_tests_ref:
+        description: 'gameap/gameap ref for the e2e tests. Empty = tag of the installed panel.'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    if: github.repository == 'gameap/gameapctl'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Compute matrix
+        id: plan
+        env:
+          INPUT_OS: ${{ inputs.os || 'auto' }}
+          INPUT_DB: ${{ inputs.database || 'auto' }}
+        run: |
+          set -euo pipefail
+
+          OSES=(debian-12 debian-13 ubuntu-24.04 ubuntu-26.04)
+          IMAGES=(debian:12 debian:13 ubuntu:24.04 ubuntu:26.04)
+          DBS=(postgres mysql sqlite)
+
+          # One combination per 12h slot, so idx advances by exactly 1 between
+          # the 03:00 and 15:00 runs. gcd(4,3)=1, so (idx%4, idx%3) walks all
+          # 12 OS x database pairs in 12 slots: full coverage every 6 days.
+          idx=$(( $(date -u +%s) / 43200 % 12 ))
+          rot_os="${OSES[idx % 4]}"
+          rot_db="${DBS[idx % 3]}"
+          echo "Rotation slot ${idx}: ${rot_os} + ${rot_db}"
+
+          case "${INPUT_OS}" in
+            auto) sel_os=("${rot_os}") ;;
+            all)  sel_os=("${OSES[@]}") ;;
+            *)    sel_os=("${INPUT_OS}") ;;
+          esac
+
+          case "${INPUT_DB}" in
+            auto) sel_db=("${rot_db}") ;;
+            all)  sel_db=("${DBS[@]}") ;;
+            *)
+              # gameapctl accepts only postgres/mysql/sqlite/none; an unknown
+              # value would be silently ignored and yield a broken config.env.
+              if ! printf '%s\n' "${DBS[@]}" | grep -qx "${INPUT_DB}"; then
+                echo "::error::unknown database '${INPUT_DB}'" >&2
+                exit 1
+              fi
+              sel_db=("${INPUT_DB}")
+              ;;
+          esac
+
+          matrix=$(
+            for os in "${sel_os[@]}"; do
+              image=""
+              for i in "${!OSES[@]}"; do
+                if [ "${OSES[i]}" = "${os}" ]; then
+                  image="${IMAGES[i]}"
+                fi
+              done
+              if [ -z "${image}" ]; then
+                echo "::error::unknown os '${os}'" >&2
+                exit 1
+              fi
+              for db in "${sel_db[@]}"; do
+                jq -n \
+                  --arg name "${os}-${db}" \
+                  --arg os "${os}" \
+                  --arg image "${image}" \
+                  --arg database "${db}" \
+                  '{name: $name, os: $os, image: $image, database: $database}'
+              done
+            done | jq -cs '{include: .}'
+          )
+
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "## E2E install plan"
+            echo
+            echo "Rotation slot \`${idx}\` picks \`${rot_os}\` + \`${rot_db}\`."
+            echo
+            echo '```json'
+            echo "${matrix}" | jq .
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build:
+    if: github.repository == 'gameap/gameapctl'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # ui/dist is not tracked in git but is embedded via //go:embed, so the UI
+      # has to be built before the Go build.
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Static binary, so the same artifact runs on every base image in the matrix.
+      - name: Build gameapctl
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o gameapctl ./cmd/gameapctl
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameapctl-linux-amd64
+          path: gameapctl
+          retention-days: 1
+
+  install:
+    name: install (${{ matrix.name }})
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      CONTAINER: gameap-e2e-target
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download gameapctl binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gameapctl-linux-amd64
+
+      # The runner image ships mysql-server, and AppArmor profiles live in the
+      # kernel shared with the container, so a loaded usr.sbin.mysqld profile
+      # would confine the mysqld installed inside the privileged container.
+      - name: Neutralize host MySQL AppArmor profile
+        run: |
+          if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then
+            sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null || true
+          fi
+          sudo aa-status 2>/dev/null | grep -i mysqld || echo "no mysqld apparmor profile loaded"
+
+      - name: Build systemd image
+        run: |
+          docker build --pull \
+            --build-arg BASE_IMAGE='${{ matrix.image }}' \
+            -t gameap-e2e:'${{ matrix.os }}' \
+            .github/e2e-install
+
+      # --privileged is needed beyond systemd itself: gameap.service uses
+      # ProtectSystem=strict / PrivateTmp / RuntimeDirectory and the database
+      # units are sandboxed the same way, all of which need mount namespaces.
+      - name: Start container
+        run: |
+          docker run -d --name "${CONTAINER}" \
+            --privileged \
+            --cgroupns=host \
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            --tmpfs /run \
+            --tmpfs /run/lock \
+            gameap-e2e:'${{ matrix.os }}'
+
+      - name: Wait for systemd
+        run: |
+          state=""
+          for _ in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' "${CONTAINER}")" != "true" ]; then
+              echo "::error::container exited before systemd came up"
+              docker logs "${CONTAINER}" || true
+              exit 1
+            fi
+            state="$(docker exec "${CONTAINER}" systemctl is-system-running 2>/dev/null || true)"
+            case "${state}" in
+              running|degraded)
+                echo "systemd state: ${state}"
+                docker exec "${CONTAINER}" systemctl --no-pager --failed || true
+                exit 0
+                ;;
+            esac
+            sleep 2
+          done
+          echo "::error::systemd did not reach running/degraded (last state: ${state:-unknown})"
+          docker exec "${CONTAINER}" systemctl --no-pager --failed || true
+          docker logs "${CONTAINER}" || true
+          exit 1
+
+      - name: Get container IP
+        id: ip
+        run: |
+          ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${CONTAINER}")"
+          if [ -z "${ip}" ]; then
+            echo "::error::could not determine container IP"
+            exit 1
+          fi
+          echo "Container IP: ${ip}"
+          echo "ip=${ip}" >> "${GITHUB_OUTPUT}"
+
+      # actions/upload-artifact does not preserve the executable bit, hence the
+      # chmod. /usr/local/bin rather than /tmp because docker cp cannot write
+      # into the tmpfs mounts systemd sets up.
+      - name: Install gameapctl into container
+        run: |
+          docker cp gameapctl "${CONTAINER}":/usr/local/bin/gameapctl
+          docker exec "${CONTAINER}" chmod 0755 /usr/local/bin/gameapctl
+          docker exec "${CONTAINER}" /usr/local/bin/gameapctl version
+
+      # --host doubles as the bind address, as the address the installer
+      # health-checks and as the gRPC enrollment address, so the bridge IP has
+      # to be used here: 127.0.0.1 would be unreachable from the runner host.
+      # DEBIAN_FRONTEND/NEEDRESTART_SUSPEND are passed explicitly because the
+      # package recipes run shell commands that inherit the process environment.
+      - name: Install panel with daemon
+        timeout-minutes: 25
+        env:
+          IP: ${{ steps.ip.outputs.ip }}
+          PANEL_VERSION: ${{ inputs.panel_version }}
+        run: |
+          version_arg=()
+          if [ -n "${PANEL_VERSION}" ]; then
+            version_arg=(--version="${PANEL_VERSION}")
+          fi
+          docker exec \
+            -e HOME=/root \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e NEEDRESTART_SUSPEND=1 \
+            "${CONTAINER}" \
+            /usr/local/bin/gameapctl --non-interactive panel install \
+              --host="${IP}" \
+              --port=80 \
+              --database='${{ matrix.database }}' \
+              --with-daemon \
+              "${version_arg[@]}"
+
+      # A failing daemon install is only printed by the installer, which still
+      # exits 0, so these assertions are the actual gate.
+      - name: Assert services are up
+        env:
+          IP: ${{ steps.ip.outputs.ip }}
+        run: |
+          docker exec "${CONTAINER}" systemctl is-active gameap
+          docker exec "${CONTAINER}" systemctl is-active gameap-daemon
+          docker exec "${CONTAINER}" systemctl is-enabled gameap gameap-daemon
+          docker exec -e HOME=/root "${CONTAINER}" /usr/local/bin/gameapctl panel status
+          docker exec -e HOME=/root "${CONTAINER}" /usr/local/bin/gameapctl daemon status
+          curl -fsS --max-time 5 "http://${IP}/api/health"
+          echo
+
+      - name: Read install state
+        id: state
+        run: |
+          docker exec -e HOME=/root "${CONTAINER}" \
+            cat /root/.gameapctl/panel_install_state.json > state.json
+          admin_password="$(jq -er '.adminPassword' state.json)"
+          panel_tag="$(jq -er '.version' state.json)"
+          echo "::add-mask::${admin_password}"
+          {
+            echo "admin_password=${admin_password}"
+            echo "panel_tag=${panel_tag}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Installed panel: ${panel_tag}"
+
+      # Admin MFA enforcement is on by default and shows a modal that cannot be
+      # dismissed to an admin without 2FA, which would fail every UI test.
+      # The restart also exercises the installed systemd unit.
+      - name: Disable admin MFA requirement and restart panel
+        run: |
+          docker exec "${CONTAINER}" sh -c \
+            'printf "\nAUTH_REQUIRE_MFA_FOR_ADMINS=false\n" >> /etc/gameap/config.env'
+          docker exec -e HOME=/root "${CONTAINER}" /usr/local/bin/gameapctl panel restart
+
+      - name: Wait for panel health
+        env:
+          IP: ${{ steps.ip.outputs.ip }}
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 5 "http://${IP}/api/health" \
+                | jq -e '.status == "ok"' >/dev/null 2>&1; then
+              echo "panel healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::panel /api/health did not report ok after restart"
+          curl -sv --max-time 5 "http://${IP}/api/health" || true
+          docker exec "${CONTAINER}" journalctl -u gameap -n 100 --no-pager || true
+          exit 1
+
+      - name: Log in as admin
+        id: login
+        env:
+          IP: ${{ steps.ip.outputs.ip }}
+          ADMIN_PASSWORD: ${{ steps.state.outputs.admin_password }}
+        run: |
+          body="$(jq -n --arg l admin --arg p "${ADMIN_PASSWORD}" '{login: $l, password: $p}')"
+          token="$(curl -fsS --max-time 10 \
+            -H 'Content-Type: application/json' \
+            -d "${body}" \
+            "http://${IP}/api/auth/login" | jq -er '.token')"
+          echo "::add-mask::${token}"
+          echo "token=${token}" >> "${GITHUB_OUTPUT}"
+          echo "login ok"
+
+      # The daemon reconnects after the panel restart above, so this polls
+      # instead of asserting once.
+      - name: Assert daemon is online
+        env:
+          IP: ${{ steps.ip.outputs.ip }}
+          TOKEN: ${{ steps.login.outputs.token }}
+        run: |
+          summary=""
+          for _ in $(seq 1 60); do
+            summary="$(curl -fsS --max-time 5 -H "Authorization: Bearer ${TOKEN}" \
+              "http://${IP}/api/nodes/summary" || true)"
+            if echo "${summary}" | jq -e '(.total >= 1) and (.online >= 1)' >/dev/null 2>&1; then
+              echo "daemon online: $(echo "${summary}" | jq -c '{total, online, offline}')"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::daemon did not come online; last summary: ${summary}"
+          docker exec "${CONTAINER}" journalctl -u gameap-daemon -n 200 --no-pager || true
+          docker exec "${CONTAINER}" tail -n 200 /var/log/gameap-daemon/output.log || true
+          exit 1
+
+      # Test the installed panel with the tests of that same version.
+      - name: Resolve tests ref
+        id: testsref
+        env:
+          PANEL_TESTS_REF: ${{ inputs.panel_tests_ref }}
+          PANEL_TAG: ${{ steps.state.outputs.panel_tag }}
+        run: |
+          if [ -n "${PANEL_TESTS_REF}" ]; then
+            ref="${PANEL_TESTS_REF}"
+          elif echo "${PANEL_TAG}" | grep -Eq '^v4\.[0-9]+\.[0-9]+'; then
+            ref="${PANEL_TAG}"
+          else
+            ref="main"
+          fi
+          echo "tests ref: ${ref}"
+          echo "tests_ref=${ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout panel tests
+        uses: actions/checkout@v4
+        with:
+          repository: gameap/gameap
+          ref: ${{ steps.testsref.outputs.tests_ref }}
+          path: panel
+
+      - name: Check smoke tests exist
+        env:
+          TESTS_REF: ${{ steps.testsref.outputs.tests_ref }}
+        run: |
+          if [ ! -d panel/web/frontend/tests/e2e/smoke ]; then
+            echo "::error::no smoke tests at ref '${TESTS_REF}' (they exist from v4.2.4)"
+            exit 1
+          fi
+
+      # Has to come after the panel checkout: the npm cache key hashes its lockfile.
+      - name: Install Node.js for tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: panel/web/frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: panel/web/frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: panel/web/frontend
+        run: npx playwright install --with-deps chromium
+
+      # Both URLs point at the installed panel, so the suite drives the SPA the
+      # installer actually shipped rather than a dev server build.
+      - name: Run smoke tests
+        working-directory: panel/web/frontend
+        env:
+          E2E_BASE_URL: http://${{ steps.ip.outputs.ip }}
+          E2E_API_BASE_URL: http://${{ steps.ip.outputs.ip }}
+          E2E_ADMIN_USER: admin
+          E2E_ADMIN_PASSWORD: ${{ steps.state.outputs.admin_password }}
+        run: npx playwright test --project=chromium tests/e2e/smoke
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p logs
+          if ! docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
+            echo "container was never started" > logs/no-container.txt
+            exit 0
+          fi
+          docker logs "${CONTAINER}" > logs/docker.log 2>&1 || true
+          docker exec "${CONTAINER}" journalctl -u gameap --no-pager -o short-iso \
+            > logs/journal-gameap.log 2>&1 || true
+          docker exec "${CONTAINER}" journalctl -u gameap-daemon --no-pager -o short-iso \
+            > logs/journal-gameap-daemon.log 2>&1 || true
+          docker exec "${CONTAINER}" journalctl -u mysql -u mariadb -u postgresql --no-pager -o short-iso \
+            > logs/journal-database.log 2>&1 || true
+          docker exec "${CONTAINER}" journalctl -b --no-pager -o short-iso -n 3000 \
+            > logs/journal-boot.log 2>&1 || true
+          docker exec "${CONTAINER}" sh -c 'cat /var/log/gameapctl/*.log 2>/dev/null' \
+            > logs/gameapctl.log 2>&1 || true
+          docker exec "${CONTAINER}" cat /var/log/gameap-daemon/output.log \
+            > logs/gameap-daemon-output.log 2>&1 || true
+          docker exec "${CONTAINER}" systemctl --no-pager status gameap gameap-daemon \
+            > logs/systemctl-status.log 2>&1 || true
+          docker exec "${CONTAINER}" sh -c \
+            "sed -E 's/^(AUTH_SECRET|ENCRYPTION_KEY|DATABASE_URL|DAEMON_SETUP_KEY|DAEMON_SETUP_TOKEN)=.*/\1=REDACTED/' /etc/gameap/config.env" \
+            > logs/config.env.redacted 2>&1 || true
+          if [ -f state.json ]; then
+            jq 'del(.adminPassword, .dbPassword, .dbRootPassword)' state.json \
+              > logs/panel_install_state.redacted.json || true
+          fi
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-install-logs-${{ matrix.name }}
+          path: logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-${{ matrix.name }}
+          path: panel/web/frontend/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Job summary
+        if: always()
+        env:
+          PANEL_TAG: ${{ steps.state.outputs.panel_tag }}
+          TESTS_REF: ${{ steps.testsref.outputs.tests_ref }}
+        run: |
+          {
+            echo "## ${{ matrix.name }} — ${{ job.status }}"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Image | \`${{ matrix.image }}\` |"
+            echo "| Database | \`${{ matrix.database }}\` |"
+            echo "| Panel tag | \`${PANEL_TAG:-n/a}\` |"
+            echo "| Tests ref | \`${TESTS_REF:-n/a}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
