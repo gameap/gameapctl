@@ -128,6 +128,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -174,6 +176,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download gameapctl binary
         uses: actions/download-artifact@v4
@@ -191,16 +195,21 @@ jobs:
           sudo aa-status 2>/dev/null | grep -i mysqld || echo "no mysqld apparmor profile loaded"
 
       - name: Build systemd image
+        env:
+          BASE_IMAGE: ${{ matrix.image }}
+          IMAGE_TAG: gameap-e2e:${{ matrix.os }}
         run: |
           docker build --pull \
-            --build-arg BASE_IMAGE='${{ matrix.image }}' \
-            -t gameap-e2e:'${{ matrix.os }}' \
+            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+            -t "${IMAGE_TAG}" \
             .github/e2e-install
 
       # --privileged is needed beyond systemd itself: gameap.service uses
       # ProtectSystem=strict / PrivateTmp / RuntimeDirectory and the database
       # units are sandboxed the same way, all of which need mount namespaces.
       - name: Start container
+        env:
+          IMAGE_TAG: gameap-e2e:${{ matrix.os }}
         run: |
           docker run -d --name "${CONTAINER}" \
             --privileged \
@@ -208,7 +217,7 @@ jobs:
             -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
             --tmpfs /run \
             --tmpfs /run/lock \
-            gameap-e2e:'${{ matrix.os }}'
+            "${IMAGE_TAG}"
 
       - name: Wait for systemd
         run: |
@@ -263,6 +272,7 @@ jobs:
         timeout-minutes: 25
         env:
           IP: ${{ steps.ip.outputs.ip }}
+          DATABASE: ${{ matrix.database }}
           PANEL_VERSION: ${{ inputs.panel_version }}
         run: |
           version_arg=()
@@ -277,7 +287,7 @@ jobs:
             /usr/local/bin/gameapctl --non-interactive panel install \
               --host="${IP}" \
               --port=80 \
-              --database='${{ matrix.database }}' \
+              --database="${DATABASE}" \
               --with-daemon \
               "${version_arg[@]}"
 
@@ -395,6 +405,7 @@ jobs:
           repository: gameap/gameap
           ref: ${{ steps.testsref.outputs.tests_ref }}
           path: panel
+          persist-credentials: false
 
       - name: Check smoke tests exist
         env:
@@ -455,9 +466,28 @@ jobs:
             > logs/gameap-daemon-output.log 2>&1 || true
           docker exec "${CONTAINER}" systemctl --no-pager status gameap gameap-daemon \
             > logs/systemctl-status.log 2>&1 || true
-          docker exec "${CONTAINER}" sh -c \
-            "sed -E 's/^(AUTH_SECRET|ENCRYPTION_KEY|DATABASE_URL|DAEMON_SETUP_KEY|DAEMON_SETUP_TOKEN)=.*/\1=REDACTED/' /etc/gameap/config.env" \
-            > logs/config.env.redacted 2>&1 || true
+          # Redact by key pattern rather than by an explicit list of names, so a
+          # future config.env template gaining a secret does not silently leak
+          # into the artifact; the second rule masks the password inside any
+          # credentialed URL while keeping scheme and host readable.
+          if docker exec "${CONTAINER}" sh -c \
+              'sed -E -e "s/^([A-Za-z0-9_]*(PASSWORD|PASSWD|SECRET|TOKEN|CREDENTIAL|DSN|KEY)[A-Za-z0-9_]*|DATABASE_URL)=.*/\1=REDACTED/" \
+                      -e "s#^([A-Za-z0-9_]+)=([A-Za-z0-9+.-]+://[^:@[:space:]]+):[^@[:space:]]*@#\1=\2:REDACTED@#" \
+                      /etc/gameap/config.env' \
+              > logs/config.env.redacted 2>logs/config.env.redacted.err; then
+            # Never publish the file unless it verifiably carries no secret value.
+            if grep -E '^([A-Za-z0-9_]*(PASSWORD|PASSWD|SECRET|TOKEN|CREDENTIAL|DSN|KEY)[A-Za-z0-9_]*|DATABASE_URL)=' \
+                 logs/config.env.redacted | grep -qv '=REDACTED$' \
+               || sed 's/:REDACTED@/:@/g' logs/config.env.redacted \
+                 | grep -Eq '://[^:@[:space:]]+:[^@[:space:]]+@'; then
+              echo "::warning::config.env redaction left a secret behind; dropping the file"
+              rm -f logs/config.env.redacted
+            fi
+            rm -f logs/config.env.redacted.err
+          else
+            echo "::warning::could not read /etc/gameap/config.env: $(cat logs/config.env.redacted.err)"
+            rm -f logs/config.env.redacted logs/config.env.redacted.err
+          fi
           if [ -f state.json ]; then
             jq 'del(.adminPassword, .dbPassword, .dbRootPassword)' state.json \
               > logs/panel_install_state.redacted.json || true
@@ -484,16 +514,20 @@ jobs:
       - name: Job summary
         if: always()
         env:
+          COMBO: ${{ matrix.name }}
+          JOB_STATUS: ${{ job.status }}
+          IMAGE: ${{ matrix.image }}
+          DATABASE: ${{ matrix.database }}
           PANEL_TAG: ${{ steps.state.outputs.panel_tag }}
           TESTS_REF: ${{ steps.testsref.outputs.tests_ref }}
         run: |
           {
-            echo "## ${{ matrix.name }} — ${{ job.status }}"
+            echo "## ${COMBO} — ${JOB_STATUS}"
             echo
             echo "| Field | Value |"
             echo "|---|---|"
-            echo "| Image | \`${{ matrix.image }}\` |"
-            echo "| Database | \`${{ matrix.database }}\` |"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Database | \`${DATABASE}\` |"
             echo "| Panel tag | \`${PANEL_TAG:-n/a}\` |"
             echo "| Tests ref | \`${TESTS_REF:-n/a}\` |"
           } >> "${GITHUB_STEP_SUMMARY}"
