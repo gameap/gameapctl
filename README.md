@@ -43,6 +43,10 @@ Pass `--scope=user` explicitly if the state file in `~/.gameapctl` was lost.
 | Daemon binary | `/usr/bin/gameap-daemon` | `~/.local/bin/gameap-daemon` |
 | Daemon unit | `/etc/systemd/system/gameap-daemon.service` | `~/.config/systemd/user/gameap-daemon.service` |
 
+The daemon work dir can be changed at install time with `gameapctl daemon install --work-path=<dir>`
+(an absolute path; defaults to `/srv/gameap` in system scope, `~/gameap` in user scope,
+`C:\gameap` on Windows).
+
 Note that `~/.local/bin` is frequently missing from `PATH` in non-login shells. The services
 are unaffected because the units use absolute paths, but to run `gameap` by name add it:
 `export PATH="$HOME/.local/bin:$PATH"`.

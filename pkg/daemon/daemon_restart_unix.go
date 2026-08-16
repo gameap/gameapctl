@@ -31,7 +31,7 @@ func Restart(ctx context.Context, opts ...Options) error {
 	case runhelper.InitSystemd:
 		err = restartDaemonSystemdScope(ctx, gameap.ScopeSystem)
 	case runhelper.InitUnknown:
-		err = restartDaemonProcess(ctx)
+		err = restartDaemonProcess(ctx, o)
 	}
 
 	return err
@@ -62,7 +62,7 @@ func restartDaemonSystemdScope(ctx context.Context, scope string) error {
 	return nil
 }
 
-func restartDaemonProcess(ctx context.Context) error {
+func restartDaemonProcess(ctx context.Context, o Options) error {
 	p, err := FindProcess(ctx)
 	if err != nil {
 		return errors.WithMessage(err, "failed to find daemon process")
@@ -74,7 +74,7 @@ func restartDaemonProcess(ctx context.Context) error {
 		}
 	}
 
-	err = startDaemonFork(ctx)
+	err = startDaemonFork(ctx, o)
 	if err != nil {
 		return errors.WithMessage(err, "failed to start daemon")
 	}

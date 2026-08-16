@@ -136,7 +136,11 @@ func Run(args []string) {
 								EnvVars: []string{"CONFIG"},
 							},
 							&cli.StringFlag{
-								Name: "work-dir",
+								Name:    "work-path",
+								Aliases: []string{"work-dir"},
+								EnvVars: []string{"WORK_PATH"},
+								Usage: "Daemon working directory, must be an absolute path " +
+									"(default: /srv/gameap on Linux, C:\\gameap on Windows)",
 							},
 							&cli.BoolFlag{
 								Name:  "github",

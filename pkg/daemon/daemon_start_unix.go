@@ -24,7 +24,7 @@ func Start(ctx context.Context, opts ...Options) error {
 	o := firstOptions(opts)
 
 	if o.scope() == gameap.ScopeUser {
-		return startDaemonSystemdScope(ctx, gameap.ScopeUser)
+		return startDaemonSystemdScope(ctx, gameap.ScopeUser, o.WorkPath)
 	}
 
 	init, err := runhelper.DetectInit(ctx)
@@ -34,9 +34,9 @@ func Start(ctx context.Context, opts ...Options) error {
 
 	switch init {
 	case runhelper.InitSystemd:
-		err = startDaemonSystemdScope(ctx, gameap.ScopeSystem)
+		err = startDaemonSystemdScope(ctx, gameap.ScopeSystem, o.WorkPath)
 	case runhelper.InitUnknown:
-		err = startDaemonFork(ctx)
+		err = startDaemonFork(ctx, o)
 	}
 
 	if err != nil {
@@ -46,8 +46,8 @@ func Start(ctx context.Context, opts ...Options) error {
 	return nil
 }
 
-func startDaemonSystemdScope(ctx context.Context, scope string) error {
-	paths, err := gameap.DaemonPathsForScope(scope)
+func startDaemonSystemdScope(ctx context.Context, scope, workPath string) error {
+	paths, err := gameap.DaemonPathsForScopeWithWorkPath(scope, workPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to resolve daemon paths")
 	}
@@ -108,7 +108,7 @@ func (e daemonAlreadyRunningError) Error() string {
 	return fmt.Sprintf("daemon is already running with pid %d", e)
 }
 
-func startDaemonFork(ctx context.Context) error {
+func startDaemonFork(ctx context.Context, o Options) error {
 	log.Println("Starting daemon (fork)")
 
 	daemonProcess, err := FindProcess(ctx)
@@ -126,8 +126,10 @@ func startDaemonFork(ctx context.Context) error {
 	}
 	log.Println("Found", exePath)
 
-	if _, err := os.Stat(gameap.DefaultWorkPath); errors.Is(err, fs.ErrNotExist) {
-		err := os.Mkdir(gameap.DefaultWorkPath, 0755)
+	workPath := o.workPath()
+
+	if _, err := os.Stat(workPath); errors.Is(err, fs.ErrNotExist) {
+		err := os.Mkdir(workPath, 0755)
 		if err != nil {
 			return errors.WithMessage(err, "failed to create work path")
 		}
@@ -145,7 +147,7 @@ func startDaemonFork(ctx context.Context) error {
 	}(devNull)
 
 	attr := os.ProcAttr{
-		Dir: gameap.DefaultWorkPath,
+		Dir: workPath,
 		Env: os.Environ(),
 		Sys: &syscall.SysProcAttr{
 			Setsid: true,

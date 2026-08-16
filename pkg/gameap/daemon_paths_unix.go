@@ -70,3 +70,13 @@ func DaemonPathsForScope(scope string) (DaemonPaths, error) {
 		return DaemonPaths{}, errors.Errorf("unknown daemon scope %q (expected %q or %q)", scope, ScopeSystem, ScopeUser)
 	}
 }
+
+// applyWorkPath rewrites the fields derived from the work path, keeping the
+// rest of the paths (binary, config, certs, logs, systemd unit) untouched.
+func applyWorkPath(paths DaemonPaths, dir string) DaemonPaths {
+	paths.WorkPath = dir
+	paths.SteamCMDPath = filepath.Join(dir, "steamcmd")
+	paths.ToolsPath = dir
+
+	return paths
+}

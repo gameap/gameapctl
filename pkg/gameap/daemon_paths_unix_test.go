@@ -55,3 +55,52 @@ func TestUserDaemonPathsFromHome(t *testing.T) {
 	assert.Equal(t, filepath.Join(home, ".config", "systemd", "user", "gameap-daemon.service"), paths.SystemdUnitPath)
 	assert.Equal(t, filepath.Join(home, ".config", "systemd", "user"), paths.SystemdUnitDir)
 }
+
+func TestDaemonPathsForScopeWithWorkPath_System(t *testing.T) {
+	const workPath = "/opt/gameap"
+
+	paths, err := DaemonPathsForScopeWithWorkPath(ScopeSystem, workPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, ScopeSystem, paths.Scope)
+	assert.Equal(t, workPath, paths.WorkPath)
+	assert.Equal(t, filepath.Join(workPath, "steamcmd"), paths.SteamCMDPath)
+	assert.Equal(t, workPath, paths.ToolsPath)
+	assert.Equal(t, DefaultDaemonFilePath, paths.DaemonFilePath)
+	assert.Equal(t, DefaultDaemonConfigFilePath, paths.DaemonConfigFilePath)
+	assert.Equal(t, DefaultDaemonCertPath, paths.CertsPath)
+	assert.Equal(t, DefaultOutputLogPath, paths.OutputLogPath)
+	assert.Equal(t, "/etc/systemd/system/gameap-daemon.service", paths.SystemdUnitPath)
+}
+
+func TestDaemonPathsForScopeWithWorkPath_User(t *testing.T) {
+	const workPath = "/opt/gameap"
+
+	paths, err := DaemonPathsForScopeWithWorkPath(ScopeUser, workPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, ScopeUser, paths.Scope)
+	assert.Equal(t, workPath, paths.WorkPath)
+	assert.Equal(t, filepath.Join(workPath, "steamcmd"), paths.SteamCMDPath)
+	assert.Equal(t, workPath, paths.ToolsPath)
+
+	userPaths, err := UserDaemonPaths()
+	require.NoError(t, err)
+	assert.Equal(t, userPaths.DaemonFilePath, paths.DaemonFilePath)
+	assert.Equal(t, userPaths.DaemonConfigFilePath, paths.DaemonConfigFilePath)
+	assert.Equal(t, userPaths.CertsPath, paths.CertsPath)
+	assert.Equal(t, userPaths.OutputLogPath, paths.OutputLogPath)
+	assert.Equal(t, userPaths.SystemdUnitPath, paths.SystemdUnitPath)
+}
+
+func TestDaemonPathsForScopeWithWorkPath_Empty(t *testing.T) {
+	for _, workPath := range []string{"", "  "} {
+		paths, err := DaemonPathsForScopeWithWorkPath(ScopeSystem, workPath)
+		require.NoError(t, err)
+
+		defaultPaths, err := DaemonPathsForScope(ScopeSystem)
+		require.NoError(t, err)
+
+		assert.Equal(t, defaultPaths, paths)
+	}
+}

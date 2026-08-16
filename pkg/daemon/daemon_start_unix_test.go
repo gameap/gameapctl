@@ -8,6 +8,7 @@ import (
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRenderDaemonUnit_System(t *testing.T) {
@@ -41,4 +42,15 @@ func TestRenderDaemonUnit_User(t *testing.T) {
 	assert.NotContains(t, unit, "WantedBy=multi-user.target")
 	assert.NotContains(t, unit, "Wants=network-online.target")
 	assert.NotContains(t, unit, "After=network.target network-online.target")
+}
+
+func TestRenderDaemonUnit_CustomWorkPath(t *testing.T) {
+	const workPath = "/opt/gameap"
+
+	paths, err := gameap.DaemonPathsForScopeWithWorkPath(gameap.ScopeSystem, workPath)
+	require.NoError(t, err)
+
+	unit := renderDaemonUnit(paths)
+
+	assert.Contains(t, unit, "WorkingDirectory="+workPath)
 }
