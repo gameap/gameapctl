@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/pkg/errors"
@@ -24,7 +23,7 @@ func createUser(_ context.Context, state daemonsInstallState) (daemonsInstallSta
 func setUserPrivileges(ctx context.Context, state daemonsInstallState) (daemonsInstallState, error) {
 	if err := oscore.GrantFullControl(
 		ctx,
-		gameap.DefaultWorkPath,
+		state.WorkPath,
 		defaultUserName,
 	); err != nil {
 		return state, errors.WithMessage(err, "failed to set permissions for working directory")

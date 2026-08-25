@@ -16,6 +16,7 @@ func Handle(cliCtx *cli.Context) error {
 	opts := daemon.Options{}
 	if st, err := gameapctl.LoadDaemonInstallState(cliCtx.Context); err == nil {
 		opts.Scope = st.Scope
+		opts.WorkPath = st.WorkPath
 	}
 
 	err := daemon.Start(cliCtx.Context, opts)

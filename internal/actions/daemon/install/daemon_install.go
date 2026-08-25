@@ -148,6 +148,7 @@ type InstallOptions struct {
 	ConnectURL string
 	Config     string
 	Scope      string
+	WorkPath   string
 	FromGithub bool
 	Branch     string
 	Version    string
@@ -160,6 +161,7 @@ func Handle(cliCtx *cli.Context) error {
 		ConnectURL: cliCtx.String("connect"),
 		Config:     cliCtx.String("config"),
 		Scope:      cliCtx.String("scope"),
+		WorkPath:   cliCtx.String("work-path"),
 		FromGithub: cliCtx.Bool("github"),
 		Branch:     cliCtx.String("branch"),
 		Version:    cliCtx.String("version"),
@@ -199,7 +201,11 @@ func Install(ctx context.Context, opts InstallOptions) error {
 		return err
 	}
 
-	paths, err := gameap.DaemonPathsForScope(scope)
+	if opts.WorkPath != "" && !filepath.IsAbs(opts.WorkPath) {
+		return errors.Errorf("work path must be an absolute path, got %q", opts.WorkPath)
+	}
+
+	paths, err := gameap.DaemonPathsForScopeWithWorkPath(scope, opts.WorkPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to resolve daemon paths for scope")
 	}
@@ -407,7 +413,7 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	}
 
 	fmt.Println("Starting gameap-daemon ...")
-	err = daemon.Start(ctx, daemon.Options{Scope: state.Scope})
+	err = daemon.Start(ctx, daemon.Options{Scope: state.Scope, WorkPath: state.WorkPath})
 	if err != nil {
 		return errors.WithMessage(err, "failed to start gameap-daemon")
 	}
