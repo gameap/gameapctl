@@ -12,11 +12,19 @@ import (
 func ExecCommand(ctx context.Context, command string, args ...string) error {
 	cmd := exec.CommandContext(ctx, command, args...)
 
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = log.Writer()
+	stdout := NewOutputDecoder(log.Writer())
+	stderr := NewOutputDecoder(log.Writer())
+
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	log.Println("\n" + cmd.String())
 
-	return cmd.Run()
+	err := cmd.Run()
+
+	stdout.Flush()
+	stderr.Flush()
+
+	return err
 }
 
 func ExecCommandWithOutput(ctx context.Context, command string, args ...string) (string, error) {
@@ -24,10 +32,16 @@ func ExecCommandWithOutput(ctx context.Context, command string, args ...string) 
 
 	buf := &bytes.Buffer{}
 	buf.Grow(1024) //nolint:mnd
+	stderr := NewOutputDecoder(log.Writer())
+
 	cmd.Stdout = buf
-	cmd.Stderr = log.Writer()
+	cmd.Stderr = stderr
 	log.Println("\n" + cmd.String())
+
 	err := cmd.Run()
+
+	stderr.Flush()
+
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to run command %s", command)
 	}

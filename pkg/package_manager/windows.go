@@ -27,11 +27,15 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 const servicesConfigPath = "C:\\gameap\\services"
 
-const defaultServiceUser = "NT AUTHORITY\\NETWORK SERVICE"
+const defaultServiceUser = oscore.WindowsNetworkServiceAccount
+
+// defaultResetFailureDuration is the period after which the service failure count is reset.
+const defaultResetFailureDuration = time.Hour
 
 // https://curl.se/docs/caextract.html
 const caCertURL = "https://curl.se/ca/cacert.pem"
@@ -360,14 +364,20 @@ func (pm *WindowsPackageManager) installPackage(ctx context.Context, p windows.P
 					//
 					//nolint:gosec
 					execCmd := exec.Command("cmd", append([]string{"/C"}, scmd...)...)
+					stdout := oscore.NewOutputDecoder(log.Writer())
+					stderr := oscore.NewOutputDecoder(log.Writer())
 					execCmd.Env = env
-					execCmd.Stdout = log.Writer()
-					execCmd.Stderr = log.Writer()
+					execCmd.Stdout = stdout
+					execCmd.Stderr = stderr
 					execCmd.Dir = dir
 
-					log.Println('\n', execCmd.String())
+					log.Println("\n" + execCmd.String())
 
 					err = execCmd.Run()
+
+					stdout.Flush()
+					stderr.Flush()
+
 					if err != nil {
 						if len(step.AllowedInstallExitCodes) > 0 &&
 							lo.Contains(step.AllowedInstallExitCodes, execCmd.ProcessState.ExitCode()) {
@@ -886,8 +896,11 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 	}
 
 	serviceAccount := ""
+	servicePassword := ""
+
 	if p.Service.ServiceAccount != nil && p.Service.ServiceAccount.Username != "" {
 		serviceAccount = p.Service.ServiceAccount.Username
+		servicePassword = p.Service.ServiceAccount.Password
 	}
 
 	shawlArgs := []string{
@@ -938,10 +951,13 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 	shawlArgs = append(shawlArgs, p.Service.Executable)
 
 	if p.Service.Arguments != "" {
-		shawlArgs = append(shawlArgs, strings.Split(p.Service.Arguments, " ")...)
-	}
+		serviceArgs, err := shellquote.Split(p.Service.Arguments)
+		if err != nil {
+			return errors.WithMessagef(err, "failed to parse arguments of service '%s'", serviceName)
+		}
 
-	binPath := fmt.Sprintf("%s %s", shawlPath, strings.Join(shawlArgs, " "))
+		shawlArgs = append(shawlArgs, serviceArgs...)
+	}
 
 	if !utils.IsFileExists(servicesConfigPath) {
 		log.Println("Creating services config directory at", servicesConfigPath)
@@ -969,30 +985,22 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 		return errors.WithMessagef(err, "failed to save config for service '%s'", serviceName)
 	}
 
-	scArgs := []string{
-		"create",
-		serviceName,
-		"start=auto",
+	resetFailure := p.Service.ResetFailure.Duration
+	if resetFailure == 0 {
+		resetFailure = defaultResetFailureDuration
 	}
 
-	if serviceAccount != "" {
-		scArgs = append(scArgs, fmt.Sprintf("obj=%s", serviceAccount))
-	}
-
-	scArgs = append(scArgs, fmt.Sprintf("binPath=%s", binPath))
-
-	log.Println("Creating service with sc command:", "sc", strings.Join(scArgs, " "))
-
-	err = oscore.ExecCommand(ctx, "sc", scArgs...)
+	err = createWindowsService(windowsServiceConfig{
+		Name:            serviceName,
+		ExecutablePath:  shawlPath,
+		Arguments:       shawlArgs,
+		Account:         serviceAccount,
+		Password:        servicePassword,
+		RecoveryActions: serviceRecoveryActions(p.Service.OnFailure),
+		ResetPeriod:     resetFailure,
+	})
 	if err != nil {
 		return errors.WithMessagef(err, "failed to install service '%s'", serviceName)
-	}
-
-	if len(p.Service.OnFailure) > 0 {
-		err = pm.configureServiceFailureActions(ctx, serviceName, p.Service.OnFailure, p.Service.ResetFailure.Duration)
-		if err != nil {
-			return errors.WithMessagef(err, "failed to configure failure actions for service '%s'", serviceName)
-		}
 	}
 
 	log.Printf("Service '%s' successfully installed", serviceName)
@@ -1000,62 +1008,30 @@ func (pm *WindowsPackageManager) installShawlService(ctx context.Context, p wind
 	return nil
 }
 
-func (pm *WindowsPackageManager) configureServiceFailureActions(
-	ctx context.Context,
-	serviceName string,
-	onFailure []windows.ServiceOnFailure,
-	resetFailure time.Duration,
-) error {
-	if len(onFailure) == 0 {
-		return nil
-	}
+// serviceRecoveryActions converts the failure actions of a package to the service control
+// manager representation.
+func serviceRecoveryActions(onFailure []windows.ServiceOnFailure) []mgr.RecoveryAction {
+	actions := make([]mgr.RecoveryAction, 0, len(onFailure))
 
-	actions := make([]string, 0, len(onFailure))
 	for _, failure := range onFailure {
-		action := ""
-		delay := "0"
+		actionType := mgr.NoAction
 
 		switch failure.Action {
 		case "restart":
-			action = "restart"
+			actionType = mgr.ServiceRestart
 		case "reboot":
-			action = "reboot"
+			actionType = mgr.ComputerReboot
 		case "run":
-			action = "run"
-		default:
-			action = ""
+			actionType = mgr.RunCommand
 		}
 
-		if failure.Delay.Duration > 0 {
-			delay = fmt.Sprintf("%d", int(failure.Delay.Milliseconds()))
-		}
-
-		actions = append(actions, fmt.Sprintf("%s/%s", action, delay))
+		actions = append(actions, mgr.RecoveryAction{
+			Type:  actionType,
+			Delay: failure.Delay.Duration,
+		})
 	}
 
-	actionsString := strings.Join(actions, "/")
-
-	if resetFailure == 0 {
-		resetFailure = time.Hour
-	}
-
-	resetSeconds := int(resetFailure.Seconds())
-
-	scFailureArgs := []string{
-		"failure",
-		serviceName,
-		fmt.Sprintf("reset=%d", resetSeconds),
-		fmt.Sprintf("actions=%s", actionsString),
-	}
-
-	log.Println("Configuring service failure actions:", "sc", strings.Join(scFailureArgs, " "))
-
-	err := oscore.ExecCommand(ctx, "sc", scFailureArgs...)
-	if err != nil {
-		return errors.WithMessage(err, "failed to configure service failure actions")
-	}
-
-	return nil
+	return actions
 }
 
 type runtimeTemplateVariables struct {

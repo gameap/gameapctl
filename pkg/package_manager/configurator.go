@@ -1,13 +1,10 @@
 package packagemanager
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -237,7 +234,7 @@ func defineNginxPath(ctx context.Context) (string, error) {
 	}
 
 	if path == "" {
-		path, err = defineWindowsServiceBinaryPath(ctx, NginxPackage)
+		path, err = windowsServiceBinaryPath(NginxPackage)
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to define service binary path"))
 
@@ -287,40 +284,6 @@ func findNginxDirWindows(_ context.Context) (string, error) {
 			if entry.IsDir() && strings.HasPrefix(entry.Name(), "nginx") {
 				return filepath.Join(dir, entry.Name()), nil
 			}
-		}
-	}
-
-	return "", nil
-}
-
-func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {
-	cmd := exec.Command("sc", "qc", serviceName)
-	buf := &bytes.Buffer{}
-	buf.Grow(1024) //nolint:mnd
-	cmd.Stdout = buf
-	cmd.Stderr = log.Writer()
-
-	log.Println("\n", cmd.String())
-
-	err := cmd.Run()
-	if err != nil {
-		return "", errors.WithMessage(err, "failed to execute command")
-	}
-
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		parts := strings.SplitN(scanner.Text(), ":", 2)
-		if len(parts) < 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		//nolint:gocritic
-		switch key {
-		case "BINARY_PATH_NAME":
-			return value, nil
 		}
 	}
 

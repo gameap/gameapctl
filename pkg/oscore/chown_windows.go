@@ -46,7 +46,7 @@ func ChownR(_ context.Context, _ string, _, _ int) error {
 func Grant(ctx context.Context, path string, userName string, permission GrantFlag) error {
 	userName = strings.TrimSpace(userName)
 
-	userIdentifier := resolveUserIdentifier(userName)
+	userIdentifier := WindowsAccountIdentifier(userName)
 	grantParam := fmt.Sprintf("%s:(OI)(CI)%s", userIdentifier, string(permission))
 
 	output, err := ExecCommandWithOutput(ctx, "icacls", path, "/grant", grantParam, "/T")
@@ -64,22 +64,6 @@ func Grant(ctx context.Context, path string, userName string, permission GrantFl
 	}
 
 	return nil
-}
-
-// resolveUserIdentifier converts well-known account names to their SIDs.
-// Using SIDs ensures compatibility across different Windows locales and versions.
-func resolveUserIdentifier(userName string) string {
-	wellKnownSIDs := map[string]string{
-		"NT AUTHORITY\\NETWORK SERVICE": "*S-1-5-20",
-		"NT AUTHORITY\\LOCAL SERVICE":   "*S-1-5-19",
-		"NT AUTHORITY\\SYSTEM":          "*S-1-5-18",
-	}
-
-	if sid, ok := wellKnownSIDs[userName]; ok {
-		return sid
-	}
-
-	return userName
 }
 
 // GrantFullControl grants full control permissions.

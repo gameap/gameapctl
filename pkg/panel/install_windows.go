@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	windowUsername = "NT AUTHORITY\\NETWORK SERVICE"
+	windowUsername = oscore.WindowsNetworkServiceAccount
 )
 
 func install(ctx context.Context, cfg InstallConfig) error {
