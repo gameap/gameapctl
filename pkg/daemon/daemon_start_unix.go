@@ -52,13 +52,15 @@ func startDaemonSystemdScope(ctx context.Context, scope, workPath string) error 
 		return errors.WithMessage(err, "failed to resolve daemon paths")
 	}
 
-	_, statErr := os.Stat(paths.SystemdUnitPath)
-	if statErr != nil && errors.Is(statErr, fs.ErrNotExist) {
+	outdated, err := daemonUnitOutdated(paths)
+	if err != nil {
+		return err
+	}
+
+	if outdated {
 		if cfgErr := daemonConfigureSystemd(ctx, paths); cfgErr != nil {
 			return cfgErr
 		}
-	} else if statErr != nil {
-		return errors.WithMessage(statErr, "failed to stat gameap-daemon service configuration")
 	}
 
 	if err := systemd.Start(ctx, paths.Scope, daemonServiceName); err != nil {
@@ -66,6 +68,22 @@ func startDaemonSystemdScope(ctx context.Context, scope, workPath string) error 
 	}
 
 	return nil
+}
+
+// daemonUnitOutdated reports whether the unit file is missing or no longer
+// matches the resolved paths. Without it a changed work path would be applied
+// everywhere but the WorkingDirectory of an already installed unit.
+func daemonUnitOutdated(paths gameap.DaemonPaths) (bool, error) {
+	current, err := os.ReadFile(paths.SystemdUnitPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return true, nil
+		}
+
+		return false, errors.Wrap(err, "failed to read gameap-daemon service configuration")
+	}
+
+	return string(current) != renderDaemonUnit(paths), nil
 }
 
 func daemonConfigureSystemd(ctx context.Context, paths gameap.DaemonPaths) error {
@@ -88,8 +106,10 @@ func renderDaemonUnit(paths gameap.DaemonPaths) string {
 	if paths.Scope == gameap.ScopeSystem {
 		b.WriteString("User=root\n")
 	}
-	fmt.Fprintf(&b, "WorkingDirectory=%s\n", paths.WorkPath)
-	fmt.Fprintf(&b, "ExecStart=/bin/bash -c '%s -c %s'\n", paths.DaemonFilePath, paths.DaemonConfigFilePath)
+	fmt.Fprintf(&b, "WorkingDirectory=%s\n", escapeSystemdSpecifiers(paths.WorkPath))
+	fmt.Fprintf(&b, "ExecStart=/bin/bash -c '%s -c %s'\n",
+		escapeSystemdSpecifiers(paths.DaemonFilePath),
+		escapeSystemdSpecifiers(paths.DaemonConfigFilePath))
 	b.WriteString("Restart=always\n\n")
 
 	b.WriteString("[Install]\n")
@@ -100,6 +120,12 @@ func renderDaemonUnit(paths gameap.DaemonPaths) string {
 	}
 
 	return b.String()
+}
+
+// systemd expands % specifiers in unit directives, so a literal percent sign
+// in a path has to be doubled.
+func escapeSystemdSpecifiers(s string) string {
+	return strings.ReplaceAll(s, "%", "%%")
 }
 
 type daemonAlreadyRunningError int
@@ -129,7 +155,7 @@ func startDaemonFork(ctx context.Context, o Options) error {
 	workPath := o.workPath()
 
 	if _, err := os.Stat(workPath); errors.Is(err, fs.ErrNotExist) {
-		err := os.Mkdir(workPath, 0755)
+		err := os.MkdirAll(workPath, 0755)
 		if err != nil {
 			return errors.WithMessage(err, "failed to create work path")
 		}

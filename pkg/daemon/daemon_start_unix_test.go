@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -53,4 +54,55 @@ func TestRenderDaemonUnit_CustomWorkPath(t *testing.T) {
 	unit := renderDaemonUnit(paths)
 
 	assert.Contains(t, unit, "WorkingDirectory="+workPath)
+}
+
+func TestRenderDaemonUnit_WorkPathWithPercent(t *testing.T) {
+	const workPath = "/opt/game%p"
+
+	paths, err := gameap.DaemonPathsForScopeWithWorkPath(gameap.ScopeSystem, workPath)
+	require.NoError(t, err)
+
+	unit := renderDaemonUnit(paths)
+
+	assert.Contains(t, unit, "WorkingDirectory=/opt/game%%p\n")
+	assert.NotContains(t, unit, "WorkingDirectory="+workPath+"\n")
+}
+
+func TestDaemonUnitOutdated_UnitMissing(t *testing.T) {
+	paths := gameap.SystemDaemonPaths()
+	paths.SystemdUnitPath = filepath.Join(t.TempDir(), "gameap-daemon.service")
+
+	outdated, err := daemonUnitOutdated(paths)
+
+	require.NoError(t, err)
+	assert.True(t, outdated)
+}
+
+func TestDaemonUnitOutdated_UnitUpToDate(t *testing.T) {
+	paths := gameap.SystemDaemonPaths()
+	paths.SystemdUnitPath = filepath.Join(t.TempDir(), "gameap-daemon.service")
+	require.NoError(t, os.WriteFile(paths.SystemdUnitPath, []byte(renderDaemonUnit(paths)), 0600))
+
+	outdated, err := daemonUnitOutdated(paths)
+
+	require.NoError(t, err)
+	assert.False(t, outdated)
+}
+
+func TestDaemonUnitOutdated_WorkPathChanged(t *testing.T) {
+	const workPath = "/opt/gameap-custom"
+
+	installed := gameap.SystemDaemonPaths()
+	installed.SystemdUnitPath = filepath.Join(t.TempDir(), "gameap-daemon.service")
+	require.NoError(t, os.WriteFile(installed.SystemdUnitPath, []byte(renderDaemonUnit(installed)), 0600))
+
+	requested, err := gameap.DaemonPathsForScopeWithWorkPath(gameap.ScopeSystem, workPath)
+	require.NoError(t, err)
+	requested.SystemdUnitPath = installed.SystemdUnitPath
+
+	outdated, err := daemonUnitOutdated(requested)
+	require.NoError(t, err)
+	assert.True(t, outdated)
+
+	assert.Contains(t, renderDaemonUnit(requested), "WorkingDirectory="+workPath+"\n")
 }
