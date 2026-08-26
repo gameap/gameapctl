@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -302,6 +303,11 @@ func createConfigEnv(ctx context.Context, config InstallConfig) error {
 		return errors.WithMessage(err, "failed to write config.env file")
 	}
 
+	log.Printf(
+		"Configuration saved to %s: HTTP_HOST=%s, HTTP_PORT=%s, DATABASE_DRIVER=%s\n",
+		configPath, config.HTTPHost, config.HTTPPort, config.DatabaseDriver,
+	)
+
 	if config.scope() == gameap.ScopeUser {
 		return nil
 	}
@@ -408,6 +414,11 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 
 	fmt.Println("Downloading from URL:", release.PrimaryURL())
 
+	log.Printf(
+		"Downloading GameAP %s from %s to %s\n",
+		release.Tag, release.PrimaryURL(), config.BinaryPath,
+	)
+
 	err = releasesource.Download(
 		ctx,
 		release,
@@ -437,6 +448,8 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 		}
 
 		binariesInstalled = true
+
+		log.Println("GameAP binary installed to", config.BinaryPath)
 
 		break
 	}

@@ -486,12 +486,7 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to start GameAP after installation")
 	}
 
-	err = waitForPanelHealthCheck(
-		ctx,
-		fmt.Sprintf("http://%s:%s", state.Host, state.Port),
-		30, //nolint:mnd
-		2*time.Second,
-	)
+	err = waitForPanelHealthCheck(ctx, state, healthCheckRetries, healthCheckInterval)
 	if err != nil {
 		return errors.WithMessage(err, "failed to wait for GameAP health check")
 	}
@@ -1354,6 +1349,8 @@ const (
 	httpClientTimeout   = 5 * time.Second
 )
 
+var errPanelNotReady = errors.New("GameAP panel failed to become ready in time")
+
 func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
 
@@ -1376,7 +1373,7 @@ func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (pane
 
 	host := "http://" + state.Host + ":" + state.Port
 
-	if err := waitForPanelHealthCheck(ctx, host, healthCheckRetries, healthCheckInterval); err != nil {
+	if err := waitForPanelHealthCheck(ctx, state, healthCheckRetries, healthCheckInterval); err != nil {
 		return state, err
 	}
 
@@ -1466,9 +1463,7 @@ func daemonInstallV4GRPC(ctx context.Context, state panelInstallStateV4) (panelI
 		}
 	}()
 
-	host := "http://" + state.Host + ":" + state.Port
-
-	if err := waitForPanelHealthCheck(ctx, host, healthCheckRetries, healthCheckInterval); err != nil {
+	if err := waitForPanelHealthCheck(ctx, state, healthCheckRetries, healthCheckInterval); err != nil {
 		return state, err
 	}
 
@@ -1566,12 +1561,19 @@ func removeConfigEnvVar(configPath, name string) {
 	}
 }
 
-func waitForPanelHealthCheck(ctx context.Context, host string, maxRetries int, retryDelay time.Duration) error {
+func waitForPanelHealthCheck(
+	ctx context.Context,
+	state panelInstallStateV4,
+	maxRetries int,
+	retryDelay time.Duration,
+) error {
 	client := &http.Client{
-		Timeout: 5 * time.Second, //nolint:mnd
+		Timeout: httpClientTimeout,
 	}
 
-	healthCheckURL := fmt.Sprintf("%s/health", host)
+	healthCheckURL := fmt.Sprintf("http://%s:%s/health", state.Host, state.Port)
+
+	var lastErr error
 
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthCheckURL, nil)
@@ -1580,10 +1582,15 @@ func waitForPanelHealthCheck(ctx context.Context, host string, maxRetries int, r
 		}
 
 		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == http.StatusOK {
+		switch {
+		case err != nil:
+			lastErr = err
+		case resp.StatusCode == http.StatusOK:
 			resp.Body.Close()
 
 			return nil
+		default:
+			lastErr = errors.Errorf("unexpected status code %d", resp.StatusCode)
 		}
 
 		if resp != nil {
@@ -1591,7 +1598,13 @@ func waitForPanelHealthCheck(ctx context.Context, host string, maxRetries int, r
 		}
 
 		if i == maxRetries-1 {
-			return errors.New("GameAP panel failed to become ready in time")
+			logPanelStartDiagnosticsOnce(ctx, state)
+
+			if lastErr == nil {
+				lastErr = errPanelNotReady
+			}
+
+			return errors.WithMessagef(lastErr, "%s, %s", errPanelNotReady, healthCheckURL)
 		}
 
 		time.Sleep(retryDelay)

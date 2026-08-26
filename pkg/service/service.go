@@ -24,6 +24,16 @@ type Service interface {
 	Status(ctx context.Context, serviceName string) error
 }
 
+// StatusInfo describes the current state of a service, including the exit codes
+// reported by the service manager after a failed start.
+type StatusInfo struct {
+	Name                    string
+	State                   string
+	PID                     uint32
+	Win32ExitCode           uint32
+	ServiceSpecificExitCode uint32
+}
+
 func Start(ctx context.Context, serviceName string) error {
 	s, err := Load(ctx)
 	if err != nil {

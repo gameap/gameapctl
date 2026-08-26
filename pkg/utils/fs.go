@@ -262,3 +262,53 @@ func findLineAndReplaceOrAdd(
 
 	return writer.Flush()
 }
+
+// TailFile returns the last maxLines lines of the file, reading no more than maxBytes from its end.
+// Non-positive maxLines or maxBytes disables the corresponding limit.
+func TailFile(path string, maxLines int, maxBytes int64) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to open file %s", path)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to stat file %s", path)
+	}
+
+	var offset int64
+	if maxBytes > 0 && stat.Size() > maxBytes {
+		offset = stat.Size() - maxBytes
+	}
+
+	if _, err = f.Seek(offset, io.SeekStart); err != nil {
+		return "", errors.Wrapf(err, "failed to seek file %s", path)
+	}
+
+	contents, err := io.ReadAll(f)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s", path)
+	}
+
+	text := strings.ReplaceAll(string(contents), "\r\n", "\n")
+	text = strings.Trim(text, "\n")
+	if text == "" {
+		return "", nil
+	}
+
+	lines := strings.Split(text, "\n")
+
+	// The first line is incomplete when reading has started from the middle of the file.
+	if offset > 0 && len(lines) > 1 {
+		lines = lines[1:]
+	}
+
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
