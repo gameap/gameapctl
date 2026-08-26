@@ -6,7 +6,7 @@ packages:
     pre-install:
       - grant-permissions:
           - path: C:\gameap\tools\nginx
-            user: NT AUTHORITY\NETWORK SERVICE
+            user: NT AUTHORITY\NetworkService
             access: full-control
     download-urls:
       - http://nginx.org/download/nginx-1.29.3.zip
@@ -28,7 +28,7 @@ packages:
       stop-executable: nginx
       stop-arguments: -s stop
       service-account:
-        username: NT AUTHORITY\NETWORK SERVICE
+        username: NT AUTHORITY\NetworkService
         password: ""
     uninstall:
       - conditions:
@@ -117,10 +117,10 @@ packages:
               register
               -N "PostgreSQL"
               -D "${ProgramData}\PostgreSQL\17\data"
-              -U "NT AUTHORITY\NETWORK SERVICE"
+              -U "NT AUTHORITY\NetworkService"
       - grant-permissions:
           - path: ${ProgramData}\PostgreSQL\17\data
-            user: NT AUTHORITY\NETWORK SERVICE
+            user: NT AUTHORITY\NetworkService
             access: full-control
 
       - run-commands:
@@ -156,7 +156,7 @@ packages:
     pre-install:
       - grant-permissions:
           - path: C:\php
-            user: NT AUTHORITY\NETWORK SERVICE
+            user: NT AUTHORITY\NetworkService
             access: full-control
     path-env:
       - C:\php
@@ -172,7 +172,7 @@ packages:
         - name: PHP_FCGI_CHILDREN
           value: "4"
       service-account:
-        username: NT AUTHORITY\NETWORK SERVICE
+        username: NT AUTHORITY\NetworkService
     dependencies:
       - vcredist16
       - shawl
@@ -267,7 +267,7 @@ packages:
       working-directory: C:\gameap\web
       log-directory: C:\gameap\services\logs\gameap
       service-account:
-        username: NT AUTHORITY\NETWORK SERVICE
+        username: NT AUTHORITY\NetworkService
       on-failure:
         - action: restart
           delay: 1s

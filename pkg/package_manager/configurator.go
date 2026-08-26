@@ -1,13 +1,10 @@
 package packagemanager
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -237,12 +234,14 @@ func defineNginxPath(ctx context.Context) (string, error) {
 	}
 
 	if path == "" {
-		path, err = defineWindowsServiceBinaryPath(ctx, NginxPackage)
+		binaryPath, err := windowsServiceBinaryPath(NginxPackage)
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to define service binary path"))
 
 			return "", NewErrNotFound(errors.WithMessage(err, "failed to define service binary path").Error())
 		}
+
+		path = windowsCommandExecutable(binaryPath)
 
 		stat, err := os.Stat(path)
 		if err != nil {
@@ -293,36 +292,19 @@ func findNginxDirWindows(_ context.Context) (string, error) {
 	return "", nil
 }
 
-func defineWindowsServiceBinaryPath(_ context.Context, serviceName string) (string, error) {
-	cmd := exec.Command("sc", "qc", serviceName)
-	buf := &bytes.Buffer{}
-	buf.Grow(1024) //nolint:mnd
-	cmd.Stdout = buf
-	cmd.Stderr = log.Writer()
+// windowsCommandExecutable returns the executable of a Windows command line. A service binary
+// path keeps the arguments the service was registered with, and a path containing spaces is
+// quoted, so neither can be passed to the file system as is.
+func windowsCommandExecutable(commandLine string) string {
+	commandLine = strings.TrimSpace(commandLine)
 
-	log.Println("\n", cmd.String())
+	if rest, quoted := strings.CutPrefix(commandLine, `"`); quoted {
+		executable, _, _ := strings.Cut(rest, `"`)
 
-	err := cmd.Run()
-	if err != nil {
-		return "", errors.WithMessage(err, "failed to execute command")
+		return executable
 	}
 
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		parts := strings.SplitN(scanner.Text(), ":", 2)
-		if len(parts) < 2 {
-			continue
-		}
+	executable, _, _ := strings.Cut(commandLine, " ")
 
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		//nolint:gocritic
-		switch key {
-		case "BINARY_PATH_NAME":
-			return value, nil
-		}
-	}
-
-	return "", nil
+	return executable
 }

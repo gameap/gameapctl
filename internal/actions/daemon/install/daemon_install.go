@@ -1406,7 +1406,7 @@ type DaemonConfig struct {
 
 	// Windows specific settings
 
-	// If true, the daemon will run servers under the "NT AUTHORITY\NETWORK SERVICE" user.
+	// If true, the daemon will run servers under the "NT AUTHORITY\NetworkService" user.
 	// This user has limited permissions and is suitable for running game servers securely.
 	// If false, servers will run under the user specified in the "users" section of the config.
 	UseNetworkServiceUser bool `yaml:"use_network_service_user"`

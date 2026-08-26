@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultUserName = "NT AUTHORITY\\NETWORK SERVICE"
+	defaultUserName = oscore.WindowsNetworkServiceAccount
 	gameapUserName  = "gameap"
 )
 
