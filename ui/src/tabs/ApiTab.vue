@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {storeToRefs} from "pinia"
 import {ChevronDoubleUpIcon, ArchiveBoxArrowDownIcon, ArchiveBoxXMarkIcon, KeyIcon} from "@heroicons/vue/24/outline/index.js";
 
@@ -7,9 +7,12 @@ import { runAction, runActionWithoutDialog } from "../action.js";
 import { unarySend } from "../websocket.js";
 
 import {useServicesStore} from "../store/services.js"
+import {useNodeStore} from "../store/node.js"
 const services = useServicesStore()
+const node = useNodeStore()
 
 const { getServiceByName } = storeToRefs(services)
+const { getNodeInfo } = storeToRefs(node)
 
 const gameapActive = computed(() => {
   return getServiceByName.value("gameap").status === "active"
@@ -58,6 +61,14 @@ const databaseOptionsV4 = [
   {label: "SQLite", value: "sqlite"},
   {label: "None", value: "none"},
 ]
+
+const recommendedDatabase = computed(() => {
+  return getNodeInfo.value("distribution") === "windows" ? "sqlite" : "postgres"
+})
+
+watch(recommendedDatabase, (database) => {
+  installationForm.value.database = database
+}, {immediate: true})
 
 const installationFormRules = {
 
