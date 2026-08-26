@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -34,6 +35,7 @@ func filterAndCheckHostV4(state panelInstallStateV4) (panelInstallStateV4, error
 	if host, port, err := net.SplitHostPort(state.Host); err == nil {
 		state.Host = host
 		state.Port = port
+		state.PortInput = port
 	}
 
 	if !utils.IsIPv4(state.Host) && !utils.IsIPv6(state.Host) {
@@ -54,56 +56,83 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 		state.Port = defaultPortForScope(state.Scope)
 	}
 
-	// Check if an existing GameAP panel is already running on this port.
-	// This is common during re-installation.
-	client := &http.Client{Timeout: 2 * time.Second}
-	healthURL := fmt.Sprintf("http://127.0.0.1:%s/health", state.Port)
-	healthReq, healthErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
-	if healthErr == nil {
-		resp, doErr := client.Do(healthReq)
-		if doErr == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-			fmt.Println("Existing GameAP panel detected on port", state.Port)
+	if existingPanelDetected(ctx, state.Port) {
+		fmt.Println("Existing GameAP panel detected on port", state.Port)
 
-			return state, nil
-		}
-		if resp != nil {
-			resp.Body.Close()
-		}
+		return state, nil
 	}
 
 	listenAddr := resolveListenAddress(state.Host, state.Port)
-	listener, err := net.Listen("tcp", net.JoinHostPort(listenAddr, state.Port))
-	if err != nil {
-		// Probing rather than comparing against 1024: the port is bindable when the
-		// administrator lowered net.ipv4.ip_unprivileged_port_start.
-		if state.Scope == gameap.ScopeUser && errors.Is(err, syscall.EACCES) {
-			return state, errors.Errorf(
-				"port %s cannot be bound by an unprivileged process; "+
-					"use a port >= 1024 (default for user scope: %s), put a reverse proxy in front, "+
-					"or install with --scope=system",
-				state.Port, defaultPortForScope(gameap.ScopeUser),
-			)
-		}
 
-		warningErr := warningV4(ctx, state,
-			fmt.Sprintf(
-				"Port %s is already in use. "+
-					"You can specify other available port. "+
-					"Further installation may fail.", state.Port,
-			),
+	err := utils.CheckPortAvailability(listenAddr, state.Port)
+	if err == nil {
+		return state, nil
+	}
+
+	freePort, freePortFound := utils.FindAvailablePort(listenAddr, state.Port)
+	if freePortFound && freePort == state.Port {
+		// The port was released between the two probes.
+		return state, nil
+	}
+
+	if freePortFound && state.PortInput == "" {
+		message := fmt.Sprintf("Port %s is already in use, port %s will be used instead.", state.Port, freePort)
+		fmt.Println(message)
+		log.Println(message)
+
+		state.Port = freePort
+
+		return state, nil
+	}
+
+	// Probing rather than comparing against 1024: the port is bindable when the
+	// administrator lowered net.ipv4.ip_unprivileged_port_start.
+	if state.Scope == gameap.ScopeUser && errors.Is(err, syscall.EACCES) {
+		return state, errors.Errorf(
+			"port %s cannot be bound by an unprivileged process; "+
+				"use a port >= 1024 (default for user scope: %s), put a reverse proxy in front, "+
+				"or install with --scope=system",
+			state.Port, defaultPortForScope(gameap.ScopeUser),
 		)
-		if warningErr != nil {
-			return state, warningErr
-		}
-	} else {
-		err = listener.Close()
-		if err != nil {
-			return state, errors.WithMessage(err, "failed to close listener")
-		}
+	}
+
+	text := fmt.Sprintf(
+		"Port %s is already in use. "+
+			"You can specify other available port. "+
+			"Further installation may fail.", state.Port,
+	)
+	if freePortFound {
+		text += fmt.Sprintf(" Port %s is free, you can re-run the installation with --port=%s.", freePort, freePort)
+	}
+
+	warningErr := warningV4(ctx, state, text)
+	if warningErr != nil {
+		return state, warningErr
 	}
 
 	return state, nil
+}
+
+// existingPanelDetected reports whether a GameAP panel already answers on the port.
+// This is common during re-installation, and such a port must not be treated as occupied.
+func existingPanelDetected(ctx context.Context, port string) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	healthURL := fmt.Sprintf("http://127.0.0.1:%s/health", port)
+	healthReq, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := client.Do(healthReq)
+	if err != nil {
+		return false
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	return resp.StatusCode == http.StatusOK
 }
 
 func checkHTTPHostAvailabilityV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {

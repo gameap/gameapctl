@@ -47,6 +47,8 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 	switch cmd[0] {
 	case "detect-ips":
 		return detectIPs(w)
+	case "detect-port":
+		return detectPort(w)
 	case "node-info":
 		return nodeInfo(ctx, w, args)
 	case "service-status":
@@ -103,6 +105,21 @@ func duplicateLogWriter(ctx context.Context, w io.Writer) {
 func detectIPs(w io.Writer) error {
 	ips := utils.DetectIPs()
 	_, _ = w.Write([]byte(strings.Join(ips, ",")))
+
+	return nil
+}
+
+// detectPort suggests the panel HTTP port for the installation form. It probes every
+// interface, so a port it suggests is never one the installer would then reject.
+//
+//nolint:unparam
+func detectPort(w io.Writer) error {
+	port, found := utils.FindAvailablePort("", gameap.DefaultPanelPort)
+	if !found {
+		port = gameap.DefaultPanelPort
+	}
+
+	_, _ = w.Write([]byte(port))
 
 	return nil
 }

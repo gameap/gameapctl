@@ -1,8 +1,11 @@
 package install
 
 import (
+	"context"
+	"net"
 	"testing"
 
+	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -181,4 +184,49 @@ func Test_filterAndCheckHostV4(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_checkPortAvailabilityV4_ReplacesOccupiedDefaultPort(t *testing.T) {
+	busyPort := occupyFreePort(t)
+
+	state, err := checkPortAvailabilityV4(context.Background(), panelInstallStateV4{
+		NonInteractive: true,
+		Host:           "127.0.0.1",
+		Port:           busyPort,
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, busyPort, state.Port)
+	assert.NoError(t, utils.CheckPortAvailability("127.0.0.1", state.Port))
+}
+
+func Test_checkPortAvailabilityV4_KeepsExplicitlyChosenPort(t *testing.T) {
+	busyPort := occupyFreePort(t)
+
+	state, err := checkPortAvailabilityV4(context.Background(), panelInstallStateV4{
+		NonInteractive: true,
+		Host:           "127.0.0.1",
+		Port:           busyPort,
+		PortInput:      busyPort,
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, busyPort, state.Port)
+}
+
+// occupyFreePort holds an arbitrary port until the test ends and returns it.
+func occupyFreePort(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	require.NoError(t, err)
+
+	return port
 }

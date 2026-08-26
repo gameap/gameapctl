@@ -6,6 +6,24 @@ You can use gameapctl to install, upgrade, inspect and manage GameAP, and view l
 
 gameapctl is available for Linux, macOS and Windows.
 
+## Panel HTTP port
+
+The panel listens on port 80 (8025 with `--scope=user`). When that port is already taken, the
+installer takes the first free one of 8025, 8026 and so on, probing up to ten of them, and says
+which it took:
+
+```
+Port 80 is already in use, port 8025 will be used instead.
+```
+
+Ten occupied ports in a row point at the network configuration rather than at a busy port, so the
+search stops there and the installation continues with the usual warning.
+
+A port chosen by hand — `--port=8080` or `--host=example.com:8080` — is never replaced: the
+installer warns and names a free port instead, so a scripted install gets either the port it asked
+for or an error. The installation form of the web UI (`gameapctl ui`) is pre-filled with the
+detected port.
+
 ## Rootless installation (user scope)
 
 On Linux both the panel and the daemon can be installed without root, into the current

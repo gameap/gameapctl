@@ -32,13 +32,16 @@ const hostOptions = ref([
   { label: "127.0.0.1", value: "127.0.0.1" }
 ])
 
+const defaultPort = 80
+const detectedPort = ref(defaultPort)
+
 const showInstallationAskModal = ref(false)
 const showUninstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
   host: "127.0.0.1",
-  port: 80,
+  port: defaultPort,
   database: "postgres",
   withDaemon: false,
 })
@@ -86,9 +89,20 @@ function loadHostIPs() {
   })
 }
 
+function loadAvailablePort() {
+  unarySend("detect-port", "detect-port", (code, value) => {
+    const port = parseInt(value, 10)
+    if (code === "payload" && port) {
+      detectedPort.value = port
+      installationForm.value.port = port
+    }
+  })
+}
+
 function onClickGameAPInstallationButton() {
   showInstallationAskModal.value = true
   loadHostIPs()
+  loadAvailablePort()
 }
 
 function onClickGameAPUpgradingButton() {
@@ -256,6 +270,11 @@ function handleChangePasswordButtonClick() {
             />
             <n-input-number v-model:value="installationForm.port" placeholder="Port" />
           </n-input-group>
+        </n-form-item>
+        <n-form-item v-if="detectedPort !== defaultPort" label="&nbsp;">
+          <n-text depth="3">
+            Port {{ defaultPort }} is busy, port {{ detectedPort }} selected.
+          </n-text>
         </n-form-item>
         <n-form-item label="Database" path="database">
           <n-select v-model:value="installationForm.database" :options="databaseOptionsV4" />
