@@ -23,7 +23,7 @@ func maskedArgs(args []string) []string {
 			continue
 		}
 
-		if !strings.HasPrefix(arg, "-") || !secretArgPattern.MatchString(arg) {
+		if !strings.HasPrefix(arg, "-") || !isSecretArg(arg) {
 			masked = append(masked, arg)
 
 			continue
@@ -41,4 +41,22 @@ func maskedArgs(args []string) []string {
 	}
 
 	return masked
+}
+
+// isSecretArg reports whether the flag value must be hidden. Besides the flags
+// matching the secret pattern, --connect carries the setup key in the URL and
+// --env carries DNS provider credentials.
+func isSecretArg(arg string) bool {
+	if secretArgPattern.MatchString(arg) {
+		return true
+	}
+
+	name, _, _ := strings.Cut(arg, "=")
+
+	switch strings.TrimLeft(name, "-") {
+	case "connect", "env":
+		return true
+	}
+
+	return false
 }

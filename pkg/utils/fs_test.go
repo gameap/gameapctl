@@ -54,6 +54,27 @@ func Test_TailFile(t *testing.T) {
 			maxBytes: 12,
 			expected: "third",
 		},
+		{
+			name:     "complete first line after offset is kept",
+			contents: "aa\nbb\ncc\n",
+			maxLines: 10,
+			maxBytes: 6,
+			expected: "bb\ncc",
+		},
+		{
+			name:     "complete single line after offset is kept",
+			contents: "aaaa\nbb\n",
+			maxLines: 10,
+			maxBytes: 3,
+			expected: "bb",
+		},
+		{
+			name:     "offset between CR and LF keeps the first line",
+			contents: "aa\r\nbb\r\ncc\r\n",
+			maxLines: 10,
+			maxBytes: 9,
+			expected: "bb\ncc",
+		},
 	}
 
 	for _, test := range tests {

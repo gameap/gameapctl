@@ -284,16 +284,35 @@ func TailFile(path string, maxLines int, maxBytes int64) (string, error) {
 		offset = stat.Size() - maxBytes
 	}
 
+	// The byte before the offset shows whether the read starts in the middle of a line;
+	// such an incomplete first line is dropped after reading.
+	firstLineIncomplete := false
+	if offset > 0 {
+		prev := make([]byte, 1)
+		if _, readErr := f.ReadAt(prev, offset-1); readErr != nil || prev[0] != '\n' {
+			firstLineIncomplete = true
+		}
+	}
+
 	if _, err = f.Seek(offset, io.SeekStart); err != nil {
 		return "", errors.Wrapf(err, "failed to seek file %s", path)
 	}
 
-	contents, err := io.ReadAll(f)
+	var reader io.Reader = f
+	if maxBytes > 0 {
+		reader = io.LimitReader(f, maxBytes)
+	}
+
+	contents, err := io.ReadAll(reader)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to read file %s", path)
 	}
 
 	text := strings.ReplaceAll(string(contents), "\r\n", "\n")
+	// A newline right at the offset means the incomplete part is empty.
+	if strings.HasPrefix(text, "\n") {
+		firstLineIncomplete = false
+	}
 	text = strings.Trim(text, "\n")
 	if text == "" {
 		return "", nil
@@ -301,8 +320,7 @@ func TailFile(path string, maxLines int, maxBytes int64) (string, error) {
 
 	lines := strings.Split(text, "\n")
 
-	// The first line is incomplete when reading has started from the middle of the file.
-	if offset > 0 && len(lines) > 1 {
+	if firstLineIncomplete && len(lines) > 1 {
 		lines = lines[1:]
 	}
 
