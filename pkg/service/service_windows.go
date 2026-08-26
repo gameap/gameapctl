@@ -343,3 +343,57 @@ func findService(serviceName string) (svc.State, error) {
 
 	return status.State, nil
 }
+
+// QueryStatus returns the current state of the service and the exit codes reported
+// by the service control manager. A service that failed to start keeps its exit
+// codes until the next start attempt, which makes them the shortest way to find out
+// that a wrapped process died right after the start.
+func QueryStatus(_ context.Context, serviceName string) (StatusInfo, error) {
+	m, err := mgr.Connect()
+	if err != nil {
+		return StatusInfo{}, errors.Wrap(err, "failed to connect to service manager")
+	}
+	defer func() {
+		_ = m.Disconnect()
+	}()
+
+	s, err := m.OpenService(serviceName)
+	if err != nil {
+		return StatusInfo{}, NewNotFoundError(serviceName)
+	}
+	defer s.Close()
+
+	status, err := s.Query()
+	if err != nil {
+		return StatusInfo{}, errors.Wrapf(err, "failed to query service '%s' status", serviceName)
+	}
+
+	return StatusInfo{
+		Name:                    serviceName,
+		State:                   stateString(status.State),
+		PID:                     status.ProcessId,
+		Win32ExitCode:           status.Win32ExitCode,
+		ServiceSpecificExitCode: status.ServiceSpecificExitCode,
+	}, nil
+}
+
+func stateString(state svc.State) string {
+	switch state {
+	case svc.Stopped:
+		return "stopped"
+	case svc.StartPending:
+		return "start pending"
+	case svc.StopPending:
+		return "stop pending"
+	case svc.Running:
+		return "running"
+	case svc.ContinuePending:
+		return "continue pending"
+	case svc.PausePending:
+		return "pause pending"
+	case svc.Paused:
+		return "paused"
+	default:
+		return fmt.Sprintf("unknown (%d)", state)
+	}
+}

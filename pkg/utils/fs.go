@@ -262,3 +262,71 @@ func findLineAndReplaceOrAdd(
 
 	return writer.Flush()
 }
+
+// TailFile returns the last maxLines lines of the file, reading no more than maxBytes from its end.
+// Non-positive maxLines or maxBytes disables the corresponding limit.
+func TailFile(path string, maxLines int, maxBytes int64) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to open file %s", path)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to stat file %s", path)
+	}
+
+	var offset int64
+	if maxBytes > 0 && stat.Size() > maxBytes {
+		offset = stat.Size() - maxBytes
+	}
+
+	// The byte before the offset shows whether the read starts in the middle of a line;
+	// such an incomplete first line is dropped after reading.
+	firstLineIncomplete := false
+	if offset > 0 {
+		prev := make([]byte, 1)
+		if _, readErr := f.ReadAt(prev, offset-1); readErr != nil || prev[0] != '\n' {
+			firstLineIncomplete = true
+		}
+	}
+
+	if _, err = f.Seek(offset, io.SeekStart); err != nil {
+		return "", errors.Wrapf(err, "failed to seek file %s", path)
+	}
+
+	var reader io.Reader = f
+	if maxBytes > 0 {
+		reader = io.LimitReader(f, maxBytes)
+	}
+
+	contents, err := io.ReadAll(reader)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s", path)
+	}
+
+	text := strings.ReplaceAll(string(contents), "\r\n", "\n")
+	// A newline right at the offset means the incomplete part is empty.
+	if strings.HasPrefix(text, "\n") {
+		firstLineIncomplete = false
+	}
+	text = strings.Trim(text, "\n")
+	if text == "" {
+		return "", nil
+	}
+
+	lines := strings.Split(text, "\n")
+
+	if firstLineIncomplete && len(lines) > 1 {
+		lines = lines[1:]
+	}
+
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+
+	return strings.Join(lines, "\n"), nil
+}

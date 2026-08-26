@@ -33,3 +33,7 @@ func (s *WindowsNil) Status(_ context.Context, _ string) error {
 func IsExists(_ context.Context, _ string) bool {
 	panic("function is not implemented")
 }
+
+func QueryStatus(_ context.Context, _ string) (StatusInfo, error) {
+	return StatusInfo{}, errors.New("unsupported")
+}

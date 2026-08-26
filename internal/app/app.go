@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -613,6 +614,9 @@ func setLogFile(dir, logname string) (string, bool) {
 	}
 
 	log.SetOutput(f)
+
+	log.Printf("gameapctl version %s, build date %s\n", gameap.Version, gameap.BuildDate)
+	log.Println("Command:", strings.Join(maskedArgs(os.Args), " "))
 
 	return logfile, true
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -83,9 +84,12 @@ func collectAllLogs(ctx context.Context, tmpDir string, additionalLogs []string)
 		{"gameapctl logs", func() error { return collectGameapCTLLogs(ctx, tmpDir) }},
 		{"daemon logs", func() error { return collectDaemonLogs(ctx, tmpDir) }},
 		{"journal logs", func() error { return collectJournalLogs(ctx, tmpDir) }},
+		{"service logs", func() error { return collectServiceLogs(ctx, tmpDir) }},
+		{"service status", func() error { return collectServiceStatus(ctx, tmpDir) }},
 		{"panel logs", func() error { return collectPanelLogs(ctx, tmpDir) }},
 		{"web server logs", func() error { return collectWebServerLogs(ctx, tmpDir) }},
 		{"database logs", func() error { return collectDatabaseLogs(ctx, tmpDir) }},
+		{"install state", func() error { return collectInstallState(ctx, tmpDir) }},
 		{"system information", func() error { return collectSystemInfo(ctx, tmpDir) }},
 	}
 
@@ -237,6 +241,12 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 	if err != nil {
 		log.Println(errors.WithMessage(err, "failed to load panel install state"))
 	} else {
+		if state.Version != "" {
+			_, _ = f.WriteString("Panel version: " + state.Version + "\n")
+		}
+		if state.Scope != "" {
+			_, _ = f.WriteString("Scope: " + state.Scope + "\n")
+		}
 		if state.Host != "" {
 			_, _ = f.WriteString("Host: " + state.Host + "\n")
 		}
@@ -257,6 +267,19 @@ func collectSystemInfo(ctx context.Context, destinationDir string) error {
 			if state.DatabaseWasInstalled {
 				_, _ = f.WriteString("Database was installed\n")
 			}
+		}
+		if state.DBHost != "" {
+			dbHost := state.DBHost
+			if state.DBPort != "" {
+				dbHost = net.JoinHostPort(state.DBHost, state.DBPort)
+			}
+			_, _ = f.WriteString("Database host: " + dbHost + "\n")
+		}
+		if state.DBName != "" {
+			_, _ = f.WriteString("Database name: " + state.DBName + "\n")
+		}
+		if state.DBUsername != "" {
+			_, _ = f.WriteString("Database username: " + state.DBUsername + "\n")
 		}
 	}
 
