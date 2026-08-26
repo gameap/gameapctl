@@ -123,8 +123,13 @@ function handleInstallButtonClick(e) {
 
   let params = "--version=v4" +
       " --host=" + installationForm.value.host +
-      " --port=" + installationForm.value.port +
       " --database=" + installationForm.value.database
+
+  // A port left at the detected value is not a choice the user made, so it is not sent:
+  // that lets the installer pick another one if this one got taken in the meantime.
+  if (installationForm.value.port !== detectedPort.value) {
+    params += " --port=" + installationForm.value.port
+  }
 
   if (installationForm.value.withDaemon) {
     params += " --with-daemon"

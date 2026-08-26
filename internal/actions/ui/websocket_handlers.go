@@ -109,8 +109,10 @@ func detectIPs(w io.Writer) error {
 	return nil
 }
 
-// detectPort suggests the panel HTTP port for the installation form. It probes every
-// interface, so a port it suggests is never one the installer would then reject.
+// detectPort suggests the panel HTTP port for the installation form. The probe binds the
+// wildcard address rather than the host picked in the form, which the form may still
+// change, so it errs towards calling a port busy. The installer re-checks the port it is
+// given in any case.
 //
 //nolint:unparam
 func detectPort(w io.Writer) error {

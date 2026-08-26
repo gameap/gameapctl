@@ -3,8 +3,12 @@ package install
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,7 +190,32 @@ func Test_filterAndCheckHostV4(t *testing.T) {
 	}
 }
 
+func Test_existingPanelDetected_RequiresPreviousInstallationOnTheSamePort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	_, port, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	require.NoError(t, err)
+
+	useTemporaryStateDirectory(t)
+	ctx := context.Background()
+
+	// A foreign service answering /health with 200 is not a GameAP panel.
+	assert.False(t, existingPanelDetected(ctx, port))
+
+	require.NoError(t, gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version: "v4",
+		Port:    port,
+	}))
+
+	assert.True(t, existingPanelDetected(ctx, port))
+}
+
 func Test_checkPortAvailabilityV4_ReplacesOccupiedDefaultPort(t *testing.T) {
+	useTemporaryStateDirectory(t)
+
 	busyPort := occupyFreePort(t)
 
 	state, err := checkPortAvailabilityV4(context.Background(), panelInstallStateV4{
@@ -201,6 +230,8 @@ func Test_checkPortAvailabilityV4_ReplacesOccupiedDefaultPort(t *testing.T) {
 }
 
 func Test_checkPortAvailabilityV4_KeepsExplicitlyChosenPort(t *testing.T) {
+	useTemporaryStateDirectory(t)
+
 	busyPort := occupyFreePort(t)
 
 	state, err := checkPortAvailabilityV4(context.Background(), panelInstallStateV4{
@@ -229,4 +260,14 @@ func occupyFreePort(t *testing.T) string {
 	require.NoError(t, err)
 
 	return port
+}
+
+// useTemporaryStateDirectory keeps the install state of the machine running the tests
+// out of the way, so that the checkers see no previous installation.
+func useTemporaryStateDirectory(t *testing.T) {
+	t.Helper()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }

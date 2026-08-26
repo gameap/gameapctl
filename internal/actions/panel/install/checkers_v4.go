@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	"github.com/gameap/gameapctl/pkg/fixer"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -113,9 +114,16 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 	return state, nil
 }
 
-// existingPanelDetected reports whether a GameAP panel already answers on the port.
-// This is common during re-installation, and such a port must not be treated as occupied.
+// existingPanelDetected reports whether the panel of a previous installation already
+// answers on the port. This is common during re-installation, and such a port must not be
+// treated as occupied. A previous installation on the very same port is required as well:
+// any local service can answer /health with 200, and trusting one of those would leave the
+// panel configured for a port it cannot bind.
 func existingPanelDetected(ctx context.Context, port string) bool {
+	if !previouslyInstalledOnPort(ctx, port) {
+		return false
+	}
+
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	healthURL := fmt.Sprintf("http://127.0.0.1:%s/health", port)
@@ -133,6 +141,15 @@ func existingPanelDetected(ctx context.Context, port string) bool {
 	}()
 
 	return resp.StatusCode == http.StatusOK
+}
+
+func previouslyInstalledOnPort(ctx context.Context, port string) bool {
+	prevState, err := gameapctl.LoadPanelInstallState(ctx)
+	if err != nil {
+		return false
+	}
+
+	return isPrevStateV4(prevState.Version) && prevState.Port == port
 }
 
 func checkHTTPHostAvailabilityV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
