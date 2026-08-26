@@ -75,11 +75,17 @@ func createWindowsService(cfg windowsServiceConfig) error {
 
 	resetPeriod := cfg.ResetPeriod.Seconds()
 	if resetPeriod < 0 || resetPeriod > math.MaxUint32 {
+		_ = svc.Delete()
+
 		return errors.Errorf("invalid failure reset period for service '%s'", cfg.Name)
 	}
 
 	err = svc.SetRecoveryActions(cfg.RecoveryActions, uint32(resetPeriod))
 	if err != nil {
+		// A service without the configured failure actions would be silently kept by the next
+		// installation attempt, so it is removed together with the reported error.
+		_ = svc.Delete()
+
 		return errors.Wrapf(err, "failed to configure failure actions for service '%s'", cfg.Name)
 	}
 

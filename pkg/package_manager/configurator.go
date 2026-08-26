@@ -234,12 +234,14 @@ func defineNginxPath(ctx context.Context) (string, error) {
 	}
 
 	if path == "" {
-		path, err = windowsServiceBinaryPath(NginxPackage)
+		binaryPath, err := windowsServiceBinaryPath(NginxPackage)
 		if err != nil {
 			log.Println(errors.WithMessage(err, "failed to define service binary path"))
 
 			return "", NewErrNotFound(errors.WithMessage(err, "failed to define service binary path").Error())
 		}
+
+		path = windowsCommandExecutable(binaryPath)
 
 		stat, err := os.Stat(path)
 		if err != nil {
@@ -288,4 +290,21 @@ func findNginxDirWindows(_ context.Context) (string, error) {
 	}
 
 	return "", nil
+}
+
+// windowsCommandExecutable returns the executable of a Windows command line. A service binary
+// path keeps the arguments the service was registered with, and a path containing spaces is
+// quoted, so neither can be passed to the file system as is.
+func windowsCommandExecutable(commandLine string) string {
+	commandLine = strings.TrimSpace(commandLine)
+
+	if rest, quoted := strings.CutPrefix(commandLine, `"`); quoted {
+		executable, _, _ := strings.Cut(rest, `"`)
+
+		return executable
+	}
+
+	executable, _, _ := strings.Cut(commandLine, " ")
+
+	return executable
 }
