@@ -32,13 +32,16 @@ const hostOptions = ref([
   { label: "127.0.0.1", value: "127.0.0.1" }
 ])
 
+const defaultPort = 80
+const detectedPort = ref(defaultPort)
+
 const showInstallationAskModal = ref(false)
 const showUninstallationAskModal = ref(false)
 
 const installationFormRef = ref(null)
 const installationForm = ref({
   host: "127.0.0.1",
-  port: 80,
+  port: defaultPort,
   database: "postgres",
   withDaemon: false,
 })
@@ -86,9 +89,20 @@ function loadHostIPs() {
   })
 }
 
+function loadAvailablePort() {
+  unarySend("detect-port", "detect-port", (code, value) => {
+    const port = parseInt(value, 10)
+    if (code === "payload" && port) {
+      detectedPort.value = port
+      installationForm.value.port = port
+    }
+  })
+}
+
 function onClickGameAPInstallationButton() {
   showInstallationAskModal.value = true
   loadHostIPs()
+  loadAvailablePort()
 }
 
 function onClickGameAPUpgradingButton() {
@@ -109,8 +123,13 @@ function handleInstallButtonClick(e) {
 
   let params = "--version=v4" +
       " --host=" + installationForm.value.host +
-      " --port=" + installationForm.value.port +
       " --database=" + installationForm.value.database
+
+  // A port left at the detected value is not a choice the user made, so it is not sent:
+  // that lets the installer pick another one if this one got taken in the meantime.
+  if (installationForm.value.port !== detectedPort.value) {
+    params += " --port=" + installationForm.value.port
+  }
 
   if (installationForm.value.withDaemon) {
     params += " --with-daemon"
@@ -256,6 +275,11 @@ function handleChangePasswordButtonClick() {
             />
             <n-input-number v-model:value="installationForm.port" placeholder="Port" />
           </n-input-group>
+        </n-form-item>
+        <n-form-item v-if="detectedPort !== defaultPort" label="&nbsp;">
+          <n-text depth="3">
+            Port {{ defaultPort }} is busy, port {{ detectedPort }} selected.
+          </n-text>
         </n-form-item>
         <n-form-item label="Database" path="database">
           <n-select v-model:value="installationForm.database" :options="databaseOptionsV4" />

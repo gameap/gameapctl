@@ -47,6 +47,8 @@ func cmdHandle(ctx context.Context, w io.Writer, m message) error {
 	switch cmd[0] {
 	case "detect-ips":
 		return detectIPs(w)
+	case "detect-port":
+		return detectPort(w)
 	case "node-info":
 		return nodeInfo(ctx, w, args)
 	case "service-status":
@@ -103,6 +105,23 @@ func duplicateLogWriter(ctx context.Context, w io.Writer) {
 func detectIPs(w io.Writer) error {
 	ips := utils.DetectIPs()
 	_, _ = w.Write([]byte(strings.Join(ips, ",")))
+
+	return nil
+}
+
+// detectPort suggests the panel HTTP port for the installation form. The probe binds the
+// wildcard address rather than the host picked in the form, which the form may still
+// change, so it errs towards calling a port busy. The installer re-checks the port it is
+// given in any case.
+//
+//nolint:unparam
+func detectPort(w io.Writer) error {
+	port, found := utils.FindAvailablePort("", gameap.DefaultPanelPort)
+	if !found {
+		port = gameap.DefaultPanelPort
+	}
+
+	_, _ = w.Write([]byte(port))
 
 	return nil
 }

@@ -43,10 +43,14 @@ type panelInstallStateV4 struct {
 
 	Scope string
 
-	HTTPS            bool
-	Host             string
-	HostIP           string
-	Port             string
+	HTTPS  bool
+	Host   string
+	HostIP string
+	Port   string
+	// PortInput captures the explicitly chosen port (--port, or a port embedded in
+	// --host); empty means the scope default. An occupied port is replaced
+	// automatically only when it was not chosen by hand.
+	PortInput        string
 	ConfigDirectory  string
 	DataDirectory    string
 	BinaryPath       string
@@ -148,7 +152,8 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 	state.Scope = scope
 
 	state.Host = cliCtx.String("host")
-	state.Port = cliCtx.String("port")
+	state.PortInput = cliCtx.String("port")
+	state.Port = state.PortInput
 	state.Database = cliCtx.String("database")
 	state.DBCreds = databaseCredentials{
 		Host:         cliCtx.String("database-host"),
@@ -213,10 +218,10 @@ func loadPanelInstallStateV4(cliCtx *cli.Context) (panelInstallStateV4, error) {
 // bind port 80 and there is no way to grant it CAP_NET_BIND_SERVICE.
 func defaultPortForScope(scope string) string {
 	if scope == gameap.ScopeUser {
-		return "8025"
+		return gameap.DefaultUserScopePanelPort
 	}
 
-	return "80"
+	return gameap.DefaultPanelPort
 }
 
 // validateDatabaseForScope rejects the database types whose installation requires
