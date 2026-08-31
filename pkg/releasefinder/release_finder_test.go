@@ -945,3 +945,67 @@ func Test_IsAtLeastV4_2(t *testing.T) {
 		})
 	}
 }
+
+func Test_CompareMajorMinor(t *testing.T) {
+	tests := []struct {
+		name    string
+		a       string
+		b       string
+		wantOK  bool
+		wantCmp int
+	}{
+		{name: "prerelease_counts_as_its_minor_line", a: "v4.5.0-beta.1", b: "v4.5", wantOK: true, wantCmp: 0},
+		{name: "old_style_prerelease_counts_too", a: "v4.2.0beta1", b: "v4.2", wantOK: true, wantCmp: 0},
+		{name: "older_minor", a: "v4.4.2", b: "v4.5", wantOK: true, wantCmp: -1},
+		{name: "minors_compare_numerically_not_lexically", a: "v4.10.0", b: "v4.9", wantOK: true, wantCmp: 1},
+		{name: "newer_major", a: "v5.0.0", b: "v4.3", wantOK: true, wantCmp: 1},
+		{name: "leading_v_is_optional", a: "4.5.0", b: "v4.5", wantOK: true, wantCmp: 0},
+		{name: "empty_is_unparseable", a: "", b: "v4.3", wantOK: false},
+		{name: "garbage_is_unparseable", a: "garbage", b: "v4.3", wantOK: false},
+		{name: "major_only_is_unparseable", a: "v4", b: "v4.3", wantOK: false},
+		{name: "unparseable_minimum", a: "v4.5.0", b: "not-a-version", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmp, ok := CompareMajorMinor(tt.a, tt.b)
+
+			assert.Equal(t, tt.wantOK, ok)
+
+			if !tt.wantOK {
+				return
+			}
+
+			switch {
+			case tt.wantCmp == 0:
+				assert.Equal(t, 0, cmp)
+			case tt.wantCmp < 0:
+				assert.Negative(t, cmp)
+			default:
+				assert.Positive(t, cmp)
+			}
+		})
+	}
+}
+
+func Test_IsAtLeast(t *testing.T) {
+	tests := []struct {
+		name    string
+		tag     string
+		minimum string
+		want    bool
+	}{
+		{name: "prerelease_of_the_same_minor", tag: "v4.5.0-beta.1", minimum: "v4.5", want: true},
+		{name: "previous_minor", tag: "v4.4.2", minimum: "v4.5", want: false},
+		{name: "later_minor_compares_numerically", tag: "v4.10.0", minimum: "v4.9", want: true},
+		{name: "later_major", tag: "v5.0.0", minimum: "v4.3", want: true},
+		{name: "unknown_tag_is_older_than_anything", tag: "", minimum: "v4.3", want: false},
+		{name: "garbage_tag_is_older_than_anything", tag: "garbage", minimum: "v4.3", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsAtLeast(tt.tag, tt.minimum))
+		})
+	}
+}

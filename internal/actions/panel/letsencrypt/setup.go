@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/configenv"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/panel"
@@ -59,7 +60,7 @@ func Setup(cliCtx *cli.Context) error {
 
 	configPath := paths.ConfigFilePath
 
-	lines, _, err := readEnv(configPath)
+	lines, _, err := configenv.Read(configPath)
 	if err != nil {
 		return err
 	}
@@ -69,7 +70,7 @@ func Setup(cliCtx *cli.Context) error {
 		return err
 	}
 
-	if err := writeEnv(configPath, lines, updates); err != nil {
+	if err := configenv.Update(configPath, lines, updates); err != nil {
 		return errors.WithMessage(err, "failed to write config")
 	}
 
@@ -120,7 +121,7 @@ func collectSetupParams(cliCtx *cli.Context, paths gameap.PanelPaths) (setupPara
 	configPath := paths.ConfigFilePath
 	log.Printf("Reading config from: %s\n", configPath)
 
-	_, values, err := readEnv(configPath)
+	_, values, err := configenv.Read(configPath)
 	if err != nil {
 		return p, err
 	}
@@ -196,7 +197,7 @@ func buildUpdates(p setupParams) (map[string]string, error) {
 	if p.challengeType == ChallengeDNS01 {
 		updates["ACME_DNS_PROVIDER"] = p.dnsProvider
 	} else {
-		updates["ACME_DNS_PROVIDER"] = removeMarker
+		updates["ACME_DNS_PROVIDER"] = configenv.RemoveMarker
 	}
 
 	for _, kv := range p.envKVs {
