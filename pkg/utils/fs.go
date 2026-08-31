@@ -134,7 +134,7 @@ func findInFileAndReplaceOrAdd(ctx context.Context, path string, replaceMap map[
 		}
 	}(file)
 
-	uid, gid := uidAndGIDForFile(path)
+	uid, gid := FileOwner(path)
 
 	tmpFile, err := os.CreateTemp("", "find-and-replace")
 	if err != nil {

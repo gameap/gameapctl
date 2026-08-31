@@ -415,54 +415,97 @@ func IsMajorV3(t NormalizedTag) bool {
 }
 
 // IsAtLeastV4_2 reports whether the resolved tag is GameAP v4.2.0 or newer.
-//
-// Accepts inputs like "v4.2.0", "v4.2.0beta1", "v4.10.0", "v5.0.0", "4.2.0".
-// The non-standard prerelease form ("v4.2.0beta1") is parsed by stripping the
-// suffix after the last numeric segment, so semver libraries that require a
-// dash separator are intentionally avoided.
-//
-// Empty input returns false (caller should treat unknown version as legacy).
 func IsAtLeastV4_2(tag string) bool {
-	tag = strings.TrimSpace(tag)
-	if tag == "" {
-		return false
+	return IsAtLeast(tag, "v4.2")
+}
+
+// IsAtLeast reports whether tag is at least minimum, comparing major and minor
+// only. An empty or unparseable tag is older than anything.
+func IsAtLeast(tag, minimum string) bool {
+	cmp, ok := CompareMajorMinor(tag, minimum)
+
+	return ok && cmp >= 0
+}
+
+// HasMajorMinor reports whether version names a GameAP release line, i.e.
+// whether the version comparisons above understand it. "v4" and "development"
+// do not qualify; "v4.5.0-beta.1" does.
+func HasMajorMinor(version string) bool {
+	_, _, ok := parseMajorMinor(version)
+
+	return ok
+}
+
+// CompareMajorMinor orders two GameAP versions by major and minor, returning a
+// negative number when a is older, zero when they share a minor line and a
+// positive number when a is newer. ok is false when either side cannot be
+// parsed.
+//
+// Both sides accept a leading "v" and the non-standard prerelease forms GameAP
+// uses ("v4.2.0beta1", "v4.5.0-beta.1"), so every prerelease of X.Y counts as
+// X.Y. That is deliberate: a rename released in X.Y is applied to a config
+// pinned at any X.Y build, and the patch level never carries such a change.
+func CompareMajorMinor(a, b string) (int, bool) {
+	aMajor, aMinor, ok := parseMajorMinor(a)
+	if !ok {
+		return 0, false
 	}
 
-	if len(tag) > 0 && (tag[0] == 'v' || tag[0] == 'V') {
-		tag = tag[1:]
+	bMajor, bMinor, ok := parseMajorMinor(b)
+	if !ok {
+		return 0, false
 	}
 
-	matches := versionSuffixSplitRegex.FindStringSubmatch(tag)
+	if aMajor != bMajor {
+		return aMajor - bMajor, true
+	}
+
+	return aMinor - bMinor, true
+}
+
+// parseMajorMinor splits a version into its major and minor numbers. Semver
+// libraries are intentionally avoided: GameAP publishes tags like "v4.2.0beta1"
+// that they refuse, so the suffix after the last numeric segment is stripped by
+// hand.
+func parseMajorMinor(version string) (major, minor int, ok bool) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return 0, 0, false
+	}
+
+	if version[0] == 'v' || version[0] == 'V' {
+		version = version[1:]
+	}
+
+	matches := versionSuffixSplitRegex.FindStringSubmatch(version)
 	if matches == nil {
-		return false
+		return 0, 0, false
 	}
 
 	versionPart := strings.TrimSuffix(matches[1], ".")
 	if versionPart == "" {
-		return false
+		return 0, 0, false
 	}
 
 	parts := strings.Split(versionPart, ".")
-	if len(parts) < 2 {
-		return false
+
+	const segmentsMajorMinor = 2
+
+	if len(parts) < segmentsMajorMinor {
+		return 0, 0, false
 	}
 
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return false
+		return 0, 0, false
 	}
 
-	minor, err := strconv.Atoi(parts[1])
+	minor, err = strconv.Atoi(parts[1])
 	if err != nil {
-		return false
+		return 0, 0, false
 	}
 
-	const (
-		minMajor = 4
-		minMinor = 2
-	)
-
-	return major > minMajor || (major == minMajor && minor >= minMinor)
+	return major, minor, true
 }
 
 var versionSuffixSplitRegex = regexp.MustCompile(`^([0-9.]*)(.*)$`)

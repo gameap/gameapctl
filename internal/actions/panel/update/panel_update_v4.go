@@ -58,6 +58,11 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		return handleV4FromGithub(ctx, paths, branch)
 	}
 
+	installedVersion := detectInstalledVersion(ctx, paths, state)
+	if installedVersion != "" {
+		log.Printf("Installed GameAP version: %s\n", installedVersion)
+	}
+
 	log.Println("Downloading GameAP release...")
 	tmpDir, downloadedBinary, resolvedTag, err := downloadRelease(ctx, tag, tagPrefix)
 	if err != nil {
@@ -80,6 +85,10 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
+	migration := reportConfigEnvMigration(
+		panel.MigrateConfigEnv(paths.ConfigFilePath, installedVersion, resolvedTag),
+	)
+
 	log.Println("Starting GameAP...")
 	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to start GameAP")
@@ -99,16 +108,8 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		log.Printf("Health check failed: %v\n", err)
 		log.Println("Rolling back to previous version...")
 
-		if stopErr := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); stopErr != nil {
-			log.Printf("Failed to stop GameAP during rollback: %v\n", stopErr)
-		}
-
-		if err := restoreBackupV4(backupPath, paths.BinaryPath); err != nil {
-			return errors.WithMessage(err, "failed to restore backup")
-		}
-
-		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
-			return errors.WithMessage(startErr, "failed to start GameAP after rollback")
+		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
+			return rollbackErr
 		}
 
 		return errors.New("update failed, rolled back to previous version")
@@ -368,17 +369,16 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
+	// A branch build is newer than every release, so every migration applies.
+	migration := reportConfigEnvMigration(panel.MigrateConfigEnvToLatest(paths.ConfigFilePath))
+
 	log.Println("Starting GameAP...")
 	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		log.Printf("Failed to start GameAP: %v\n", err)
 		log.Println("Restoring backup...")
 
-		if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
-			return errors.WithMessage(restoreErr, "failed to restore backup after start failure")
-		}
-
-		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
-			return errors.WithMessage(startErr, "failed to start GameAP after restoring backup")
+		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
+			return rollbackErr
 		}
 
 		return errors.New("new binary failed to start, rolled back to previous version")
@@ -398,16 +398,8 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 		log.Printf("Health check failed: %v\n", err)
 		log.Println("Rolling back to previous version...")
 
-		if stopErr := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); stopErr != nil {
-			log.Printf("Failed to stop GameAP during rollback: %v\n", stopErr)
-		}
-
-		if restoreErr := restoreBackupV4(backupPath, paths.BinaryPath); restoreErr != nil {
-			return errors.WithMessage(restoreErr, "failed to restore backup")
-		}
-
-		if startErr := panel.Start(ctx, panel.Options{Scope: paths.Scope}); startErr != nil {
-			return errors.WithMessage(startErr, "failed to start GameAP after rollback")
+		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
+			return rollbackErr
 		}
 
 		return errors.New("update failed, rolled back to previous version")
@@ -419,6 +411,71 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 	}
 
 	fmt.Println("GameAP has been successfully updated from GitHub!")
+
+	return nil
+}
+
+// detectInstalledVersion reports the panel release currently in place, which is
+// what tells a config.env upgrade from a downgrade. The binary knows its own
+// version from GameAP v4.5 on; before that the only record is the tag gameapctl
+// wrote when it installed or last upgraded the panel. An empty result means
+// unknown, and the migration falls back to its ordinary forward direction.
+func detectInstalledVersion(
+	ctx context.Context, paths gameap.PanelPaths, state gameapctl.PanelInstallState,
+) string {
+	if version := panel.InstalledVersion(ctx, paths.BinaryPath); version != "" {
+		return version
+	}
+
+	if releasefinder.HasMajorMinor(state.Version) {
+		return state.Version
+	}
+
+	return ""
+}
+
+// reportConfigEnvMigration logs what the migration changed. A migration that
+// fails never fails the upgrade: the panel ignores env vars it does not know,
+// and its own compatibility shim keeps the previous names working for a
+// release, so a stale config.env is a warning rather than a broken install.
+func reportConfigEnvMigration(migration panel.ConfigEnvMigration, err error) panel.ConfigEnvMigration {
+	if err != nil {
+		log.Printf("Warning: failed to migrate config.env: %v\n", err)
+
+		return panel.ConfigEnvMigration{}
+	}
+
+	for _, change := range migration.Changes {
+		log.Printf("config.env: %s\n", change)
+	}
+
+	return migration
+}
+
+// rollbackV4 puts the previous binary and its config.env back and starts the
+// panel again.
+//
+// The config is restored before the binary: it is best-effort and log-only, so
+// going first means it still happens when the binary restore fails and returns
+// early. The service is stopped throughout, so the order has no other effect.
+func rollbackV4(
+	ctx context.Context, paths gameap.PanelPaths, backupPath string, migration panel.ConfigEnvMigration,
+) error {
+	if stopErr := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); stopErr != nil {
+		log.Printf("Failed to stop GameAP during rollback: %v\n", stopErr)
+	}
+
+	if restoreErr := migration.Restore(); restoreErr != nil {
+		log.Printf("Failed to restore config.env during rollback: %v\n", restoreErr)
+	}
+
+	if err := restoreBackupV4(backupPath, paths.BinaryPath); err != nil {
+		return errors.WithMessage(err, "failed to restore backup")
+	}
+
+	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
+		return errors.WithMessage(err, "failed to start GameAP after rollback")
+	}
 
 	return nil
 }

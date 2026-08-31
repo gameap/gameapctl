@@ -4,6 +4,7 @@ import (
 	"log"
 
 	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/configenv"
 	"github.com/gameap/gameapctl/pkg/panel"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -20,7 +21,7 @@ func Disable(cliCtx *cli.Context) error {
 	configPath := paths.ConfigFilePath
 	log.Printf("Reading config from: %s\n", configPath)
 
-	lines, _, err := readEnv(configPath)
+	lines, _, err := configenv.Read(configPath)
 	if err != nil {
 		return err
 	}
@@ -34,10 +35,10 @@ func Disable(cliCtx *cli.Context) error {
 			continue
 		}
 
-		updates[k] = removeMarker
+		updates[k] = configenv.RemoveMarker
 	}
 
-	if err := writeEnv(configPath, lines, updates); err != nil {
+	if err := configenv.Update(configPath, lines, updates); err != nil {
 		return errors.WithMessage(err, "failed to write config")
 	}
 

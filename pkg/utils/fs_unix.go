@@ -10,7 +10,9 @@ import (
 	"github.com/gameap/gameapctl/pkg/oscore"
 )
 
-func uidAndGIDForFile(path string) (uint32, uint32) {
+// FileOwner returns the uid and gid owning path. A path that cannot be
+// stat'ed, and every path on Windows, yields 0, 0.
+func FileOwner(path string) (uint32, uint32) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return 0, 0
