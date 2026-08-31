@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -112,15 +113,20 @@ func Update(path string, lines []string, updates map[string]string) error {
 // Write replaces path with lines, atomically, preserving the previous file's
 // mode and (on unix) owner. The last line is always terminated, so Read
 // followed by Write with no edits reproduces the file byte for byte.
+//
+// The new content is staged under a unique name next to the file rather than a
+// fixed one, so that two writers racing over the same config (an upgrade and a
+// letsencrypt run, say) each rename a complete file into place instead of
+// interleaving into a shared scratch file.
 func Write(path string, lines []string) error {
 	mode, uid, gid := currentOwnership(path)
 
-	tmp := path + ".tmp"
-
-	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	out, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
-		return errors.Wrap(err, "failed to open temp config")
+		return errors.Wrap(err, "failed to create temp config")
 	}
+
+	tmp := out.Name()
 
 	if err := writeLines(out, lines); err != nil {
 		_ = out.Close()

@@ -73,6 +73,8 @@ func TestWrite_UnwritableDirectoryLeavesTheOriginalIntact(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "A=1\n", string(body))
 
-	_, err = os.Stat(path + ".tmp")
-	assert.True(t, os.IsNotExist(err))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "config.env", entries[0].Name())
 }

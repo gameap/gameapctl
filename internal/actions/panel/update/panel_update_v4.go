@@ -89,30 +89,8 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		panel.MigrateConfigEnv(paths.ConfigFilePath, installedVersion, resolvedTag),
 	)
 
-	log.Println("Starting GameAP...")
-	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
-		return errors.WithMessage(err, "failed to start GameAP")
-	}
-
-	log.Println("Checking if new version is working...")
-	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
-	if err != nil {
-		log.Printf("Warning: failed to read config.env: %v\n", err)
-
-		httpHost = "127.0.0.1"
-		httpPort = "8025"
-		httpsEnabled = false
-	}
-
-	if err := checkHealth(ctx, httpHost, httpPort, httpsEnabled); err != nil {
-		log.Printf("Health check failed: %v\n", err)
-		log.Println("Rolling back to previous version...")
-
-		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
-			return rollbackErr
-		}
-
-		return errors.New("update failed, rolled back to previous version")
+	if err := startAndVerifyV4(ctx, paths, backupPath, migration); err != nil {
+		return err
 	}
 
 	log.Println("Update successful! Removing backup...")
@@ -372,37 +350,8 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 	// A branch build is newer than every release, so every migration applies.
 	migration := reportConfigEnvMigration(panel.MigrateConfigEnvToLatest(paths.ConfigFilePath))
 
-	log.Println("Starting GameAP...")
-	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
-		log.Printf("Failed to start GameAP: %v\n", err)
-		log.Println("Restoring backup...")
-
-		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
-			return rollbackErr
-		}
-
-		return errors.New("new binary failed to start, rolled back to previous version")
-	}
-
-	log.Println("Checking if new version is working...")
-	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
-	if err != nil {
-		log.Printf("Warning: failed to read config.env: %v\n", err)
-
-		httpHost = "127.0.0.1"
-		httpPort = "8025"
-		httpsEnabled = false
-	}
-
-	if err := checkHealth(ctx, httpHost, httpPort, httpsEnabled); err != nil {
-		log.Printf("Health check failed: %v\n", err)
-		log.Println("Rolling back to previous version...")
-
-		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
-			return rollbackErr
-		}
-
-		return errors.New("update failed, rolled back to previous version")
+	if err := startAndVerifyV4(ctx, paths, backupPath, migration); err != nil {
+		return err
 	}
 
 	log.Println("Update successful! Removing backup...")
@@ -475,6 +424,50 @@ func rollbackV4(
 
 	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to start GameAP after rollback")
+	}
+
+	return nil
+}
+
+// startAndVerifyV4 starts the upgraded panel and makes sure it answers. A panel
+// that will not start or will not respond is rolled back together with the
+// config.env the migration rewrote for it, so that the operator is left with a
+// running installation rather than a matched but dead pair.
+func startAndVerifyV4(
+	ctx context.Context, paths gameap.PanelPaths, backupPath string, migration panel.ConfigEnvMigration,
+) error {
+	log.Println("Starting GameAP...")
+	if err := panel.Start(ctx, panel.Options{Scope: paths.Scope}); err != nil {
+		log.Printf("Failed to start GameAP: %v\n", err)
+		log.Println("Rolling back to previous version...")
+
+		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
+			return rollbackErr
+		}
+
+		return errors.New("new binary failed to start, rolled back to previous version")
+	}
+
+	log.Println("Checking if new version is working...")
+
+	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
+	if err != nil {
+		log.Printf("Warning: failed to read config.env: %v\n", err)
+
+		httpHost = "127.0.0.1"
+		httpPort = "8025"
+		httpsEnabled = false
+	}
+
+	if err := checkHealth(ctx, httpHost, httpPort, httpsEnabled); err != nil {
+		log.Printf("Health check failed: %v\n", err)
+		log.Println("Rolling back to previous version...")
+
+		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {
+			return rollbackErr
+		}
+
+		return errors.New("update failed, rolled back to previous version")
 	}
 
 	return nil
