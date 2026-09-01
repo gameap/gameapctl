@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	daemonpkg "github.com/gameap/gameapctl/internal/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/tlsprobe"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type probeOutcome struct {
-	result daemonpkg.TLSProbeResult
+	result tlsprobe.Result
 	err    error
 }
 
@@ -24,13 +24,13 @@ func fakeResolveDeps(
 	outcomes map[string]probeOutcome, localIPs []string, out *strings.Builder, calls *[]string,
 ) resolveDeps {
 	return resolveDeps{
-		probe: func(_ context.Context, addr string, _ time.Duration) (daemonpkg.TLSProbeResult, error) {
+		probe: func(_ context.Context, addr string, _ time.Duration) (tlsprobe.Result, error) {
 			*calls = append(*calls, addr)
 			if outcome, ok := outcomes[addr]; ok {
 				return outcome.result, outcome.err
 			}
 
-			return daemonpkg.TLSProbeResult{}, errors.Errorf("cannot reach gRPC server at %s", addr)
+			return tlsprobe.Result{}, errors.Errorf("cannot reach gRPC server at %s", addr)
 		},
 		localIPs: func() []string { return localIPs },
 		printf: func(format string, a ...interface{}) {
@@ -39,8 +39,8 @@ func fakeResolveDeps(
 	}
 }
 
-func tlsResult(leaf *x509.Certificate, handshakeErr error) daemonpkg.TLSProbeResult {
-	return daemonpkg.TLSProbeResult{Leaf: leaf, HandshakeErr: handshakeErr}
+func tlsResult(leaf *x509.Certificate, handshakeErr error) tlsprobe.Result {
+	return tlsprobe.Result{Leaf: leaf, HandshakeErr: handshakeErr}
 }
 
 func Test_resolveConnectAddress(t *testing.T) {

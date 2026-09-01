@@ -26,19 +26,7 @@ func Disable(cliCtx *cli.Context) error {
 		return err
 	}
 
-	updates := map[string]string{
-		"ACME_ENABLED": "false",
-	}
-
-	for _, k := range envKeysOwned {
-		if k == "ACME_ENABLED" {
-			continue
-		}
-
-		updates[k] = configenv.RemoveMarker
-	}
-
-	if err := configenv.Update(configPath, lines, updates); err != nil {
+	if err := configenv.Update(configPath, lines, DisableUpdates()); err != nil {
 		return errors.WithMessage(err, "failed to write config")
 	}
 

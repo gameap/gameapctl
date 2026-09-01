@@ -258,6 +258,14 @@ func splitAssignment(raw string) (key, value string, ok bool) {
 	return strings.TrimSpace(key), strings.TrimSpace(value), true
 }
 
+// Unquote returns a value the way the panel's own env file loader sees it, with
+// a balanced pair of surrounding quotes removed.
+func Unquote(value string) string {
+	inner, _ := unquote(value)
+
+	return inner
+}
+
 // unquote splits a value into its content and the quote character wrapping it.
 // The panel's own env file loader trims a leading and trailing quote, so
 // KEY="10" is a working configuration whose value is 10; a converter must see

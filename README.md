@@ -24,6 +24,48 @@ installer warns and names a free port instead, so a scripted install gets either
 for or an error. The installation form of the web UI (`gameapctl ui`) is pre-filled with the
 detected port.
 
+## HTTPS
+
+The panel terminates TLS itself, so there is no web server to configure. One command issues a
+self-signed certificate, points the panel at it and restarts it:
+
+```bash
+gameapctl panel https enable
+gameapctl panel https status
+gameapctl panel https disable
+```
+
+The certificate covers the configured `HTTP_HOST`, the machine's host name, every address of its
+network interfaces and loopback, and is valid for 825 days. Narrow that down with `--domain` and
+`--ip`, both repeatable, and reissue early with `--force`. A rerun keeps a certificate that still
+covers every requested name and is not about to expire, so the browser exception you have already
+accepted survives.
+
+Being self-signed, the certificate is not trusted by anything until you add it to the trust store
+of each machine that opens the panel; copy it from the path `status` prints. A certificate you
+already have is used instead with `--cert` and `--key`, which are left where they are — point them
+at the live files of an external ACME client and the panel picks up every renewal on restart.
+
+HTTP keeps answering on its own port. `--force-https` redirects it to HTTPS; leave it off until you
+are sure the HTTPS port is reachable, or you lose access to the panel from anywhere the redirect
+target is blocked.
+
+Both listeners are served by one process, and the panel exits when it cannot load the certificate
+it is configured with. `enable` therefore verifies that the panel comes back up serving exactly the
+certificate it just wrote, and restores the previous `config.env` when it does not.
+
+| | system scope | user scope |
+|---|---|---|
+| Certificate | `/etc/gameap/certs/panel.crt` | `~/.config/gameap/certs/panel.crt` |
+| Private key | `/etc/gameap/certs/panel.key` | `~/.config/gameap/certs/panel.key` |
+| Default port | 443 | 8443 |
+
+On Windows both files live in `C:\gameap\web\certs`.
+
+Let's Encrypt lives under the same command, `gameapctl panel https letsencrypt`, and is described in
+`gameapctl panel https letsencrypt --help`. ACME takes priority over a certificate on disk, so
+`enable` refuses to run while it is configured, and `disable` switches both off.
+
 ## Rootless installation (user scope)
 
 On Linux both the panel and the daemon can be installed without root, into the current
@@ -35,7 +77,7 @@ gameapctl daemon install --scope=user --connect=grpc://<host>:31718/<setup-key>
 ```
 
 The scope is recorded at install time, so the other commands (`start`, `stop`, `restart`,
-`status`, `upgrade`, `uninstall`, `change-password`, `letsencrypt`) pick it up automatically.
+`status`, `upgrade`, `uninstall`, `change-password`, `https`) pick it up automatically.
 Pass `--scope=user` explicitly if the state file in `~/.gameapctl` was lost.
 
 ### Requirements
@@ -73,7 +115,7 @@ are unaffected because the units use absolute paths, but to run `gameap` by name
 
 | Limitation | Reason |
 |---|---|
-| Ports below 1024 (80, 443) are normally unavailable; the panel defaults to 8025 | A systemd user unit cannot be granted `CAP_NET_BIND_SERVICE`. The installer probes the port rather than rejecting anything below 1024, so low ports still work where an administrator lowered `net.ipv4.ip_unprivileged_port_start` |
+| Ports below 1024 (80, 443) are normally unavailable; the panel defaults to 8025, HTTPS to 8443 | A systemd user unit cannot be granted `CAP_NET_BIND_SERVICE`. The installer probes the port rather than rejecting anything below 1024, so low ports still work where an administrator lowered `net.ipv4.ip_unprivileged_port_start` |
 | No database server is installed; SQLite is the default | `apt`/`dnf` and system services require root. `--database=mysql\|postgres` is only accepted for an existing server, described by `--database-host`, `--database-name`, `--database-username` and `--database-password` (plus `--database-port` for a non-default port) |
 | System packages are not installed for the panel | It needs none of them: downloads, archive extraction, SQLite and password hashing are all in-process. Building with `--github` still needs `git`, `go` and `npm` preinstalled |
 | The daemon has prerequisites of its own | `curl` and `gpg` must be preinstalled (plus `tmux` or `docker` if the process manager is overridden to one of them). SteamCMD additionally needs the 32-bit libraries `lib32gcc`, `lib32stdc++6` and `lib32z1` on a 64-bit system; the installer only warns about all of these |

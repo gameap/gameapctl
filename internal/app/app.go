@@ -19,6 +19,7 @@ import (
 	daemonstop "github.com/gameap/gameapctl/internal/actions/daemon/stop"
 	daemonupdate "github.com/gameap/gameapctl/internal/actions/daemon/update"
 	panelchangepassword "github.com/gameap/gameapctl/internal/actions/panel/changepassword"
+	panelhttps "github.com/gameap/gameapctl/internal/actions/panel/https"
 	panelinstall "github.com/gameap/gameapctl/internal/actions/panel/install"
 	panelletsencrypt "github.com/gameap/gameapctl/internal/actions/panel/letsencrypt"
 	panelrestart "github.com/gameap/gameapctl/internal/actions/panel/restart"
@@ -417,69 +418,8 @@ func Run(args []string) {
 							panelScopeFlag(),
 						},
 					},
-					{
-						Name:  "letsencrypt",
-						Usage: "Manage Let's Encrypt (ACME) certificates",
-						Description: "Configure or disable automatic HTTPS certificate management " +
-							"via the in-process ACME client. DNS-01 challenge is used; a DNS " +
-							"provider plugin must be installed in the panel beforehand.",
-						Subcommands: []*cli.Command{
-							{
-								Name:  "setup",
-								Usage: "Configure ACME / Let's Encrypt and restart the panel",
-								Description: "Interactive wizard (or flag-driven with --non-interactive) " +
-									"that writes ACME settings to /etc/gameap/config.env and restarts " +
-									"the gameap service. http-01 (default) requires port 80 reachable " +
-									"from the public internet; dns-01 requires a DNS provider plugin and " +
-									"supports wildcard domains.",
-								Action: panelletsencrypt.Setup,
-								Flags: []cli.Flag{
-									panelScopeFlag(),
-									&cli.StringFlag{
-										Name:  "challenge",
-										Usage: "Challenge type: http-01 (default) or dns-01",
-									},
-									&cli.StringFlag{
-										Name:  "domains",
-										Usage: "Comma-separated list of domains (wildcards require dns-01)",
-									},
-									&cli.StringFlag{
-										Name:  "email",
-										Usage: "ACME account email",
-									},
-									&cli.StringFlag{
-										Name:  "dns-provider",
-										Usage: "DNS provider identifier (<plugin-id>:<provider-name>); only for dns-01",
-									},
-									&cli.BoolFlag{
-										Name:  "staging",
-										Usage: "Use Let's Encrypt staging directory",
-									},
-									&cli.StringSliceFlag{
-										Name:  "env",
-										Usage: "Additional KEY=VALUE entries appended to config.env (DNS provider credentials)",
-									},
-									&cli.BoolFlag{
-										Name:  "non-interactive",
-										Usage: "Fail instead of prompting when required flags are missing",
-									},
-								},
-							},
-							{
-								Name:        "disable",
-								Usage:       "Disable ACME and restart the panel",
-								Description: "Removes ACME_* keys from config.env and restarts gameap service.",
-								Action:      panelletsencrypt.Disable,
-								Flags: []cli.Flag{
-									panelScopeFlag(),
-									&cli.BoolFlag{
-										Name:  "purge-certs",
-										Usage: "Also delete stored certificate material (not yet implemented)",
-									},
-								},
-							},
-						},
-					},
+					panelHTTPSCommand(),
+					panelLetsEncryptCommand(true),
 				},
 			},
 			{
@@ -563,6 +503,177 @@ func Run(args []string) {
 		}
 
 		log.Fatal(err)
+	}
+}
+
+// panelHTTPSCommand groups everything that decides how the panel serves HTTPS.
+// The panel terminates TLS in process, so all of it comes down to config.env
+// keys and a restart.
+func panelHTTPSCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "https",
+		Usage: "Manage HTTPS for the panel",
+		Description: "Serve the panel over HTTPS with a self-signed certificate, with a certificate " +
+			"you already have, or with Let's Encrypt. The panel terminates TLS itself, so there is " +
+			"no web server to configure.",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "enable",
+				Usage: "Enable HTTPS and restart the panel",
+				Description: "Issues a self-signed certificate for the configured host, points " +
+					"config.env at it and restarts the panel. Pass --cert and --key to use a " +
+					"certificate you already have. The result is verified and rolled back when the " +
+					"panel does not come up serving it.",
+				Action: panelhttps.Enable,
+				Flags: []cli.Flag{
+					panelScopeFlag(),
+					&cli.BoolFlag{
+						Name:  "self-signed",
+						Usage: "Issue a self-signed certificate. This is the default",
+					},
+					&cli.StringFlag{
+						Name:  "cert",
+						Usage: "Path to a PEM certificate to use instead of a self-signed one, requires --key",
+					},
+					&cli.StringFlag{
+						Name:  "key",
+						Usage: "Path to the private key of --cert",
+					},
+					&cli.StringSliceFlag{
+						Name:  "domain",
+						Usage: "Domain the certificate has to cover. Repeatable; replaces the detected names",
+					},
+					&cli.StringSliceFlag{
+						Name:  "ip",
+						Usage: "IP address the certificate has to cover. Repeatable; replaces the detected addresses",
+					},
+					&cli.IntFlag{
+						Name:        "port",
+						Usage:       "HTTPS port",
+						DefaultText: "443, or 8443 with --scope=user",
+					},
+					&cli.IntFlag{
+						Name:        "days",
+						Usage:       "Validity of the self-signed certificate in days",
+						DefaultText: "825",
+					},
+					&cli.BoolFlag{
+						Name:  "force-https",
+						Usage: "Redirect HTTP requests to HTTPS. Left as configured when the flag is absent",
+					},
+					&cli.BoolFlag{
+						Name:  "force",
+						Usage: "Reissue the self-signed certificate even when the current one still fits",
+					},
+				},
+			},
+			{
+				Name:  "disable",
+				Usage: "Disable HTTPS and restart the panel",
+				Description: "Removes the TLS keys from config.env, along with the ACME settings when " +
+					"those are what is in effect, leaving the panel on plain HTTP.",
+				Action: panelhttps.Disable,
+				Flags: []cli.Flag{
+					panelScopeFlag(),
+					&cli.BoolFlag{
+						Name:  "purge",
+						Usage: "Also delete the certificate gameapctl issued",
+					},
+				},
+			},
+			{
+				Name:  "status",
+				Usage: "Show the HTTPS configuration",
+				Description: "Reports the certificate the panel is configured with, the certificate it " +
+					"is actually serving and when it expires.",
+				Action: panelhttps.Status,
+				Flags: []cli.Flag{
+					panelScopeFlag(),
+				},
+			},
+			panelLetsEncryptCommand(false),
+		},
+	}
+}
+
+// panelLetsEncryptCommand builds the ACME command tree. It is registered twice,
+// under "panel https" where it belongs and hidden at "panel" level so that the
+// documented "panel letsencrypt" keeps working, and returns a new command every
+// call because urfave/cli mutates the one it runs.
+func panelLetsEncryptCommand(hidden bool) *cli.Command {
+	description := "Configure or disable automatic HTTPS certificate management " +
+		"via the in-process ACME client. Running it without a subcommand configures ACME."
+	if hidden {
+		description = "Deprecated alias of 'gameapctl panel https letsencrypt'. " + description
+	}
+
+	return &cli.Command{
+		Name:        "letsencrypt",
+		Hidden:      hidden,
+		Usage:       "Manage Let's Encrypt (ACME) certificates",
+		Description: description,
+		Action:      panelletsencrypt.Setup,
+		Flags:       letsEncryptSetupFlags(),
+		Subcommands: []*cli.Command{
+			{
+				Name:  "setup",
+				Usage: "Configure ACME / Let's Encrypt and restart the panel",
+				Description: "Interactive wizard (or flag-driven with --non-interactive) " +
+					"that writes ACME settings to /etc/gameap/config.env and restarts " +
+					"the gameap service. http-01 (default) requires port 80 reachable " +
+					"from the public internet; dns-01 requires a DNS provider plugin and " +
+					"supports wildcard domains.",
+				Action: panelletsencrypt.Setup,
+				Flags:  letsEncryptSetupFlags(),
+			},
+			{
+				Name:        "disable",
+				Usage:       "Disable ACME and restart the panel",
+				Description: "Removes ACME_* keys from config.env and restarts gameap service.",
+				Action:      panelletsencrypt.Disable,
+				Flags: []cli.Flag{
+					panelScopeFlag(),
+					&cli.BoolFlag{
+						Name:  "purge-certs",
+						Usage: "Also delete stored certificate material (not yet implemented)",
+					},
+				},
+			},
+		},
+	}
+}
+
+func letsEncryptSetupFlags() []cli.Flag {
+	return []cli.Flag{
+		panelScopeFlag(),
+		&cli.StringFlag{
+			Name:  "challenge",
+			Usage: "Challenge type: http-01 (default) or dns-01",
+		},
+		&cli.StringFlag{
+			Name:  "domains",
+			Usage: "Comma-separated list of domains (wildcards require dns-01)",
+		},
+		&cli.StringFlag{
+			Name:  "email",
+			Usage: "ACME account email",
+		},
+		&cli.StringFlag{
+			Name:  "dns-provider",
+			Usage: "DNS provider identifier (<plugin-id>:<provider-name>); only for dns-01",
+		},
+		&cli.BoolFlag{
+			Name:  "staging",
+			Usage: "Use Let's Encrypt staging directory",
+		},
+		&cli.StringSliceFlag{
+			Name:  "env",
+			Usage: "Additional KEY=VALUE entries appended to config.env (DNS provider credentials)",
+		},
+		&cli.BoolFlag{
+			Name:  "non-interactive",
+			Usage: "Fail instead of prompting when required flags are missing",
+		},
 	}
 }
 

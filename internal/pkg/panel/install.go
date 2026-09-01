@@ -2,6 +2,7 @@ package panel
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -203,6 +204,17 @@ func createHealthURL(host, port string, https bool, endpoint string) string {
 	return u
 }
 
+// healthCheckClient deliberately does not verify the panel's certificate. An
+// installation serving HTTPS from a self-signed certificate is the common case
+// here, and this is a liveness probe against the panel that was just installed
+// or restarted, not a trust decision.
+var healthCheckClient = &http.Client{
+	Transport: &http.Transport{
+		//nolint:gosec // liveness probe, see above
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	},
+}
+
 func checkInstallation(ctx context.Context, url string) error {
 	log.Printf("Checking installation at %s\n", url)
 
@@ -211,7 +223,7 @@ func checkInstallation(ctx context.Context, url string) error {
 		return err
 	}
 	//nolint:bodyclose
-	response, err := http.DefaultClient.Do(req)
+	response, err := healthCheckClient.Do(req)
 	if err != nil {
 		return err
 	}

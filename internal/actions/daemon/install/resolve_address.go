@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	daemonpkg "github.com/gameap/gameapctl/internal/pkg/daemon"
+	"github.com/gameap/gameapctl/pkg/tlsprobe"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -21,14 +21,14 @@ const (
 )
 
 type resolveDeps struct {
-	probe    func(ctx context.Context, addr string, timeout time.Duration) (daemonpkg.TLSProbeResult, error)
+	probe    func(ctx context.Context, addr string, timeout time.Duration) (tlsprobe.Result, error)
 	localIPs func() []string
 	printf   func(format string, a ...interface{})
 }
 
 func defaultResolveDeps() resolveDeps {
 	return resolveDeps{
-		probe:    daemonpkg.ProbeTLSLeaf,
+		probe:    tlsprobe.Leaf,
 		localIPs: utils.DetectIPs,
 		printf: func(format string, a ...interface{}) {
 			fmt.Printf(format, a...)
