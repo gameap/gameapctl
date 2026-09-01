@@ -2,10 +2,12 @@ package panel
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -203,15 +205,63 @@ func createHealthURL(host, port string, https bool, endpoint string) string {
 	return u
 }
 
-func checkInstallation(ctx context.Context, url string) error {
-	log.Printf("Checking installation at %s\n", url)
+// localHTTPSClient deliberately does not verify the panel's certificate. An
+// installation serving HTTPS from a self-signed certificate is the common case
+// here, and a probe of the machine gameapctl is running on is a liveness check
+// against the panel that was just installed or restarted, not a trust decision.
+// Nothing but the certificate is unverified: the transport keeps the timeouts
+// the default one carries. The proxy is dropped: a probe that stays on this
+// machine has no business leaving it, and the unspecified address is not one
+// of the hosts the environment proxy bypasses on its own.
+var localHTTPSClient = newLocalHTTPSClient()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func newLocalHTTPSClient() *http.Client {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultClient
+	}
+
+	transport = transport.Clone()
+	transport.Proxy = nil
+	//nolint:gosec // loopback liveness probe, see above
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	return &http.Client{Transport: transport}
+}
+
+// healthCheckClient picks the client for a probe. A probe that leaves this
+// machine is verified like any other request; only the local self-signed case
+// is exempt.
+func healthCheckClient(u *url.URL) *http.Client {
+	if u.Scheme != "https" || !isLocalHost(u.Hostname()) {
+		return http.DefaultClient
+	}
+
+	return localHTTPSClient
+}
+
+// isLocalHost reports whether a request to host stays on this machine. The
+// unspecified address counts: the panel is configured with it to listen
+// everywhere, and a connection to it lands on loopback.
+func isLocalHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+func checkInstallation(ctx context.Context, healthURL string) error {
+	log.Printf("Checking installation at %s\n", healthURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return err
 	}
 	//nolint:bodyclose
-	response, err := http.DefaultClient.Do(req)
+	response, err := healthCheckClient(req.URL).Do(req)
 	if err != nil {
 		return err
 	}

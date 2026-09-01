@@ -1,4 +1,7 @@
-package daemon
+// Package tlsprobe inspects the certificate a TLS server presents without
+// trusting it, so that a caller can report which certificate is actually being
+// served before deciding whether that is the one it expects.
+package tlsprobe
 
 import (
 	"context"
@@ -10,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type TLSProbeResult struct {
+type Result struct {
 	// Leaf is the server certificate captured during the handshake.
 	// Nil when the server did not present one (e.g. plaintext gRPC).
 	Leaf *x509.Certificate
@@ -20,20 +23,20 @@ type TLSProbeResult struct {
 	HandshakeErr error
 }
 
-// ProbeTLSLeaf connects to addr and captures the server's leaf certificate
-// without verifying it. A non-nil error means the TCP connection itself failed.
-func ProbeTLSLeaf(ctx context.Context, addr string, timeout time.Duration) (TLSProbeResult, error) {
+// Leaf connects to addr and captures the server's leaf certificate without
+// verifying it. A non-nil error means the TCP connection itself failed.
+func Leaf(ctx context.Context, addr string, timeout time.Duration) (Result, error) {
 	dialer := &net.Dialer{Timeout: timeout}
 
 	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return TLSProbeResult{}, errors.Wrapf(err, "cannot reach gRPC server at %s", addr)
+		return Result{}, errors.Wrapf(err, "cannot reach TLS server at %s", addr)
 	}
 	defer func() {
 		_ = rawConn.Close()
 	}()
 
-	result := TLSProbeResult{}
+	result := Result{}
 
 	//nolint:gosec // the probe only captures the certificate; no data is exchanged
 	tlsConfig := &tls.Config{

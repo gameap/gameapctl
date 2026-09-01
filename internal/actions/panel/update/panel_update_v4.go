@@ -1,7 +1,6 @@
 package update
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io/fs"
@@ -9,11 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	installpkg "github.com/gameap/gameapctl/internal/pkg/panel"
+	"github.com/gameap/gameapctl/pkg/configenv"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
@@ -28,6 +27,9 @@ const (
 	backupSuffix       = ".backup"
 	healthCheckRetries = 5
 	healthCheckDelay   = 2 * time.Second
+
+	defaultHealthCheckHost = "127.0.0.1"
+	defaultHealthCheckPort = "8025"
 )
 
 func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix string) error {
@@ -218,58 +220,29 @@ func restoreBackupV4(backupPath, currentBinary string) error {
 	return nil
 }
 
-// readConfigEnv reads HTTP_HOST and HTTP_PORT from config.env.
+// readConfigEnv reads the address the panel answers on. HTTPS is derived from
+// the certificate source rather than from a flag: the panel has no key that
+// switches TLS on, it serves it as soon as a certificate is configured, and with
+// TLS_FORCE_HTTPS the plain HTTP endpoint only answers with a redirect.
 func readConfigEnv(configPath string) (host, port string, httpsEnabled bool, err error) {
-	file, err := os.Open(configPath)
+	_, values, err := configenv.Read(configPath)
 	if err != nil {
-		return "", "", false, errors.WithMessage(err, "failed to open config file")
-	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			log.Printf("Failed to close config file: %v\n", err)
-		}
-	}(file)
-
-	scanner := bufio.NewScanner(file)
-	host = "127.0.0.1"
-	port = "8025"
-	httpsEnabled = false
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse KEY=VALUE format
-		//nolint:nestif
-		if strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-
-				switch key {
-				case "HTTP_HOST":
-					if value != "" {
-						host = value
-					}
-				case "HTTP_PORT":
-					if value != "" {
-						port = value
-					}
-				case "HTTPS_ENABLED":
-					httpsEnabled = value == "true" || value == "1"
-				}
-			}
-		}
+		return "", "", false, err
 	}
 
-	if err := scanner.Err(); err != nil {
-		return "", "", false, errors.WithMessage(err, "failed to read config file")
+	host = panel.ConfigValue(values, panel.HTTPHostKey)
+	if host == "" {
+		host = defaultHealthCheckHost
+	}
+
+	port = panel.ConfigValue(values, panel.HTTPPortKey)
+	if port == "" {
+		port = defaultHealthCheckPort
+	}
+
+	httpsEnabled = panel.TLSEnabled(values)
+	if httpsEnabled {
+		port = panel.HTTPSPort(values)
 	}
 
 	return host, port, httpsEnabled, nil

@@ -1,4 +1,4 @@
-package daemon
+package tlsprobe
 
 import (
 	"context"
@@ -68,14 +68,14 @@ func runTLSServer(t *testing.T, cfg *tls.Config) net.Listener {
 	return listener
 }
 
-func TestProbeTLSLeaf_tlsServer(t *testing.T) {
+func TestLeaf_tlsServer(t *testing.T) {
 	cert := generateTestCert(t)
 	listener := runTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
 	})
 
-	result, err := ProbeTLSLeaf(context.Background(), listener.Addr().String(), 3*time.Second)
+	result, err := Leaf(context.Background(), listener.Addr().String(), 3*time.Second)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.Leaf)
@@ -83,7 +83,7 @@ func TestProbeTLSLeaf_tlsServer(t *testing.T) {
 	assert.Equal(t, "test-panel", result.Leaf.Subject.CommonName)
 }
 
-func TestProbeTLSLeaf_mtlsRequired(t *testing.T) {
+func TestLeaf_mtlsRequired(t *testing.T) {
 	cert := generateTestCert(t)
 
 	leaf, err := x509.ParseCertificate(cert.Certificate[0])
@@ -99,7 +99,7 @@ func TestProbeTLSLeaf_mtlsRequired(t *testing.T) {
 		MaxVersion:   tls.VersionTLS12,
 	})
 
-	result, err := ProbeTLSLeaf(context.Background(), listener.Addr().String(), 3*time.Second)
+	result, err := Leaf(context.Background(), listener.Addr().String(), 3*time.Second)
 
 	require.NoError(t, err)
 	require.NotNil(t, result.Leaf)
@@ -107,14 +107,14 @@ func TestProbeTLSLeaf_mtlsRequired(t *testing.T) {
 	assert.Equal(t, "test-panel", result.Leaf.Subject.CommonName)
 }
 
-func TestProbeTLSLeaf_unreachable(t *testing.T) {
-	_, err := ProbeTLSLeaf(context.Background(), "127.0.0.1:1", 1*time.Second)
+func TestLeaf_unreachable(t *testing.T) {
+	_, err := Leaf(context.Background(), "127.0.0.1:1", 1*time.Second)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot reach gRPC server")
+	assert.Contains(t, err.Error(), "cannot reach TLS server")
 }
 
-func TestProbeTLSLeaf_plainTCP(t *testing.T) {
+func TestLeaf_plainTCP(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -131,7 +131,7 @@ func TestProbeTLSLeaf_plainTCP(t *testing.T) {
 		}
 	}()
 
-	result, err := ProbeTLSLeaf(context.Background(), listener.Addr().String(), 1*time.Second)
+	result, err := Leaf(context.Background(), listener.Addr().String(), 1*time.Second)
 
 	require.NoError(t, err)
 	assert.Nil(t, result.Leaf)
