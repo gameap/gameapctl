@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -249,6 +250,116 @@ func TestDisableUpdates(t *testing.T) {
 
 	assert.Equal(t, "false", withACME["ACME_ENABLED"])
 	assert.Contains(t, withACME, "TLS_CERT_FILE")
+}
+
+func TestWriteCertificate(t *testing.T) {
+	t.Run("the pair is replaced and nothing is left beside it", func(t *testing.T) {
+		dir := t.TempDir()
+		certPath, keyPath := existingPair(t, dir)
+
+		require.NoError(t, writeCertificate(certPath, keyPath, []byte("new cert"), []byte("new key")))
+
+		assert.Equal(t, "new cert", readFile(t, certPath))
+		assert.Equal(t, "new key", readFile(t, keyPath))
+		assert.ElementsMatch(t, []string{certFileName, keyFileName}, dirEntries(t, dir))
+
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(keyPath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(keyFileMode), info.Mode().Perm())
+		}
+	})
+
+	t.Run("a leftover staged key is not reused with its old mode", func(t *testing.T) {
+		dir := t.TempDir()
+		certPath, keyPath := existingPair(t, dir)
+		require.NoError(t, os.WriteFile(keyPath+stagedSuffix, []byte("leftover"), certFileMode))
+
+		require.NoError(t, writeCertificate(certPath, keyPath, []byte("new cert"), []byte("new key")))
+
+		assert.Equal(t, "new key", readFile(t, keyPath))
+
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(keyPath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(keyFileMode), info.Mode().Perm())
+		}
+	})
+
+	t.Run("a failed promotion leaves the previous pair in place", func(t *testing.T) {
+		dir := t.TempDir()
+		certPath, keyPath := existingPair(t, dir)
+
+		stagedCert := certPath + stagedSuffix
+		require.NoError(t, os.WriteFile(stagedCert, []byte("new cert"), certFileMode))
+
+		err := promoteCertificate(certPath, keyPath, stagedCert, keyPath+stagedSuffix)
+
+		require.Error(t, err)
+		assert.Equal(t, "old cert", readFile(t, certPath))
+		assert.Equal(t, "old key", readFile(t, keyPath))
+	})
+}
+
+func TestPanelURL(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		port string
+		want string
+	}{
+		{name: "the default port is left out", host: "panel.example.com", port: "443",
+			want: "https://panel.example.com"},
+		{name: "any other port is appended", host: "panel.example.com", port: "8443",
+			want: "https://panel.example.com:8443"},
+		{name: "an address is bracketed without a port", host: "2001:db8::1", port: "443",
+			want: "https://[2001:db8::1]"},
+		{name: "an address is bracketed with a port", host: "2001:db8::1", port: "8443",
+			want: "https://[2001:db8::1]:8443"},
+		{name: "the wildcard host becomes loopback", host: "0.0.0.0", port: "8443",
+			want: "https://localhost:8443"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, panelURL(map[string]string{"HTTP_HOST": test.host}, test.port))
+		})
+	}
+}
+
+func existingPair(t *testing.T, dir string) (certPath, keyPath string) {
+	t.Helper()
+
+	certPath = filepath.Join(dir, certFileName)
+	keyPath = filepath.Join(dir, keyFileName)
+
+	require.NoError(t, os.WriteFile(certPath, []byte("old cert"), certFileMode))
+	require.NoError(t, os.WriteFile(keyPath, []byte("old key"), keyFileMode))
+
+	return certPath, keyPath
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	return string(content)
+}
+
+func dirEntries(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+
+	return names
 }
 
 func writePair(t *testing.T, opts certgen.SelfSignedOptions) (certPath, keyPath string) {

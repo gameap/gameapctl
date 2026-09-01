@@ -619,7 +619,7 @@ func panelLetsEncryptCommand(hidden bool) *cli.Command {
 				Name:  "setup",
 				Usage: "Configure ACME / Let's Encrypt and restart the panel",
 				Description: "Interactive wizard (or flag-driven with --non-interactive) " +
-					"that writes ACME settings to /etc/gameap/config.env and restarts " +
+					"that writes ACME settings to the selected panel config.env and restarts " +
 					"the gameap service. http-01 (default) requires port 80 reachable " +
 					"from the public internet; dns-01 requires a DNS provider plugin and " +
 					"supports wildcard domains.",

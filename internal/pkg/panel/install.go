@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -204,26 +205,60 @@ func createHealthURL(host, port string, https bool, endpoint string) string {
 	return u
 }
 
-// healthCheckClient deliberately does not verify the panel's certificate. An
+// localHTTPSClient deliberately does not verify the panel's certificate. An
 // installation serving HTTPS from a self-signed certificate is the common case
-// here, and this is a liveness probe against the panel that was just installed
-// or restarted, not a trust decision.
-var healthCheckClient = &http.Client{
-	Transport: &http.Transport{
-		//nolint:gosec // liveness probe, see above
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	},
+// here, and a probe of the machine gameapctl is running on is a liveness check
+// against the panel that was just installed or restarted, not a trust decision.
+// Nothing but the certificate is unverified: the transport keeps the proxy and
+// the timeouts the default one carries.
+var localHTTPSClient = newLocalHTTPSClient()
+
+func newLocalHTTPSClient() *http.Client {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultClient
+	}
+
+	transport = transport.Clone()
+	//nolint:gosec // loopback liveness probe, see above
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	return &http.Client{Transport: transport}
 }
 
-func checkInstallation(ctx context.Context, url string) error {
-	log.Printf("Checking installation at %s\n", url)
+// healthCheckClient picks the client for a probe. A probe that leaves this
+// machine is verified like any other request; only the local self-signed case
+// is exempt.
+func healthCheckClient(u *url.URL) *http.Client {
+	if u.Scheme != "https" || !isLocalHost(u.Hostname()) {
+		return http.DefaultClient
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	return localHTTPSClient
+}
+
+// isLocalHost reports whether a request to host stays on this machine. The
+// unspecified address counts: the panel is configured with it to listen
+// everywhere, and a connection to it lands on loopback.
+func isLocalHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+func checkInstallation(ctx context.Context, healthURL string) error {
+	log.Printf("Checking installation at %s\n", healthURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return err
 	}
 	//nolint:bodyclose
-	response, err := healthCheckClient.Do(req)
+	response, err := healthCheckClient(req.URL).Do(req)
 	if err != nil {
 		return err
 	}

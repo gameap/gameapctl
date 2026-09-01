@@ -118,9 +118,16 @@ func reportServedCertificate(ctx context.Context, httpsPort string) {
 		return
 	}
 
-	if result.Leaf == nil {
+	switch {
+	case result.HandshakeErr != nil:
+		// The certificate arrives before a server that requires a client one
+		// aborts, so a failed handshake is still worth reporting alongside it.
+		log.Printf("The TLS handshake with %s failed: %v\n", addr, result.HandshakeErr)
+	case result.Leaf == nil:
 		log.Printf("%s answered without a certificate.\n", addr)
+	}
 
+	if result.Leaf == nil {
 		return
 	}
 

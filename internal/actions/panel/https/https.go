@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -29,6 +30,11 @@ const (
 	certDirName  = "certs"
 	certFileName = "panel.crt"
 	keyFileName  = "panel.key"
+
+	// stagedSuffix and backupSuffix name the two intermediate states a
+	// certificate pair passes through while it is being replaced.
+	stagedSuffix = ".new"
+	backupSuffix = ".old"
 
 	certFileMode = 0644
 	keyFileMode  = 0600
@@ -52,6 +58,10 @@ const (
 	verifyInterval = time.Second
 	healthInterval = 3 * time.Second
 	probeTimeout   = 3 * time.Second
+
+	// rollbackTimeout bounds the restart that puts the previous configuration
+	// back, which runs on a context of its own.
+	rollbackTimeout = 2 * time.Minute
 
 	localhostName = "localhost"
 	wildcardHost  = "0.0.0.0"
@@ -204,20 +214,113 @@ func fingerprint(cert *x509.Certificate) string {
 	return strings.Join(parts, ":")
 }
 
+// writeCertificate stages the new pair beside the old one and moves both files
+// into place only once both are written. The panel exits when the configured
+// certificate and key do not load as a pair, so a replacement that fails halfway
+// through would take the installation down with it.
 func writeCertificate(certPath, keyPath string, certPEM, keyPEM []byte) error {
 	if err := os.MkdirAll(filepath.Dir(certPath), certDirMode); err != nil {
 		return errors.Wrap(err, "failed to create the certificate directory")
 	}
 
-	if err := os.WriteFile(certPath, certPEM, certFileMode); err != nil {
+	stagedCert, stagedKey := certPath+stagedSuffix, keyPath+stagedSuffix
+
+	defer func() {
+		removeQuietly(stagedCert)
+		removeQuietly(stagedKey)
+	}()
+
+	if err := writeStaged(stagedCert, certPEM, certFileMode); err != nil {
 		return errors.Wrap(err, "failed to write the certificate")
 	}
 
-	if err := os.WriteFile(keyPath, keyPEM, keyFileMode); err != nil {
+	if err := writeStaged(stagedKey, keyPEM, keyFileMode); err != nil {
 		return errors.Wrap(err, "failed to write the private key")
 	}
 
+	return promoteCertificate(certPath, keyPath, stagedCert, stagedKey)
+}
+
+// promoteCertificate swaps the staged pair in, putting the pair that was there
+// back when either move fails.
+func promoteCertificate(certPath, keyPath, stagedCert, stagedKey string) error {
+	certBackup, err := moveAside(certPath)
+	if err != nil {
+		return err
+	}
+
+	keyBackup, err := moveAside(keyPath)
+	if err != nil {
+		restore(certBackup, certPath)
+
+		return err
+	}
+
+	if err = os.Rename(stagedCert, certPath); err != nil {
+		restore(certBackup, certPath)
+		restore(keyBackup, keyPath)
+
+		return errors.Wrap(err, "failed to replace the certificate")
+	}
+
+	if err = os.Rename(stagedKey, keyPath); err != nil {
+		restore(certBackup, certPath)
+		restore(keyBackup, keyPath)
+
+		return errors.Wrap(err, "failed to replace the private key")
+	}
+
+	removeQuietly(certBackup)
+	removeQuietly(keyBackup)
+
 	return nil
+}
+
+// moveAside renames path out of the way, reporting where it went or an empty
+// string when there was nothing there to keep.
+func moveAside(path string) (string, error) {
+	if !utils.IsFileExists(path) {
+		return "", nil
+	}
+
+	backup := path + backupSuffix
+	if err := os.Rename(path, backup); err != nil {
+		return "", errors.Wrapf(err, "failed to move %s aside", path)
+	}
+
+	return backup, nil
+}
+
+// restore puts a file that was moved aside back, or clears what took its place
+// when there was no file to begin with.
+func restore(backup, path string) {
+	if backup == "" {
+		removeQuietly(path)
+
+		return
+	}
+
+	if err := os.Rename(backup, path); err != nil {
+		log.Printf("Failed to restore %s from %s: %v\n", path, backup, err)
+	}
+}
+
+// writeStaged drops a leftover from an interrupted run first, so that the file
+// is created with the mode asked for rather than keeping the one it had.
+func writeStaged(path string, data []byte, mode os.FileMode) error {
+	removeQuietly(path)
+
+	return os.WriteFile(path, data, mode)
+}
+
+func removeQuietly(path string) {
+	if path == "" {
+		return
+	}
+
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Printf("Failed to remove %s: %v\n", path, err)
+	}
 }
 
 func certificateNames(cert *x509.Certificate) string {

@@ -319,7 +319,13 @@ func rollback(ctx context.Context, paths gameap.PanelPaths, lines []string, caus
 		return errors.WithMessagef(err, "failed to restore config.env after: %s", cause)
 	}
 
-	if err := panel.Restart(ctx, panel.Options{Scope: paths.Scope}); err != nil {
+	// The context that reached here is usually already cancelled: an interrupt
+	// during the verification is one of the ways the rollback is entered, and
+	// the panel still has to be brought back up on the restored config.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer cancel()
+
+	if err := panel.Restart(cleanupCtx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessagef(err, "config.env restored, but gameap failed to restart after: %s", cause)
 	}
 
@@ -363,10 +369,20 @@ func panelURL(values map[string]string, httpsPort string) string {
 	}
 
 	if httpsPort == panel.DefaultHTTPSPort {
-		return "https://" + host
+		return "https://" + urlHost(host)
 	}
 
 	return "https://" + net.JoinHostPort(host, httpsPort)
+}
+
+// urlHost brackets an IPv6 literal, which a URL needs even where there is no
+// port to separate it from. net.JoinHostPort does it for every other case.
+func urlHost(host string) string {
+	if strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+
+	return host
 }
 
 func isSelfSigned(cert *x509.Certificate) bool {
