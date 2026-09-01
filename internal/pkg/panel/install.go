@@ -209,8 +209,10 @@ func createHealthURL(host, port string, https bool, endpoint string) string {
 // installation serving HTTPS from a self-signed certificate is the common case
 // here, and a probe of the machine gameapctl is running on is a liveness check
 // against the panel that was just installed or restarted, not a trust decision.
-// Nothing but the certificate is unverified: the transport keeps the proxy and
-// the timeouts the default one carries.
+// Nothing but the certificate is unverified: the transport keeps the timeouts
+// the default one carries. The proxy is dropped: a probe that stays on this
+// machine has no business leaving it, and the unspecified address is not one
+// of the hosts the environment proxy bypasses on its own.
 var localHTTPSClient = newLocalHTTPSClient()
 
 func newLocalHTTPSClient() *http.Client {
@@ -220,6 +222,7 @@ func newLocalHTTPSClient() *http.Client {
 	}
 
 	transport = transport.Clone()
+	transport.Proxy = nil
 	//nolint:gosec // loopback liveness probe, see above
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
