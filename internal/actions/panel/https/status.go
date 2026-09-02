@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
@@ -28,10 +29,12 @@ func Status(cliCtx *cli.Context) error {
 	}
 
 	source := panel.EffectiveCertSource(values)
+	bind := panel.ResolveBindAddress(ctx, values)
 
 	log.Println("Installation scope:", paths.Scope)
 	log.Println("Config:            ", paths.ConfigFilePath)
 	log.Println("HTTP:              ", httpSummary(values))
+	log.Println("Listening on:      ", bind)
 	log.Println("Certificate source:", source)
 
 	if source == panel.CertSourceNone {
@@ -46,7 +49,7 @@ func Status(cliCtx *cli.Context) error {
 	log.Println("Redirect HTTP:     ", panel.ForceHTTPS(values))
 
 	reportSource(source, values)
-	reportServedCertificate(ctx, httpsPort)
+	reportServedCertificate(ctx, bind, httpsPort)
 
 	return nil
 }
@@ -108,12 +111,26 @@ func reportCertificate(leaf *x509.Certificate) {
 // reportServedCertificate reads the certificate the panel is actually serving.
 // A fingerprint that differs from the configured one means the running process
 // predates the last change and has to be restarted.
-func reportServedCertificate(ctx context.Context, httpsPort string) {
-	addr := net.JoinHostPort("127.0.0.1", httpsPort)
+func reportServedCertificate(ctx context.Context, bind panel.BindAddress, httpsPort string) {
+	addrs := bind.ProbeAddrs(httpsPort)
 
-	result, err := tlsprobe.Leaf(ctx, addr, probeTimeout)
+	var (
+		served string
+		result tlsprobe.Result
+	)
+
+	err := panel.ProbeEach(addrs, func(addr string) error {
+		probed, probeErr := tlsprobe.Leaf(ctx, addr, probeTimeout)
+		if probeErr != nil {
+			return probeErr
+		}
+
+		served, result = addr, probed
+
+		return nil
+	})
 	if err != nil {
-		log.Printf("Nothing is listening on %s: %v\n", addr, err)
+		log.Printf("Nothing is listening on %s: %v\n", strings.Join(addrs, ", "), err)
 
 		return
 	}
@@ -122,16 +139,16 @@ func reportServedCertificate(ctx context.Context, httpsPort string) {
 	case result.HandshakeErr != nil:
 		// The certificate arrives before a server that requires a client one
 		// aborts, so a failed handshake is still worth reporting alongside it.
-		log.Printf("The TLS handshake with %s failed: %v\n", addr, result.HandshakeErr)
+		log.Printf("The TLS handshake with %s failed: %v\n", served, result.HandshakeErr)
 	case result.Leaf == nil:
-		log.Printf("%s answered without a certificate.\n", addr)
+		log.Printf("%s answered without a certificate.\n", served)
 	}
 
 	if result.Leaf == nil {
 		return
 	}
 
-	log.Println("Served on         ", addr)
+	log.Println("Served on         ", served)
 	log.Println("  Names:      ", certificateNames(result.Leaf))
 	log.Println("  Expires:    ", expirySummary(result.Leaf.NotAfter, time.Now()))
 	log.Println("  Fingerprint:", fingerprint(result.Leaf))

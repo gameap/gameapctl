@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -220,20 +221,19 @@ func restoreBackupV4(backupPath, currentBinary string) error {
 	return nil
 }
 
-// readConfigEnv reads the address the panel answers on. HTTPS is derived from
-// the certificate source rather than from a flag: the panel has no key that
-// switches TLS on, it serves it as soon as a certificate is configured, and with
-// TLS_FORCE_HTTPS the plain HTTP endpoint only answers with a redirect.
-func readConfigEnv(configPath string) (host, port string, httpsEnabled bool, err error) {
+// readConfigEnv reads the addresses the panel answers on. They come from where
+// it binds rather than from HTTP_HOST alone, which on a domain behind NAT names
+// somewhere this machine cannot reach. HTTPS is derived from the certificate
+// source rather than from a flag: the panel has no key that switches TLS on, it
+// serves it as soon as a certificate is configured, and with TLS_FORCE_HTTPS the
+// plain HTTP endpoint only answers with a redirect.
+func readConfigEnv(ctx context.Context, configPath string) (hosts []string, port string, httpsEnabled bool, err error) {
 	_, values, err := configenv.Read(configPath)
 	if err != nil {
-		return "", "", false, err
+		return nil, "", false, err
 	}
 
-	host = panel.ConfigValue(values, panel.HTTPHostKey)
-	if host == "" {
-		host = defaultHealthCheckHost
-	}
+	hosts = panel.ResolveBindAddress(ctx, values).ProbeHosts()
 
 	port = panel.ConfigValue(values, panel.HTTPPortKey)
 	if port == "" {
@@ -245,18 +245,27 @@ func readConfigEnv(configPath string) (host, port string, httpsEnabled bool, err
 		port = panel.HTTPSPort(values)
 	}
 
-	return host, port, httpsEnabled, nil
+	return hosts, port, httpsEnabled, nil
 }
 
-// checkHealth performs health checks on the GameAP instance.
-func checkHealth(ctx context.Context, host, port string, httpsEnabled bool) error {
+// checkHealth performs health checks on the GameAP instance, at every address it
+// may answer on: the health check names none of them on its own, so each failure
+// is labelled with the address that produced it.
+func checkHealth(ctx context.Context, hosts []string, port string, httpsEnabled bool) error {
+	check := func(host string) error {
+		return errors.WithMessage(
+			installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled),
+			net.JoinHostPort(host, port),
+		)
+	}
+
 	for i := 0; i < healthCheckRetries; i++ {
 		if i > 0 {
 			log.Printf("Retry %d/%d...\n", i+1, healthCheckRetries)
 			time.Sleep(healthCheckDelay)
 		}
 
-		if err := installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled); err == nil {
+		if err := panel.ProbeEach(hosts, check); err == nil {
 			log.Println("Health check passed!")
 
 			return nil
@@ -423,16 +432,16 @@ func startAndVerifyV4(
 
 	log.Println("Checking if new version is working...")
 
-	httpHost, httpPort, httpsEnabled, err := readConfigEnv(paths.ConfigFilePath)
+	httpHosts, httpPort, httpsEnabled, err := readConfigEnv(ctx, paths.ConfigFilePath)
 	if err != nil {
 		log.Printf("Warning: failed to read config.env: %v\n", err)
 
-		httpHost = "127.0.0.1"
-		httpPort = "8025"
+		httpHosts = []string{defaultHealthCheckHost}
+		httpPort = defaultHealthCheckPort
 		httpsEnabled = false
 	}
 
-	if err := checkHealth(ctx, httpHost, httpPort, httpsEnabled); err != nil {
+	if err := checkHealth(ctx, httpHosts, httpPort, httpsEnabled); err != nil {
 		log.Printf("Health check failed: %v\n", err)
 		log.Println("Rolling back to previous version...")
 

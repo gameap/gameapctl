@@ -54,6 +54,13 @@ Both listeners are served by one process, and the panel exits when it cannot loa
 it is configured with. `enable` therefore verifies that the panel comes back up serving exactly the
 certificate it just wrote, and restores the previous `config.env` when it does not.
 
+That check goes to the address the panel binds, not to loopback. The panel listens on
+`HTTP_BIND_IP` when that is set, otherwise on `HTTP_HOST` when it holds an address of this machine,
+and otherwise on every interface: `HTTP_HOST` empty, `0.0.0.0`, or a name that does not resolve to
+one of the machine's own addresses. `enable`, `disable` and `status` all check it there and fall
+back to loopback, so an installation configured with its public address is verified where it
+actually answers. `status` prints the address it worked out.
+
 | | system scope | user scope |
 |---|---|---|
 | Certificate | `/etc/gameap/certs/panel.crt` | `~/.config/gameap/certs/panel.crt` |

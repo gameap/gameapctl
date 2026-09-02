@@ -7,11 +7,13 @@ import (
 	"github.com/gameap/gameapctl/pkg/configenv"
 )
 
-// Keys of config.env that decide how the panel serves HTTP and HTTPS. The panel
-// reads them at start and picks a certificate source from whatever is set;
-// gameapctl only ever writes them.
+// Keys of config.env that decide where the panel listens and how it serves HTTP
+// and HTTPS. The panel reads them at start and picks a certificate source from
+// whatever is set; gameapctl writes all of them but HTTP_BIND_IP, which it only
+// reads to know where the listeners land.
 const (
 	HTTPHostKey      = "HTTP_HOST"
+	HTTPBindIPKey    = "HTTP_BIND_IP"
 	HTTPPortKey      = "HTTP_PORT"
 	HTTPSPortKey     = "HTTPS_PORT"
 	TLSCertFileKey   = "TLS_CERT_FILE"
