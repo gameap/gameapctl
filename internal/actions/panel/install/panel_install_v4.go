@@ -335,6 +335,10 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check host")
 	}
 
+	if err = stopPreviousPanelV4(ctx, state, panel.Stop); err != nil {
+		return err
+	}
+
 	state, err = checkPortAvailabilityV4(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check port availability")
@@ -436,11 +440,14 @@ func HandleV4(cliCtx *cli.Context) error {
 
 	if state.WithDaemon {
 		state, err = daemonInstallV4(ctx, state)
-		if err != nil {
+		switch {
+		case err == nil:
+			daemonInstalled = true
+		case ctx.Err() != nil:
+			return errors.Wrap(ctx.Err(), "installation interrupted")
+		default:
 			fmt.Println("Failed to install daemon: ", err.Error())
 			log.Println(errors.WithMessage(err, "failed to install daemon, try to install it manually"))
-		} else {
-			daemonInstalled = true
 		}
 	}
 
@@ -1349,12 +1356,7 @@ const (
 	daemonSetupTokenEnv = "DAEMON_SETUP_TOKEN"
 	daemonSetupKeyEnv   = "DAEMON_SETUP_KEY"
 	setupKeyByteLen     = 16
-	healthCheckRetries  = 30
-	healthCheckInterval = 2 * time.Second
-	httpClientTimeout   = 5 * time.Second
 )
-
-var errPanelNotReady = errors.New("GameAP panel failed to become ready in time")
 
 func daemonInstallV4Legacy(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
 	token := fmt.Sprintf("gameapctl%d", time.Now().UnixMilli())
@@ -1566,56 +1568,51 @@ func removeConfigEnvVar(configPath, name string) {
 	}
 }
 
-func waitForPanelHealthCheck(
+// stopPreviousPanelV4 stops the panel of a previous installation. Its binary is about to
+// be replaced and a running executable cannot be overwritten, while panel.Install only
+// writes and enables the unit and never touches the process. Stopping before the port
+// check also keeps the port: an occupant that is our own panel must not trigger the
+// fallback port.
+func stopPreviousPanelV4(
 	ctx context.Context,
 	state panelInstallStateV4,
-	maxRetries int,
-	retryDelay time.Duration,
+	stop func(context.Context, ...panel.Options) error,
 ) error {
-	client := &http.Client{
-		Timeout: httpClientTimeout,
+	if !previousPanelInstalled(state) {
+		return nil
 	}
 
-	healthCheckURL := fmt.Sprintf("http://%s:%s/health", state.Host, state.Port)
+	fmt.Println("Stopping GameAP of the previous installation ...")
+	log.Println("Stopping GameAP of the previous installation")
 
-	var lastErr error
-
-	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthCheckURL, nil)
-		if err != nil {
-			return errors.WithMessage(err, "failed to create health check request")
-		}
-
-		resp, err := client.Do(req)
-		switch {
-		case err != nil:
-			lastErr = err
-		case resp.StatusCode == http.StatusOK:
-			resp.Body.Close()
-
-			return nil
-		default:
-			lastErr = errors.Errorf("unexpected status code %d", resp.StatusCode)
-		}
-
-		if resp != nil {
-			resp.Body.Close()
-		}
-
-		if i == maxRetries-1 {
-			logPanelStartDiagnosticsOnce(ctx, state)
-
-			if lastErr == nil {
-				lastErr = errPanelNotReady
-			}
-
-			return errors.WithMessagef(lastErr, "%s, %s", errPanelNotReady, healthCheckURL)
-		}
-
-		time.Sleep(retryDelay)
+	err := stop(ctx, panel.Options{Scope: state.Scope})
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	var notFoundErr *service.NotFoundError
+	if errors.Is(err, panel.ErrGameAPNotInstalled) ||
+		errors.Is(err, service.ErrInactiveService) ||
+		errors.As(err, &notFoundErr) {
+		log.Println(errors.WithMessage(err, "GameAP of the previous installation is not running"))
+
+		return nil
+	}
+
+	return errors.WithMessage(err, "failed to stop GameAP of the previous installation")
+}
+
+func previousPanelInstalled(state panelInstallStateV4) bool {
+	if utils.IsFileExists(state.BinaryPath) {
+		return true
+	}
+
+	paths, err := gameap.PanelPathsForScope(state.Scope)
+	if err != nil {
+		return false
+	}
+
+	return utils.IsFileExists(paths.SystemdUnitPath)
 }
 
 func updateAdminPasswordv4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {

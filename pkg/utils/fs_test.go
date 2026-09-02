@@ -3,6 +3,7 @@ package utils_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -111,4 +112,65 @@ func Test_TailFile_NotExistingFile(t *testing.T) {
 	_, err := utils.TailFile(filepath.Join(t.TempDir(), "missing.log"), 10, 1024)
 
 	require.Error(t, err)
+}
+
+func Test_ReplaceFile_ReplacesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
+	require.NoError(t, os.WriteFile(dst, []byte("old"), 0600))
+
+	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(dst)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	}
+
+	require.NoFileExists(t, src)
+	require.NoFileExists(t, dst+".new")
+}
+
+func Test_ReplaceFile_CreatesMissingDestination(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "bin", "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
+
+	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+	require.NoFileExists(t, dst+".new")
+}
+
+func Test_ReplaceFile_RemovesStaleStagingFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
+	require.NoError(t, os.WriteFile(dst+".new", []byte("stale"), 0600))
+
+	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+	require.NoFileExists(t, dst+".new")
+}
+
+func Test_ReplaceFile_MissingSource(t *testing.T) {
+	dir := t.TempDir()
+
+	err := utils.ReplaceFile(filepath.Join(dir, "missing"), filepath.Join(dir, "dst"), 0755)
+
+	require.Error(t, err)
+	require.NoFileExists(t, filepath.Join(dir, "dst"))
 }

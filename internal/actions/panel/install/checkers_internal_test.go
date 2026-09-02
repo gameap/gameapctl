@@ -3,12 +3,10 @@ package install
 import (
 	"context"
 	"net"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -191,26 +189,102 @@ func Test_filterAndCheckHostV4(t *testing.T) {
 }
 
 func Test_existingPanelDetected_RequiresPreviousInstallationOnTheSamePort(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-
-	_, port, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
-	require.NoError(t, err)
+	port := servePanelHealth(t, panelHealthHandler)
 
 	useTemporaryStateDirectory(t)
 	ctx := context.Background()
 
-	// A foreign service answering /health with 200 is not a GameAP panel.
-	assert.False(t, existingPanelDetected(ctx, port))
+	// A service answering /api/health without a recorded installation is not our panel.
+	assert.False(t, existingPanelDetected(ctx, panelInstallStateV4{Port: port}))
 
 	require.NoError(t, gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
 		Version: "v4",
 		Port:    port,
 	}))
 
-	assert.True(t, existingPanelDetected(ctx, port))
+	assert.True(t, existingPanelDetected(ctx, panelInstallStateV4{Port: port}))
+	assert.False(t, existingPanelDetected(ctx, panelInstallStateV4{Port: "1"}))
+}
+
+func Test_existingPanelDetected_RejectsSPAFallback(t *testing.T) {
+	port := servePanelHealth(t, spaFallbackHandler)
+
+	useTemporaryStateDirectory(t)
+	ctx := context.Background()
+
+	require.NoError(t, gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version: "v4",
+		Port:    port,
+	}))
+
+	// index.html with 200 on every path is not a ready panel.
+	assert.False(t, existingPanelDetected(ctx, panelInstallStateV4{Port: port}))
+}
+
+func Test_existingPanelDetected_RejectsOtherScope(t *testing.T) {
+	port := servePanelHealth(t, panelHealthHandler)
+
+	useTemporaryStateDirectory(t)
+	ctx := context.Background()
+
+	require.NoError(t, gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version: "v4",
+		Scope:   gameap.ScopeUser,
+		Port:    port,
+	}))
+
+	assert.False(t, existingPanelDetected(ctx, panelInstallStateV4{Scope: gameap.ScopeSystem, Port: port}))
+	assert.True(t, existingPanelDetected(ctx, panelInstallStateV4{Scope: gameap.ScopeUser, Port: port}))
+}
+
+func Test_existingPanelDetected_ProbesPreviousHost(t *testing.T) {
+	port := servePanelHealth(t, panelHealthHandler)
+
+	useTemporaryStateDirectory(t)
+	ctx := context.Background()
+
+	require.NoError(t, gameapctl.SavePanelInstallState(ctx, gameapctl.PanelInstallState{
+		Version: "v4",
+		Host:    "127.0.0.1",
+		HostIP:  "127.0.0.1",
+		Port:    port,
+	}))
+
+	assert.True(t, existingPanelDetected(ctx, panelInstallStateV4{Port: port}))
+}
+
+func Test_panelProbeHosts(t *testing.T) {
+	tests := []struct {
+		name     string
+		state    gameapctl.PanelInstallState
+		expected []string
+	}{
+		{
+			name:     "empty_state_falls_back_to_loopback",
+			state:    gameapctl.PanelInstallState{},
+			expected: []string{"127.0.0.1"},
+		},
+		{
+			name:     "ip_host_is_not_duplicated",
+			state:    gameapctl.PanelInstallState{Host: "2.29.29.94", HostIP: "2.29.29.94"},
+			expected: []string{"2.29.29.94", "127.0.0.1"},
+		},
+		{
+			name:     "domain_host_then_its_ip",
+			state:    gameapctl.PanelInstallState{Host: "panel.example.com", HostIP: "10.0.0.5"},
+			expected: []string{"panel.example.com", "10.0.0.5", "127.0.0.1"},
+		},
+		{
+			name:     "loopback_host_once",
+			state:    gameapctl.PanelInstallState{Host: "127.0.0.1"},
+			expected: []string{"127.0.0.1"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, panelProbeHosts(test.state))
+		})
+	}
 }
 
 func Test_checkPortAvailabilityV4_ReplacesOccupiedDefaultPort(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
@@ -192,6 +193,10 @@ func CheckInstallationV4(ctx context.Context, host, port string, https bool) err
 }
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
+	if strings.Contains(host, ":") {
+		host = "[" + strings.Trim(host, "[]") + "]"
+	}
+
 	hostPort := host
 	if port != "80" && port != "443" {
 		hostPort = host + ":" + port

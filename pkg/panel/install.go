@@ -400,6 +400,11 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to make temp dir")
 	}
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			log.Printf("Failed to remove temp dir %s: %v\n", tmpDir, removeErr)
+		}
+	}()
 
 	release := config.PreResolvedRelease
 	if release == nil {
@@ -438,13 +443,9 @@ func downloadBinaries(ctx context.Context, config InstallConfig) (string, error)
 			return "", errors.WithMessage(err, "failed to stat file")
 		}
 
-		err = utils.Move(fp, config.BinaryPath)
+		err = utils.ReplaceFile(fp, config.BinaryPath, 0755)
 		if err != nil {
-			return "", errors.WithMessage(err, "failed to move gameap binaries")
-		}
-
-		if err = os.Chmod(config.BinaryPath, 0755); err != nil {
-			return "", errors.Wrap(err, "failed to set executable permissions")
+			return "", errors.WithMessage(err, "failed to install gameap binary")
 		}
 
 		binariesInstalled = true
