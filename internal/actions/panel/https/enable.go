@@ -92,7 +92,7 @@ func Enable(cliCtx *cli.Context) error {
 		return rollback(ctx, paths, lines, err)
 	}
 
-	reportEnabled(cliCtx, values, setup, httpsPort)
+	reportEnabled(cliCtx, values, bind, setup, httpsPort)
 
 	return nil
 }
@@ -354,9 +354,15 @@ func rollback(ctx context.Context, paths gameap.PanelPaths, lines []string, caus
 	return errors.WithMessage(cause, "HTTPS is not enabled, the previous configuration is restored")
 }
 
-func reportEnabled(cliCtx *cli.Context, values map[string]string, setup certificateSetup, httpsPort string) {
+func reportEnabled(
+	cliCtx *cli.Context,
+	values map[string]string,
+	bind panel.BindAddress,
+	setup certificateSetup,
+	httpsPort string,
+) {
 	log.Println("HTTPS is enabled.")
-	log.Println("  URL:        ", panelURL(values, httpsPort))
+	log.Println("  URL:        ", panelURL(values, bind, httpsPort))
 	log.Println("  Certificate:", setup.certPath)
 	log.Println("  Private key:", setup.keyPath)
 	log.Println("  Names:      ", certificateNames(setup.leaf))
@@ -384,17 +390,35 @@ func reportEnabled(cliCtx *cli.Context, values map[string]string, setup certific
 	log.Printf("HTTP is still served on port %s. Pass --force-https to redirect it.\n", httpPort)
 }
 
-func panelURL(values map[string]string, httpsPort string) string {
-	host := panel.ConfigValue(values, panel.HTTPHostKey)
-	if host == "" || host == wildcardHost {
-		host = localhostName
-	}
+// panelURL names the panel where a browser can open it: what HTTP_HOST says
+// when it names an address, then the one the listeners are pinned to, which
+// HTTP_BIND_IP can set on its own. Loopback is left when neither names one.
+func panelURL(values map[string]string, bind panel.BindAddress, httpsPort string) string {
+	host := firstNamedHost(panel.ConfigValue(values, panel.HTTPHostKey), bind.IP)
 
 	if httpsPort == panel.DefaultHTTPSPort {
 		return "https://" + urlHost(host)
 	}
 
 	return "https://" + net.JoinHostPort(host, httpsPort)
+}
+
+// firstNamedHost returns the first candidate that names a host to connect to,
+// which the wildcards and the empty string do not.
+func firstNamedHost(candidates ...string) string {
+	for _, host := range candidates {
+		if host == "" {
+			continue
+		}
+
+		if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+			continue
+		}
+
+		return host
+	}
+
+	return localhostName
 }
 
 // urlHost brackets an IPv6 literal, which a URL needs even where there is no

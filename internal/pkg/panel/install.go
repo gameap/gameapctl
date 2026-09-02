@@ -193,21 +193,25 @@ func CheckInstallationV4(ctx context.Context, host, port string, https bool) err
 }
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
-	if strings.Contains(host, ":") {
-		host = "[" + strings.Trim(host, "[]") + "]"
-	}
-
 	scheme, defaultPort := "http", "80"
 	if https {
 		scheme, defaultPort = "https", "443"
 	}
 
-	hostPort := host
-	if port != defaultPort {
-		hostPort = host + ":" + port
+	host = strings.Trim(host, "[]")
+
+	authority := net.JoinHostPort(host, port)
+	if port == defaultPort {
+		authority = host
+		if strings.Contains(host, ":") {
+			authority = "[" + host + "]"
+		}
 	}
 
-	return scheme + "://" + hostPort + endpoint
+	// The URL is assembled rather than concatenated so that the interface zone
+	// of a link-local address is percent-encoded. Written out as it stands, the
+	// "%eth0" is an invalid escape and no parser accepts the result.
+	return (&url.URL{Scheme: scheme, Host: authority, Path: endpoint}).String()
 }
 
 // localProbeClient deliberately does not verify the panel's certificate. An
@@ -253,6 +257,12 @@ func healthCheckClient(u *url.URL) *http.Client {
 func isLocalHost(host string) bool {
 	if host == "localhost" {
 		return true
+	}
+
+	// A link-local address carries the interface to reach it through, which
+	// neither parses as part of the address nor changes where it leads.
+	if zone := strings.IndexByte(host, '%'); zone >= 0 {
+		host = host[:zone]
 	}
 
 	ip := net.ParseIP(host)

@@ -2,6 +2,7 @@ package panel
 
 import (
 	"net"
+	"net/http"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -24,10 +25,24 @@ func Test_createHealthURL(t *testing.T) {
 		{name: "ipv6_custom_port", host: "::1", port: "8025", expected: "http://[::1]:8025/api/health"},
 		{name: "ipv6_default_port", host: "2a01:4f9:c015:fafb::1", port: "80", expected: "http://[2a01:4f9:c015:fafb::1]/api/health"},
 		{name: "bracketed_ipv6", host: "[::1]", port: "8025", expected: "http://[::1]:8025/api/health"},
+		{
+			name: "zoned_ipv6_default_port", host: "fe80::1%eth0", port: "80",
+			expected: "http://[fe80::1%25eth0]/api/health",
+		},
+		{
+			name: "zoned_ipv6_custom_port", host: "fe80::1%eth0", port: "8025",
+			expected: "http://[fe80::1%25eth0]:8025/api/health",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.expected, createHealthURL(test.host, test.port, test.https, "/api/health"))
+			healthURL := createHealthURL(test.host, test.port, test.https, "/api/health")
+
+			assert.Equal(t, test.expected, healthURL)
+
+			// A URL a request cannot be built from never reaches the panel.
+			_, err := http.NewRequest(http.MethodGet, healthURL, nil) //nolint:noctx // parsing only
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -45,6 +60,8 @@ func Test_isLocalHost(t *testing.T) {
 		{name: "unspecified_ipv6", host: "::", expected: true},
 		{name: "documentation_address", host: "203.0.113.10", expected: false},
 		{name: "domain", host: "panel.example.com", expected: false},
+		{name: "zoned_loopback", host: "::1%lo0", expected: true},
+		{name: "zoned_documentation_address", host: "2001:db8::1%eth0", expected: false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -73,4 +90,8 @@ func Test_isLocalHost_interfaceAddress(t *testing.T) {
 	}
 
 	assert.True(t, isLocalHost(address))
+
+	// The panel can be pinned to a link-local address, which is written with the
+	// interface to reach it through.
+	assert.True(t, isLocalHost(address+"%eth0"))
 }

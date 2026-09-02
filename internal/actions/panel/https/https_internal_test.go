@@ -307,6 +307,7 @@ func TestPanelURL(t *testing.T) {
 	tests := []struct {
 		name string
 		host string
+		bind string
 		port string
 		want string
 	}{
@@ -318,13 +319,23 @@ func TestPanelURL(t *testing.T) {
 			want: "https://[2001:db8::1]"},
 		{name: "an address is bracketed with a port", host: "2001:db8::1", port: "8443",
 			want: "https://[2001:db8::1]:8443"},
-		{name: "the wildcard host becomes loopback", host: "0.0.0.0", port: "8443",
+		{name: "the wildcard host becomes loopback", host: "0.0.0.0", bind: "0.0.0.0", port: "8443",
 			want: "https://localhost:8443"},
+		{name: "an unset host becomes loopback", port: "8443",
+			want: "https://localhost:8443"},
+		{name: "a pinned listener names the panel when the host does not", bind: "10.0.0.5", port: "8443",
+			want: "https://10.0.0.5:8443"},
+		{name: "a configured host wins over the address it is pinned to",
+			host: "panel.example.com", bind: "10.0.0.5", port: "8443",
+			want: "https://panel.example.com:8443"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, panelURL(map[string]string{"HTTP_HOST": test.host}, test.port))
+			values := map[string]string{panel.HTTPHostKey: test.host}
+			bind := panel.BindAddress{IP: test.bind, Key: panel.HTTPBindIPKey}
+
+			assert.Equal(t, test.want, panelURL(values, bind, test.port))
 		})
 	}
 }
