@@ -75,16 +75,29 @@ func Copy(src string, dst string) error {
 }
 
 // ReplaceFile moves src over dst without truncating dst in place: the file is staged
-// next to dst and renamed into it, so a process still executing dst keeps its old
-// inode and no reader ever sees a half-written file.
+// under a unique name next to dst and renamed into it, so a process still executing dst
+// keeps its old inode and no reader ever sees a half-written file.
 func ReplaceFile(src, dst string, mode os.FileMode) error {
-	staging := dst + ".new"
+	dstDir := filepath.Dir(dst)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create destination directory %s", dstDir)
+	}
 
-	if err := os.Remove(staging); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return errors.Wrapf(err, "failed to remove stale staging file %s", staging)
+	stagingFile, err := os.CreateTemp(dstDir, filepath.Base(dst)+".*.new")
+	if err != nil {
+		return errors.Wrapf(err, "failed to create staging file for %s", dst)
+	}
+
+	staging := stagingFile.Name()
+	if err := stagingFile.Close(); err != nil {
+		_ = os.Remove(staging)
+
+		return errors.Wrapf(err, "failed to close staging file %s", staging)
 	}
 
 	if err := Move(src, staging); err != nil {
+		_ = os.Remove(staging)
+
 		return errors.WithMessagef(err, "failed to stage %s", dst)
 	}
 

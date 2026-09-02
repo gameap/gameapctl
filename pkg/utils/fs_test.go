@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -134,7 +135,7 @@ func Test_ReplaceFile_ReplacesExistingFile(t *testing.T) {
 	}
 
 	require.NoFileExists(t, src)
-	require.NoFileExists(t, dst+".new")
+	requireNoStagingFiles(t, dir)
 }
 
 func Test_ReplaceFile_CreatesMissingDestination(t *testing.T) {
@@ -148,22 +149,46 @@ func Test_ReplaceFile_CreatesMissingDestination(t *testing.T) {
 	content, err := os.ReadFile(dst)
 	require.NoError(t, err)
 	require.Equal(t, "new", string(content))
-	require.NoFileExists(t, dst+".new")
+	requireNoStagingFiles(t, filepath.Dir(dst))
 }
 
-func Test_ReplaceFile_RemovesStaleStagingFile(t *testing.T) {
+func Test_ReplaceFile_ConcurrentReplacements(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "src")
 	dst := filepath.Join(dir, "dst")
-	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
-	require.NoError(t, os.WriteFile(dst+".new", []byte("stale"), 0600))
+	require.NoError(t, os.WriteFile(dst, []byte("old"), 0600))
 
-	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+	const writers = 8
 
-	content, err := os.ReadFile(dst)
+	contents := make(map[string]struct{}, writers)
+	for i := 0; i < writers; i++ {
+		contents[strconv.Itoa(i)] = struct{}{}
+	}
+
+	errs := make(chan error, writers)
+
+	var wg sync.WaitGroup
+	for content := range contents {
+		src := filepath.Join(dir, "src-"+content)
+		require.NoError(t, os.WriteFile(src, []byte(content), 0600))
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			errs <- utils.ReplaceFile(src, dst, 0755)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	got, err := os.ReadFile(dst)
 	require.NoError(t, err)
-	require.Equal(t, "new", string(content))
-	require.NoFileExists(t, dst+".new")
+	require.Contains(t, contents, string(got))
+	requireNoStagingFiles(t, dir)
 }
 
 func Test_ReplaceFile_MissingSource(t *testing.T) {
@@ -173,4 +198,13 @@ func Test_ReplaceFile_MissingSource(t *testing.T) {
 
 	require.Error(t, err)
 	require.NoFileExists(t, filepath.Join(dir, "dst"))
+	requireNoStagingFiles(t, dir)
+}
+
+func requireNoStagingFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	leftovers, err := filepath.Glob(filepath.Join(dir, "*.new"))
+	require.NoError(t, err)
+	require.Empty(t, leftovers)
 }

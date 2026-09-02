@@ -197,17 +197,17 @@ func createHealthURL(host, port string, https bool, endpoint string) string {
 		host = "[" + strings.Trim(host, "[]") + "]"
 	}
 
+	scheme, defaultPort := "http", "80"
+	if https {
+		scheme, defaultPort = "https", "443"
+	}
+
 	hostPort := host
-	if port != "80" && port != "443" {
+	if port != defaultPort {
 		hostPort = host + ":" + port
 	}
 
-	u := "http://" + hostPort + endpoint
-	if https {
-		u = "https://" + hostPort + endpoint
-	}
-
-	return u
+	return scheme + "://" + hostPort + endpoint
 }
 
 // localHTTPSClient deliberately does not verify the panel's certificate. An

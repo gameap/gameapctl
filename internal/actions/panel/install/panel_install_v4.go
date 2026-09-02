@@ -335,10 +335,6 @@ func HandleV4(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to check host")
 	}
 
-	if err = stopPreviousPanelV4(ctx, state, panel.Stop); err != nil {
-		return err
-	}
-
 	state, err = checkPortAvailabilityV4(ctx, state)
 	if err != nil {
 		return errors.WithMessage(err, "failed to check port availability")
@@ -421,6 +417,10 @@ func HandleV4(cliCtx *cli.Context) error {
 	}
 
 	saveStateCheckpointV4(cliCtx.Context, state)
+
+	if err = stopPreviousPanelV4(ctx, state, panel.Stop); err != nil {
+		return err
+	}
 
 	fmt.Println("Installing GameAP ...")
 
@@ -1568,11 +1568,11 @@ func removeConfigEnvVar(configPath, name string) {
 	}
 }
 
-// stopPreviousPanelV4 stops the panel of a previous installation. Its binary is about to
-// be replaced and a running executable cannot be overwritten, while panel.Install only
-// writes and enables the unit and never touches the process. Stopping before the port
-// check also keeps the port: an occupant that is our own panel must not trigger the
-// fallback port.
+// stopPreviousPanelV4 stops the panel of a previous installation right before its binary
+// is replaced: a running executable cannot be overwritten, and panel.Install only writes
+// and enables the unit, it never touches the process. It runs after every preflight step,
+// so a failure in those leaves the previous panel up; the port check recognises the
+// running panel through existingPanelDetected.
 func stopPreviousPanelV4(
 	ctx context.Context,
 	state panelInstallStateV4,
