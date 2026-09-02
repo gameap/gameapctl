@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
@@ -192,17 +193,21 @@ func CheckInstallationV4(ctx context.Context, host, port string, https bool) err
 }
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
+	if strings.Contains(host, ":") {
+		host = "[" + strings.Trim(host, "[]") + "]"
+	}
+
+	scheme, defaultPort := "http", "80"
+	if https {
+		scheme, defaultPort = "https", "443"
+	}
+
 	hostPort := host
-	if port != "80" && port != "443" {
+	if port != defaultPort {
 		hostPort = host + ":" + port
 	}
 
-	u := "http://" + hostPort + endpoint
-	if https {
-		u = "https://" + hostPort + endpoint
-	}
-
-	return u
+	return scheme + "://" + hostPort + endpoint
 }
 
 // localHTTPSClient deliberately does not verify the panel's certificate. An

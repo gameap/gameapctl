@@ -74,6 +74,48 @@ func Copy(src string, dst string) error {
 	return copy.Copy(src, dst)
 }
 
+// ReplaceFile moves src over dst without truncating dst in place: the file is staged
+// under a unique name next to dst and renamed into it, so a process still executing dst
+// keeps its old inode and no reader ever sees a half-written file.
+func ReplaceFile(src, dst string, mode os.FileMode) error {
+	dstDir := filepath.Dir(dst)
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return errors.Wrapf(err, "failed to create destination directory %s", dstDir)
+	}
+
+	stagingFile, err := os.CreateTemp(dstDir, filepath.Base(dst)+".*.new")
+	if err != nil {
+		return errors.Wrapf(err, "failed to create staging file for %s", dst)
+	}
+
+	staging := stagingFile.Name()
+	if err := stagingFile.Close(); err != nil {
+		_ = os.Remove(staging)
+
+		return errors.Wrapf(err, "failed to close staging file %s", staging)
+	}
+
+	if err := Move(src, staging); err != nil {
+		_ = os.Remove(staging)
+
+		return errors.WithMessagef(err, "failed to stage %s", dst)
+	}
+
+	if err := os.Chmod(staging, mode); err != nil {
+		_ = os.Remove(staging)
+
+		return errors.Wrapf(err, "failed to set permissions on %s", staging)
+	}
+
+	if err := os.Rename(staging, dst); err != nil {
+		_ = os.Remove(staging)
+
+		return errors.Wrapf(err, "failed to replace %s", dst)
+	}
+
+	return nil
+}
+
 func WriteContentsToFile(contents []byte, path string) error {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {

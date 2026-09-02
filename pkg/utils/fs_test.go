@@ -3,8 +3,10 @@ package utils_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/utils"
@@ -111,4 +113,98 @@ func Test_TailFile_NotExistingFile(t *testing.T) {
 	_, err := utils.TailFile(filepath.Join(t.TempDir(), "missing.log"), 10, 1024)
 
 	require.Error(t, err)
+}
+
+func Test_ReplaceFile_ReplacesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
+	require.NoError(t, os.WriteFile(dst, []byte("old"), 0600))
+
+	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(dst)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	}
+
+	require.NoFileExists(t, src)
+	requireNoStagingFiles(t, dir)
+}
+
+func Test_ReplaceFile_CreatesMissingDestination(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "bin", "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0600))
+
+	require.NoError(t, utils.ReplaceFile(src, dst, 0755))
+
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+	requireNoStagingFiles(t, filepath.Dir(dst))
+}
+
+func Test_ReplaceFile_ConcurrentReplacements(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "dst")
+	require.NoError(t, os.WriteFile(dst, []byte("old"), 0600))
+
+	const writers = 8
+
+	contents := make(map[string]struct{}, writers)
+	for i := 0; i < writers; i++ {
+		contents[strconv.Itoa(i)] = struct{}{}
+	}
+
+	errs := make(chan error, writers)
+
+	var wg sync.WaitGroup
+	for content := range contents {
+		src := filepath.Join(dir, "src-"+content)
+		require.NoError(t, os.WriteFile(src, []byte(content), 0600))
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			errs <- utils.ReplaceFile(src, dst, 0755)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Contains(t, contents, string(got))
+	requireNoStagingFiles(t, dir)
+}
+
+func Test_ReplaceFile_MissingSource(t *testing.T) {
+	dir := t.TempDir()
+
+	err := utils.ReplaceFile(filepath.Join(dir, "missing"), filepath.Join(dir, "dst"), 0755)
+
+	require.Error(t, err)
+	require.NoFileExists(t, filepath.Join(dir, "dst"))
+	requireNoStagingFiles(t, dir)
+}
+
+func requireNoStagingFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	leftovers, err := filepath.Glob(filepath.Join(dir, "*.new"))
+	require.NoError(t, err)
+	require.Empty(t, leftovers)
 }

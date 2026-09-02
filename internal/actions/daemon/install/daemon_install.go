@@ -641,9 +641,9 @@ func installDaemonBinaries(
 			return state, errors.WithMessage(err, "failed to stat file")
 		}
 
-		err = utils.Move(fp, state.DaemonFilePath)
+		err = utils.ReplaceFile(fp, state.DaemonFilePath, 0755)
 		if err != nil {
-			return state, errors.WithMessage(err, "failed to move gameap-daemon binaries")
+			return state, errors.WithMessage(err, "failed to install gameap-daemon binary")
 		}
 		binariesInstalled = true
 

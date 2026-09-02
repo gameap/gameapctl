@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -57,7 +58,7 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 		state.Port = defaultPortForScope(state.Scope)
 	}
 
-	if existingPanelDetected(ctx, state.Port) {
+	if existingPanelDetected(ctx, state) {
 		fmt.Println("Existing GameAP panel detected on port", state.Port)
 
 		return state, nil
@@ -114,42 +115,62 @@ func checkPortAvailabilityV4(ctx context.Context, state panelInstallStateV4) (pa
 	return state, nil
 }
 
+const loopbackHost = "127.0.0.1"
+
 // existingPanelDetected reports whether the panel of a previous installation already
 // answers on the port. This is common during re-installation, and such a port must not be
-// treated as occupied. A previous installation on the very same port is required as well:
-// any local service can answer /health with 200, and trusting one of those would leave the
-// panel configured for a port it cannot bind.
-func existingPanelDetected(ctx context.Context, port string) bool {
-	if !previouslyInstalledOnPort(ctx, port) {
+// treated as occupied. A previous installation of the same scope on the very same port is
+// required as well: any local service can answer with 200, and trusting one of those would
+// leave the panel configured for a port it cannot bind.
+//
+// The previous panel listens on its configured HTTP_HOST, usually the public address rather
+// than loopback, so that address is probed first. A panel that already redirects plain HTTP
+// to HTTPS is not recognised here.
+func existingPanelDetected(ctx context.Context, state panelInstallStateV4) bool {
+	prev, ok := previousInstallation(ctx, state.Scope)
+	if !ok || prev.Port != state.Port {
 		return false
 	}
 
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	healthURL := fmt.Sprintf("http://127.0.0.1:%s/health", port)
-	healthReq, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
-	if err != nil {
-		return false
+	for _, host := range panelProbeHosts(prev) {
+		if checkPanelHealth(ctx, host, state.Port, panelProbeTimeout) == nil {
+			return true
+		}
 	}
 
-	resp, err := client.Do(healthReq)
-	if err != nil {
-		return false
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	return resp.StatusCode == http.StatusOK
+	return false
 }
 
-func previouslyInstalledOnPort(ctx context.Context, port string) bool {
-	prevState, err := gameapctl.LoadPanelInstallState(ctx)
-	if err != nil {
-		return false
+// panelProbeHosts lists the addresses a previous installation may answer on, most
+// specific first: the configured host, its resolved IP, then loopback.
+func panelProbeHosts(prev gameapctl.PanelInstallState) []string {
+	candidates := []string{prev.Host, prev.HostIP, loopbackHost}
+
+	hosts := make([]string, 0, len(candidates))
+	for _, host := range candidates {
+		if host == "" || slices.Contains(hosts, host) {
+			continue
+		}
+
+		hosts = append(hosts, host)
 	}
 
-	return isPrevStateV4(prevState.Version) && prevState.Port == port
+	return hosts
+}
+
+// previousInstallation loads the state of a previous v4 installation of the same scope.
+// A panel of the other scope runs from different paths and is never replaced by this one.
+func previousInstallation(ctx context.Context, scope string) (gameapctl.PanelInstallState, bool) {
+	prev, err := gameapctl.LoadPanelInstallState(ctx)
+	if err != nil || !isPrevStateV4(prev.Version) {
+		return gameapctl.PanelInstallState{}, false
+	}
+
+	if gameap.ScopeOrDefault(prev.Scope) != gameap.ScopeOrDefault(scope) {
+		return gameapctl.PanelInstallState{}, false
+	}
+
+	return prev, true
 }
 
 func checkHTTPHostAvailabilityV4(ctx context.Context, state panelInstallStateV4) (panelInstallStateV4, error) {
