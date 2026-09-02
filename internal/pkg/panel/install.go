@@ -193,34 +193,38 @@ func CheckInstallationV4(ctx context.Context, host, port string, https bool) err
 }
 
 func createHealthURL(host, port string, https bool, endpoint string) string {
-	if strings.Contains(host, ":") {
-		host = "[" + strings.Trim(host, "[]") + "]"
-	}
-
 	scheme, defaultPort := "http", "80"
 	if https {
 		scheme, defaultPort = "https", "443"
 	}
 
-	hostPort := host
-	if port != defaultPort {
-		hostPort = host + ":" + port
+	host = strings.Trim(host, "[]")
+
+	authority := net.JoinHostPort(host, port)
+	if port == defaultPort {
+		authority = host
+		if strings.Contains(host, ":") {
+			authority = "[" + host + "]"
+		}
 	}
 
-	return scheme + "://" + hostPort + endpoint
+	// The URL is assembled rather than concatenated so that the interface zone
+	// of a link-local address is percent-encoded. Written out as it stands, the
+	// "%eth0" is an invalid escape and no parser accepts the result.
+	return (&url.URL{Scheme: scheme, Host: authority, Path: endpoint}).String()
 }
 
-// localHTTPSClient deliberately does not verify the panel's certificate. An
+// localProbeClient deliberately does not verify the panel's certificate. An
 // installation serving HTTPS from a self-signed certificate is the common case
 // here, and a probe of the machine gameapctl is running on is a liveness check
 // against the panel that was just installed or restarted, not a trust decision.
 // Nothing but the certificate is unverified: the transport keeps the timeouts
 // the default one carries. The proxy is dropped: a probe that stays on this
-// machine has no business leaving it, and the unspecified address is not one
-// of the hosts the environment proxy bypasses on its own.
-var localHTTPSClient = newLocalHTTPSClient()
+// machine has no business leaving it, and neither the unspecified address nor
+// the machine's own public one is bypassed by the environment proxy on its own.
+var localProbeClient = newLocalProbeClient()
 
-func newLocalHTTPSClient() *http.Client {
+func newLocalProbeClient() *http.Client {
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return http.DefaultClient
@@ -235,27 +239,48 @@ func newLocalHTTPSClient() *http.Client {
 }
 
 // healthCheckClient picks the client for a probe. A probe that leaves this
-// machine is verified like any other request; only the local self-signed case
-// is exempt.
+// machine is verified and proxied like any other request; a probe that stays on
+// it is neither.
 func healthCheckClient(u *url.URL) *http.Client {
-	if u.Scheme != "https" || !isLocalHost(u.Hostname()) {
+	if !isLocalHost(u.Hostname()) {
 		return http.DefaultClient
 	}
 
-	return localHTTPSClient
+	return localProbeClient
 }
 
 // isLocalHost reports whether a request to host stays on this machine. The
 // unspecified address counts: the panel is configured with it to listen
-// everywhere, and a connection to it lands on loopback.
+// everywhere, and a connection to it lands on loopback. So does an address of
+// one of the interfaces, which is what HTTP_HOST holds on an installation that
+// answers on its public address and nowhere else.
 func isLocalHost(host string) bool {
 	if host == "localhost" {
 		return true
 	}
 
-	ip := net.ParseIP(host)
+	// A link-local address carries the interface to reach it through, which
+	// neither parses as part of the address nor changes where it leads.
+	if zone := strings.IndexByte(host, '%'); zone >= 0 {
+		host = host[:zone]
+	}
 
-	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	if ip.IsLoopback() || ip.IsUnspecified() {
+		return true
+	}
+
+	for _, local := range utils.DetectIPs() {
+		if ip.Equal(net.ParseIP(local)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func checkInstallation(ctx context.Context, healthURL string) error {

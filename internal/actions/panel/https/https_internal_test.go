@@ -1,6 +1,7 @@
 package https
 
 import (
+	"crypto/tls"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gameap/gameapctl/pkg/certgen"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/panel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -305,6 +307,7 @@ func TestPanelURL(t *testing.T) {
 	tests := []struct {
 		name string
 		host string
+		bind string
 		port string
 		want string
 	}{
@@ -316,13 +319,23 @@ func TestPanelURL(t *testing.T) {
 			want: "https://[2001:db8::1]"},
 		{name: "an address is bracketed with a port", host: "2001:db8::1", port: "8443",
 			want: "https://[2001:db8::1]:8443"},
-		{name: "the wildcard host becomes loopback", host: "0.0.0.0", port: "8443",
+		{name: "the wildcard host becomes loopback", host: "0.0.0.0", bind: "0.0.0.0", port: "8443",
 			want: "https://localhost:8443"},
+		{name: "an unset host becomes loopback", port: "8443",
+			want: "https://localhost:8443"},
+		{name: "a pinned listener names the panel when the host does not", bind: "10.0.0.5", port: "8443",
+			want: "https://10.0.0.5:8443"},
+		{name: "a configured host wins over the address it is pinned to",
+			host: "panel.example.com", bind: "10.0.0.5", port: "8443",
+			want: "https://panel.example.com:8443"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.want, panelURL(map[string]string{"HTTP_HOST": test.host}, test.port))
+			values := map[string]string{panel.HTTPHostKey: test.host}
+			bind := panel.BindAddress{IP: test.bind, Key: panel.HTTPBindIPKey}
+
+			assert.Equal(t, test.want, panelURL(values, bind, test.port))
 		})
 	}
 }
@@ -385,4 +398,140 @@ func ipStrings(ips []net.IP) []string {
 	}
 
 	return out
+}
+
+func TestProbeCertificate(t *testing.T) {
+	opts := certgen.SelfSignedOptions{
+		DNSNames:    []string{"localhost"},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+		ValidFor:    day,
+	}
+
+	certPath, keyPath := writePair(t, opts)
+
+	expected, err := loadLeaf(certPath, keyPath)
+	require.NoError(t, err)
+
+	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+	require.NoError(t, err)
+
+	addr := serveTLS(t, pair)
+
+	t.Run("the expected certificate passes", func(t *testing.T) {
+		require.NoError(t, probeCertificate(t.Context(), addr, expected))
+	})
+
+	t.Run("another certificate names the address", func(t *testing.T) {
+		otherPath, otherKeyPath := writePair(t, opts)
+
+		other, loadErr := loadLeaf(otherPath, otherKeyPath)
+		require.NoError(t, loadErr)
+
+		probeErr := probeCertificate(t.Context(), addr, other)
+
+		require.Error(t, probeErr)
+		assert.Contains(t, probeErr.Error(), addr)
+		assert.Contains(t, probeErr.Error(), "another certificate")
+	})
+
+	t.Run("a refused address is reported", func(t *testing.T) {
+		probeErr := probeCertificate(t.Context(), closedAddr(t), expected)
+
+		require.Error(t, probeErr)
+		assert.Contains(t, probeErr.Error(), "cannot reach TLS server")
+	})
+}
+
+// closedAddr is an address nothing listens on, taken by opening a listener and
+// closing it again so that the port is known to be free.
+func closedAddr(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	return addr
+}
+
+func TestPortUnavailableMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		bind        panel.BindAddress
+		scope       string
+		wantParts   []string
+		wantMissing []string
+	}{
+		{
+			name:      "a bound address names the key it came from",
+			bind:      panel.BindAddress{IP: "2.29.29.94", Key: panel.HTTPHostKey},
+			scope:     gameap.ScopeSystem,
+			wantParts: []string{"443", "2.29.29.94", panel.HTTPHostKey},
+		},
+		{
+			name:        "a wildcard has no key to name",
+			bind:        panel.BindAddress{IP: "0.0.0.0", Key: panel.HTTPHostKey},
+			scope:       gameap.ScopeSystem,
+			wantParts:   []string{"443", "every interface"},
+			wantMissing: []string{panel.HTTPHostKey},
+		},
+		{
+			name:      "the user scope keeps its privileged port hint",
+			bind:      panel.BindAddress{Key: panel.HTTPHostKey},
+			scope:     gameap.ScopeUser,
+			wantParts: []string{"CAP_NET_BIND_SERVICE"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			message := portUnavailableMessage(test.bind, "443", test.scope)
+
+			for _, part := range test.wantParts {
+				assert.Contains(t, message, part)
+			}
+
+			for _, part := range test.wantMissing {
+				assert.NotContains(t, message, part)
+			}
+		})
+	}
+}
+
+// serveTLS answers handshakes with pair on loopback until the test ends.
+func serveTLS(t *testing.T, pair tls.Certificate) string {
+	t.Helper()
+
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+		Certificates: []tls.Certificate{pair},
+		MinVersion:   tls.VersionTLS12,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+
+				if tlsConn, ok := conn.(*tls.Conn); ok {
+					_ = tlsConn.Handshake()
+				}
+			}()
+		}
+	}()
+
+	return listener.Addr().String()
 }

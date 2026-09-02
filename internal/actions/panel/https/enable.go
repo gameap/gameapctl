@@ -60,6 +60,12 @@ func Enable(cliCtx *cli.Context) error {
 		)
 	}
 
+	// Resolving from the values read above stays correct because nothing this
+	// command writes touches HTTP_HOST or HTTP_BIND_IP.
+	bind := panel.ResolveBindAddress(ctx, values)
+
+	log.Println("The panel listens on:", bind)
+
 	setup, err := prepareCertificate(ctx, cliCtx, paths, values)
 	if err != nil {
 		return err
@@ -70,7 +76,7 @@ func Enable(cliCtx *cli.Context) error {
 		return err
 	}
 
-	if err = checkHTTPSPort(values, httpsPort, paths.Scope); err != nil {
+	if err = checkHTTPSPort(values, bind, httpsPort, paths.Scope); err != nil {
 		return err
 	}
 
@@ -82,11 +88,11 @@ func Enable(cliCtx *cli.Context) error {
 
 	log.Println("config.env updated. Restarting gameap ...")
 
-	if err = restartAndVerify(ctx, paths, httpsPort, setup.leaf); err != nil {
+	if err = restartAndVerify(ctx, paths, bind, httpsPort, setup.leaf); err != nil {
 		return rollback(ctx, paths, lines, err)
 	}
 
-	reportEnabled(cliCtx, values, setup, httpsPort)
+	reportEnabled(cliCtx, values, bind, setup, httpsPort)
 
 	return nil
 }
@@ -221,20 +227,26 @@ func forceHTTPSUpdate(cliCtx *cli.Context) *bool {
 // checkHTTPSPort probes the port only when the panel is not serving it already:
 // a rerun that keeps the port would otherwise fail against the panel's own
 // listener.
-func checkHTTPSPort(values map[string]string, httpsPort, scope string) error {
+func checkHTTPSPort(values map[string]string, bind panel.BindAddress, httpsPort, scope string) error {
 	if panel.TLSEnabled(values) && panel.HTTPSPort(values) == httpsPort {
 		return nil
 	}
 
-	if err := utils.CheckPortAvailability("", httpsPort); err != nil {
-		return errors.WithMessage(err, portUnavailableMessage(httpsPort, scope))
+	// Testing the address the panel binds rather than the wildcard also catches a
+	// bind address this machine does not have, which the panel would exit over.
+	if err := utils.CheckPortAvailability(bind.ListenAddr(), httpsPort); err != nil {
+		return errors.WithMessage(err, portUnavailableMessage(bind, httpsPort, scope))
 	}
 
 	return nil
 }
 
-func portUnavailableMessage(httpsPort, scope string) string {
-	message := fmt.Sprintf("port %s is not available", httpsPort)
+func portUnavailableMessage(bind panel.BindAddress, httpsPort, scope string) string {
+	message := fmt.Sprintf("port %s is not available on %s", httpsPort, bind)
+
+	if !bind.Wildcard() {
+		message += " (" + bind.Key + ")"
+	}
 
 	port, err := strconv.Atoi(httpsPort)
 	if err == nil && port < privilegedPortLimit && scope == gameap.ScopeUser {
@@ -269,33 +281,43 @@ func warnUnreachablePath(paths gameap.PanelPaths, path string) {
 }
 
 func restartAndVerify(
-	ctx context.Context, paths gameap.PanelPaths, httpsPort string, expected *x509.Certificate,
+	ctx context.Context,
+	paths gameap.PanelPaths,
+	bind panel.BindAddress,
+	httpsPort string,
+	expected *x509.Certificate,
 ) error {
 	if err := panel.Restart(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}
 
-	return waitForHTTPS(ctx, httpsPort, expected)
+	return waitForHTTPS(ctx, bind, httpsPort, expected)
 }
 
 // waitForHTTPS blocks until the panel answers a handshake with the certificate
 // that was just configured. This is not a nicety: the panel exits when it cannot
 // load the configured certificate, taking the plain HTTP listener down with it,
 // so an unverified change can leave the installation unreachable.
-func waitForHTTPS(ctx context.Context, httpsPort string, expected *x509.Certificate) error {
-	addr := net.JoinHostPort("127.0.0.1", httpsPort)
+func waitForHTTPS(
+	ctx context.Context, bind panel.BindAddress, httpsPort string, expected *x509.Certificate,
+) error {
+	// The addresses are worked out once: a domain in HTTP_HOST costs a lookup,
+	// and inside the retry loop that would eat the whole verification budget.
+	addrs := bind.ProbeAddrs(httpsPort)
 
 	err := waitFor(ctx, verifyInterval, func() error {
-		return probeHTTPS(ctx, addr, expected)
+		return panel.ProbeEach(addrs, func(addr string) error {
+			return probeCertificate(ctx, addr, expected)
+		})
 	})
 	if err != nil {
-		return errors.WithMessagef(err, "the panel is not serving HTTPS on port %s", httpsPort)
+		return errors.WithMessagef(err, "the panel is not serving HTTPS on %s", strings.Join(addrs, ", "))
 	}
 
 	return nil
 }
 
-func probeHTTPS(ctx context.Context, addr string, expected *x509.Certificate) error {
+func probeCertificate(ctx context.Context, addr string, expected *x509.Certificate) error {
 	result, err := tlsprobe.Leaf(ctx, addr, probeTimeout)
 	if err != nil {
 		return err
@@ -306,7 +328,7 @@ func probeHTTPS(ctx context.Context, addr string, expected *x509.Certificate) er
 	}
 
 	if !bytes.Equal(result.Leaf.Raw, expected.Raw) {
-		return errors.New("the panel is still serving another certificate")
+		return errors.Errorf("%s is serving another certificate", addr)
 	}
 
 	return nil
@@ -332,9 +354,15 @@ func rollback(ctx context.Context, paths gameap.PanelPaths, lines []string, caus
 	return errors.WithMessage(cause, "HTTPS is not enabled, the previous configuration is restored")
 }
 
-func reportEnabled(cliCtx *cli.Context, values map[string]string, setup certificateSetup, httpsPort string) {
+func reportEnabled(
+	cliCtx *cli.Context,
+	values map[string]string,
+	bind panel.BindAddress,
+	setup certificateSetup,
+	httpsPort string,
+) {
 	log.Println("HTTPS is enabled.")
-	log.Println("  URL:        ", panelURL(values, httpsPort))
+	log.Println("  URL:        ", panelURL(values, bind, httpsPort))
 	log.Println("  Certificate:", setup.certPath)
 	log.Println("  Private key:", setup.keyPath)
 	log.Println("  Names:      ", certificateNames(setup.leaf))
@@ -362,17 +390,35 @@ func reportEnabled(cliCtx *cli.Context, values map[string]string, setup certific
 	log.Printf("HTTP is still served on port %s. Pass --force-https to redirect it.\n", httpPort)
 }
 
-func panelURL(values map[string]string, httpsPort string) string {
-	host := panel.ConfigValue(values, panel.HTTPHostKey)
-	if host == "" || host == wildcardHost {
-		host = localhostName
-	}
+// panelURL names the panel where a browser can open it: what HTTP_HOST says
+// when it names an address, then the one the listeners are pinned to, which
+// HTTP_BIND_IP can set on its own. Loopback is left when neither names one.
+func panelURL(values map[string]string, bind panel.BindAddress, httpsPort string) string {
+	host := firstNamedHost(panel.ConfigValue(values, panel.HTTPHostKey), bind.IP)
 
 	if httpsPort == panel.DefaultHTTPSPort {
 		return "https://" + urlHost(host)
 	}
 
 	return "https://" + net.JoinHostPort(host, httpsPort)
+}
+
+// firstNamedHost returns the first candidate that names a host to connect to,
+// which the wildcards and the empty string do not.
+func firstNamedHost(candidates ...string) string {
+	for _, host := range candidates {
+		if host == "" {
+			continue
+		}
+
+		if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+			continue
+		}
+
+		return host
+	}
+
+	return localhostName
 }
 
 // urlHost brackets an IPv6 literal, which a URL needs even where there is no

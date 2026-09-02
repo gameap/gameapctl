@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"log"
+	"net"
 	"os"
 
 	panelletsencrypt "github.com/gameap/gameapctl/internal/actions/panel/letsencrypt"
@@ -41,6 +42,10 @@ func Disable(cliCtx *cli.Context) error {
 		return nil
 	}
 
+	// Nothing this command writes touches HTTP_HOST or HTTP_BIND_IP, so the
+	// values read above still describe where the restarted panel will listen.
+	bind := panel.ResolveBindAddress(ctx, values)
+
 	if err = configenv.Update(configPath, lines, disableUpdates(values)); err != nil {
 		return errors.WithMessage(err, "failed to write config")
 	}
@@ -51,7 +56,7 @@ func Disable(cliCtx *cli.Context) error {
 		return errors.WithMessage(err, "failed to restart gameap")
 	}
 
-	if err = waitForHTTP(ctx, values); err != nil {
+	if err = waitForHTTP(ctx, bind, values); err != nil {
 		return err
 	}
 
@@ -80,14 +85,23 @@ func disableUpdates(values map[string]string) map[string]string {
 	return updates
 }
 
-func waitForHTTP(ctx context.Context, values map[string]string) error {
+func waitForHTTP(ctx context.Context, bind panel.BindAddress, values map[string]string) error {
 	httpPort := panel.ConfigValue(values, panel.HTTPPortKey)
 	if httpPort == "" {
 		httpPort = gameap.DefaultPanelPort
 	}
 
+	hosts := bind.ProbeHosts()
+
 	err := waitFor(ctx, healthInterval, func() error {
-		return panelpkg.CheckInstallationV4(ctx, "127.0.0.1", httpPort, false)
+		return panel.ProbeEach(hosts, func(host string) error {
+			// The health check reports a bad response without saying which
+			// address gave it, and here there may be more than one.
+			return errors.WithMessage(
+				panelpkg.CheckInstallationV4(ctx, host, httpPort, false),
+				net.JoinHostPort(host, httpPort),
+			)
+		})
 	})
 	if err != nil {
 		return errors.WithMessagef(err, "the panel is not answering on HTTP port %s", httpPort)
