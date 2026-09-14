@@ -311,7 +311,9 @@ func MigrateConfigEnv(
 		plan = upgradePlan(targetVersion)
 	}
 
-	plan.pluginsStoreTargetKey = pluginsStoreKeyFor(targetVersion)
+	if releasefinder.HasMajorMinor(targetVersion) {
+		plan.pluginsStoreTargetKey = pluginsStoreKeyFor(targetVersion)
+	}
 
 	return migrateConfigEnv(path, plan, opts...)
 }
@@ -348,8 +350,10 @@ type configEnvPlan struct {
 	removes  []plannedDrop
 	restores []plannedRestore
 
-	// pluginsStore, when set, makes the run check the plugin store address.
-	// A config.env without one gets it under pluginsStoreTargetKey.
+	// pluginsStore, when set, makes the run check the plugin store address and
+	// keep it under pluginsStoreTargetKey, the name the target release reads.
+	// An empty pluginsStoreTargetKey stands for an unknown target, for which
+	// the name config.env already uses is kept.
 	pluginsStore          PluginsStoreAvailability
 	pluginsStoreTargetKey string
 }
@@ -570,55 +574,88 @@ func applyRestores(lines []string, values map[string]string, restores []plannedR
 }
 
 // applyPluginsStore points the plugin store address at a reachable GameAP
-// store. It runs after the renames, so the address normally sits under the key
-// the target release reads; the other name is honoured for a config the renames
-// did not reach, such as one migrated towards an unknown release.
+// store. The renames before it leave the address under the name the target
+// reads, except when the installed release is unknown: a config from v4.5+
+// migrated towards an older target still says PLUGINS_STORE_URL, so the address
+// is moved to the target's name first.
 func applyPluginsStore(lines []string, values map[string]string, plan configEnvPlan) ([]string, []string) {
 	if plan.pluginsStore == nil {
 		return lines, nil
 	}
 
-	key := configuredPluginsStoreKey(values, plan.pluginsStoreTargetKey)
+	key := plan.pluginsStoreTargetKey
+	if key == "" {
+		key = configuredPluginsStoreKey(values)
+	}
+
+	changes := renamePluginsStoreKey(lines, values, key)
 
 	current, present := values[key]
 	if !present {
 		chosen := plan.pluginsStore.choose("")
 		values[key] = chosen
 
-		return configenv.Append(lines, key, chosen), []string{fmt.Sprintf("%s set to %s", key, chosen)}
+		return configenv.Append(lines, key, chosen), append(changes, fmt.Sprintf("%s set to %s", key, chosen))
 	}
 
 	currentURL := configenv.Unquote(current)
 
 	chosen := plan.pluginsStore.choose(currentURL)
 	if chosen == currentURL {
-		return lines, nil
+		return lines, changes
 	}
 
 	newValue, renamed := configenv.Rename(lines, key, key, func(string) string { return chosen })
 	if !renamed {
-		return lines, nil
+		return lines, changes
 	}
 
 	values[key] = newValue
 
 	if strings.TrimSpace(currentURL) == "" {
-		return lines, []string{fmt.Sprintf("%s set to %s", key, chosen)}
+		return lines, append(changes, fmt.Sprintf("%s set to %s", key, chosen))
 	}
 
-	return lines, []string{
-		fmt.Sprintf("%s changed from %s to %s, %s is unreachable", key, currentURL, chosen, currentURL),
-	}
+	return lines, append(changes,
+		fmt.Sprintf("%s changed from %s to %s, %s is unreachable", key, currentURL, chosen, currentURL))
 }
 
-// configuredPluginsStoreKey returns the key config.env already assigns the
-// plugin store address to, or preferred when it assigns none.
-func configuredPluginsStoreKey(values map[string]string, preferred string) string {
-	for _, key := range []string{preferred, pluginsStoreKey, pluginsStoreLegacyKey} {
-		if _, present := values[key]; present {
-			return key
-		}
+// configuredPluginsStoreKey returns the name config.env already assigns the
+// plugin store address to, preferring the current one.
+func configuredPluginsStoreKey(values map[string]string) string {
+	_, current := values[pluginsStoreKey]
+	_, legacy := values[pluginsStoreLegacyKey]
+
+	if legacy && !current {
+		return pluginsStoreLegacyKey
 	}
 
-	return preferred
+	return pluginsStoreKey
+}
+
+// renamePluginsStoreKey moves the plugin store address to key when config.env
+// assigns it only under the other name. lines are rewritten in place.
+func renamePluginsStoreKey(lines []string, values map[string]string, key string) []string {
+	other := pluginsStoreLegacyKey
+	if key == pluginsStoreLegacyKey {
+		other = pluginsStoreKey
+	}
+
+	if _, taken := values[key]; taken {
+		return nil
+	}
+
+	if _, present := values[other]; !present {
+		return nil
+	}
+
+	newValue, renamed := configenv.Rename(lines, other, key, nil)
+	if !renamed {
+		return nil
+	}
+
+	delete(values, other)
+	values[key] = newValue
+
+	return []string{fmt.Sprintf("%s renamed to %s", other, key)}
 }

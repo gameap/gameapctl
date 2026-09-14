@@ -387,6 +387,39 @@ func TestMigrateConfigEnv_PluginsStoreUsesTheNameAlreadyInTheFile(t *testing.T) 
 	assert.Equal(t, map[string]string{pluginsStoreLegacyKey: PluginsStoreMirrorURL}, readConfigEnvValues(t, path))
 }
 
+func TestMigrateConfigEnv_PluginsStoreMovedToTheNameAnOlderTargetReads(t *testing.T) {
+	body := pluginsStoreKey + "=" + PluginsStoreURL + "\n"
+
+	tests := []struct {
+		name         string
+		availability PluginsStoreAvailability
+		want         string
+		changes      int
+	}{
+		{name: "address_kept", availability: PluginsStoreAvailability{PluginsStoreURL: true}, want: PluginsStoreURL, changes: 1},
+		{name: "address_switched", availability: onlyMirrorReachable, want: PluginsStoreMirrorURL, changes: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfigEnv(t, body)
+
+			migration, err := MigrateConfigEnv(path, "", "v4.4.2", WithPluginsStore(tt.availability))
+			require.NoError(t, err)
+			require.Len(t, migration.Changes, tt.changes)
+			assert.Equal(t, pluginsStoreKey+" renamed to "+pluginsStoreLegacyKey, migration.Changes[0])
+
+			assert.Equal(t, map[string]string{pluginsStoreLegacyKey: tt.want}, readConfigEnvValues(t, path))
+
+			require.NoError(t, migration.Restore())
+
+			restored, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, body, string(restored))
+		})
+	}
+}
+
 func TestMigrateConfigEnv_PluginsStoreIsIdempotentAndRestorable(t *testing.T) {
 	const body = "HTTP_PORT=8025\n"
 
