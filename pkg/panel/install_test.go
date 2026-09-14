@@ -1,10 +1,13 @@
 package panel
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gameap/gameapctl/pkg/gameap"
+	"github.com/gameap/gameapctl/pkg/releasesource"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,4 +77,63 @@ func TestRenderConfigEnv_ValidShape(t *testing.T) {
 		}
 		assert.Contains(t, line, "=", "expected key=value, got %q", line)
 	}
+}
+
+func TestRenderConfigEnv_PluginsStoreURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		config InstallConfig
+		want   string
+	}{
+		{
+			name:   "release_before_the_rename",
+			config: InstallConfig{PluginsStoreURL: PluginsStoreMirrorURL, Tag: "v4.3.0"},
+			want:   "\n" + pluginsStoreLegacyKey + "=" + PluginsStoreMirrorURL + "\n",
+		},
+		{
+			name: "resolved_release_wins_over_the_requested_tag",
+			config: InstallConfig{
+				PluginsStoreURL:    PluginsStoreMirrorURL,
+				Tag:                "v4.3.0",
+				PreResolvedRelease: &releasesource.Release{Tag: "v4.5.2"},
+			},
+			want: "\n" + pluginsStoreKey + "=" + PluginsStoreMirrorURL + "\n",
+		},
+		{
+			name:   "github_build",
+			config: InstallConfig{PluginsStoreURL: PluginsStoreURL},
+			want:   "\n" + pluginsStoreKey + "=" + PluginsStoreURL + "\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := renderConfigEnv(tt.config)
+			require.NoError(t, err)
+
+			assert.Contains(t, string(out), tt.want)
+		})
+	}
+}
+
+func TestRenderConfigEnv_WithoutPluginsStoreURL(t *testing.T) {
+	out, err := renderConfigEnv(InstallConfig{})
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(out), "STORE_URL")
+}
+
+func TestExistingPluginsStoreURL(t *testing.T) {
+	dir := t.TempDir()
+	config := InstallConfig{ConfigDirectory: dir}
+
+	assert.Empty(t, existingPluginsStoreURL(config))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "config.env"),
+		[]byte("HTTP_PORT=8025\nPLUGIN_STORE_URL=\"https://plugins.example.com/api\"\n"),
+		0o600,
+	))
+
+	assert.Equal(t, "https://plugins.example.com/api", existingPluginsStoreURL(config))
 }

@@ -301,19 +301,41 @@ func (m ConfigEnvMigration) Restore() error {
 // its settings. An empty or unparseable installedVersion means "unknown" and
 // selects the ordinary forward migration, which is safe because every forward
 // migration is idempotent and gated on the target alone.
-func MigrateConfigEnv(path, installedVersion, targetVersion string) (ConfigEnvMigration, error) {
+func MigrateConfigEnv(
+	path, installedVersion, targetVersion string, opts ...ConfigEnvOption,
+) (ConfigEnvMigration, error) {
+	var plan configEnvPlan
 	if cmp, ok := releasefinder.CompareMajorMinor(installedVersion, targetVersion); ok && cmp > 0 {
-		return migrateConfigEnv(path, downgradePlan(installedVersion, targetVersion))
+		plan = downgradePlan(installedVersion, targetVersion)
+	} else {
+		plan = upgradePlan(targetVersion)
 	}
 
-	return migrateConfigEnv(path, upgradePlan(targetVersion))
+	plan.pluginsStoreTargetKey = pluginsStoreKeyFor(targetVersion)
+
+	return migrateConfigEnv(path, plan, opts...)
 }
 
 // MigrateConfigEnvToLatest applies every forward migration. It is for builds
 // from a GitHub branch, which carry no release tag: the branch is newer than
 // every release, so there is no downgrade to consider.
-func MigrateConfigEnvToLatest(path string) (ConfigEnvMigration, error) {
-	return migrateConfigEnv(path, forwardPlan(func(string) bool { return true }))
+func MigrateConfigEnvToLatest(path string, opts ...ConfigEnvOption) (ConfigEnvMigration, error) {
+	plan := forwardPlan(func(string) bool { return true })
+	plan.pluginsStoreTargetKey = pluginsStoreKey
+
+	return migrateConfigEnv(path, plan, opts...)
+}
+
+// ConfigEnvOption adds an optional step to a config.env migration.
+type ConfigEnvOption func(*configEnvPlan)
+
+// WithPluginsStore points the plugin store address at a GameAP store that
+// answered the probe, see PluginsStoreAvailability.choose. The probe is left to
+// the caller so that it can run before the panel is stopped.
+func WithPluginsStore(availability PluginsStoreAvailability) ConfigEnvOption {
+	return func(plan *configEnvPlan) {
+		plan.pluginsStore = availability
+	}
 }
 
 // configEnvPlan is the migration table flattened into the changes one run has
@@ -325,6 +347,11 @@ type configEnvPlan struct {
 	renames  []plannedRename
 	removes  []plannedDrop
 	restores []plannedRestore
+
+	// pluginsStore, when set, makes the run check the plugin store address.
+	// A config.env without one gets it under pluginsStoreTargetKey.
+	pluginsStore          PluginsStoreAvailability
+	pluginsStoreTargetKey string
 }
 
 type plannedRename struct {
@@ -417,7 +444,11 @@ func downgradePlan(installedVersion, targetVersion string) configEnvPlan {
 	return plan
 }
 
-func migrateConfigEnv(path string, plan configEnvPlan) (ConfigEnvMigration, error) {
+func migrateConfigEnv(path string, plan configEnvPlan, opts ...ConfigEnvOption) (ConfigEnvMigration, error) {
+	for _, opt := range opts {
+		opt(&plan)
+	}
+
 	if !utils.IsFileExists(path) {
 		return ConfigEnvMigration{}, nil
 	}
@@ -436,6 +467,9 @@ func migrateConfigEnv(path string, plan configEnvPlan) (ConfigEnvMigration, erro
 
 	lines, restored := applyRestores(lines, values, plan.restores)
 	changes = append(changes, restored...)
+
+	lines, stored := applyPluginsStore(lines, values, plan)
+	changes = append(changes, stored...)
 
 	if len(changes) == 0 {
 		return ConfigEnvMigration{}, nil
@@ -533,4 +567,58 @@ func applyRestores(lines []string, values map[string]string, restores []plannedR
 	}
 
 	return lines, changes
+}
+
+// applyPluginsStore points the plugin store address at a reachable GameAP
+// store. It runs after the renames, so the address normally sits under the key
+// the target release reads; the other name is honoured for a config the renames
+// did not reach, such as one migrated towards an unknown release.
+func applyPluginsStore(lines []string, values map[string]string, plan configEnvPlan) ([]string, []string) {
+	if plan.pluginsStore == nil {
+		return lines, nil
+	}
+
+	key := configuredPluginsStoreKey(values, plan.pluginsStoreTargetKey)
+
+	current, present := values[key]
+	if !present {
+		chosen := plan.pluginsStore.choose("")
+		values[key] = chosen
+
+		return configenv.Append(lines, key, chosen), []string{fmt.Sprintf("%s set to %s", key, chosen)}
+	}
+
+	currentURL := configenv.Unquote(current)
+
+	chosen := plan.pluginsStore.choose(currentURL)
+	if chosen == currentURL {
+		return lines, nil
+	}
+
+	newValue, renamed := configenv.Rename(lines, key, key, func(string) string { return chosen })
+	if !renamed {
+		return lines, nil
+	}
+
+	values[key] = newValue
+
+	if strings.TrimSpace(currentURL) == "" {
+		return lines, []string{fmt.Sprintf("%s set to %s", key, chosen)}
+	}
+
+	return lines, []string{
+		fmt.Sprintf("%s changed from %s to %s, %s is unreachable", key, currentURL, chosen, currentURL),
+	}
+}
+
+// configuredPluginsStoreKey returns the key config.env already assigns the
+// plugin store address to, or preferred when it assigns none.
+func configuredPluginsStoreKey(values map[string]string, preferred string) string {
+	for _, key := range []string{preferred, pluginsStoreKey, pluginsStoreLegacyKey} {
+		if _, present := values[key]; present {
+			return key
+		}
+	}
+
+	return preferred
 }

@@ -29,4 +29,7 @@ LEGACY_PATH={{.LegacyPath}}
 
 # Global API
 GLOBAL_API_URL={{.GlobalAPIURL}}
-`
+{{if .PluginsStoreURL}}
+# Plugins
+{{.PluginsStoreURLKey}}={{.PluginsStoreURL}}
+{{end}}`

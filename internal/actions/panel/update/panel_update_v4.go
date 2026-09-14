@@ -77,6 +77,9 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		}
 	}()
 
+	// Probed while the panel is still up: an unreachable store takes a timeout to detect.
+	storeAvailability := panel.ProbePluginsStores(ctx)
+
 	log.Println("Stopping GameAP...")
 	if err := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to stop GameAP")
@@ -88,9 +91,9 @@ func handleV4(cliCtx *cli.Context, paths gameap.PanelPaths, tag, tagPrefix strin
 		return errors.WithMessage(err, "failed to backup and replace binary")
 	}
 
-	migration := reportConfigEnvMigration(
-		panel.MigrateConfigEnv(paths.ConfigFilePath, installedVersion, resolvedTag),
-	)
+	migration := reportConfigEnvMigration(panel.MigrateConfigEnv(
+		paths.ConfigFilePath, installedVersion, resolvedTag, panel.WithPluginsStore(storeAvailability),
+	))
 
 	if err := startAndVerifyV4(ctx, paths, backupPath, migration); err != nil {
 		return err
@@ -308,6 +311,9 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 		return errors.WithMessage(err, "failed to build GameAP from github")
 	}
 
+	// Probed while the panel is still up: an unreachable store takes a timeout to detect.
+	storeAvailability := panel.ProbePluginsStores(ctx)
+
 	log.Println("Stopping GameAP...")
 	if err := panel.Stop(ctx, panel.Options{Scope: paths.Scope}); err != nil {
 		return errors.WithMessage(err, "failed to stop GameAP")
@@ -330,7 +336,9 @@ func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch str
 	}
 
 	// A branch build is newer than every release, so every migration applies.
-	migration := reportConfigEnvMigration(panel.MigrateConfigEnvToLatest(paths.ConfigFilePath))
+	migration := reportConfigEnvMigration(
+		panel.MigrateConfigEnvToLatest(paths.ConfigFilePath, panel.WithPluginsStore(storeAvailability)),
+	)
 
 	if err := startAndVerifyV4(ctx, paths, backupPath, migration); err != nil {
 		return err
