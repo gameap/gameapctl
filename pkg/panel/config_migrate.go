@@ -301,19 +301,43 @@ func (m ConfigEnvMigration) Restore() error {
 // its settings. An empty or unparseable installedVersion means "unknown" and
 // selects the ordinary forward migration, which is safe because every forward
 // migration is idempotent and gated on the target alone.
-func MigrateConfigEnv(path, installedVersion, targetVersion string) (ConfigEnvMigration, error) {
+func MigrateConfigEnv(
+	path, installedVersion, targetVersion string, opts ...ConfigEnvOption,
+) (ConfigEnvMigration, error) {
+	var plan configEnvPlan
 	if cmp, ok := releasefinder.CompareMajorMinor(installedVersion, targetVersion); ok && cmp > 0 {
-		return migrateConfigEnv(path, downgradePlan(installedVersion, targetVersion))
+		plan = downgradePlan(installedVersion, targetVersion)
+	} else {
+		plan = upgradePlan(targetVersion)
 	}
 
-	return migrateConfigEnv(path, upgradePlan(targetVersion))
+	if releasefinder.HasMajorMinor(targetVersion) {
+		plan.pluginsStoreTargetKey = pluginsStoreKeyFor(targetVersion)
+	}
+
+	return migrateConfigEnv(path, plan, opts...)
 }
 
 // MigrateConfigEnvToLatest applies every forward migration. It is for builds
 // from a GitHub branch, which carry no release tag: the branch is newer than
 // every release, so there is no downgrade to consider.
-func MigrateConfigEnvToLatest(path string) (ConfigEnvMigration, error) {
-	return migrateConfigEnv(path, forwardPlan(func(string) bool { return true }))
+func MigrateConfigEnvToLatest(path string, opts ...ConfigEnvOption) (ConfigEnvMigration, error) {
+	plan := forwardPlan(func(string) bool { return true })
+	plan.pluginsStoreTargetKey = pluginsStoreKey
+
+	return migrateConfigEnv(path, plan, opts...)
+}
+
+// ConfigEnvOption adds an optional step to a config.env migration.
+type ConfigEnvOption func(*configEnvPlan)
+
+// WithPluginsStore points the plugin store address at a GameAP store that
+// answered the probe, see PluginsStoreAvailability.choose. The probe is left to
+// the caller so that it can run before the panel is stopped.
+func WithPluginsStore(availability PluginsStoreAvailability) ConfigEnvOption {
+	return func(plan *configEnvPlan) {
+		plan.pluginsStore = availability
+	}
 }
 
 // configEnvPlan is the migration table flattened into the changes one run has
@@ -325,6 +349,13 @@ type configEnvPlan struct {
 	renames  []plannedRename
 	removes  []plannedDrop
 	restores []plannedRestore
+
+	// pluginsStore, when set, makes the run check the plugin store address and
+	// keep it under pluginsStoreTargetKey, the name the target release reads.
+	// An empty pluginsStoreTargetKey stands for an unknown target, for which
+	// the name config.env already uses is kept.
+	pluginsStore          PluginsStoreAvailability
+	pluginsStoreTargetKey string
 }
 
 type plannedRename struct {
@@ -417,7 +448,11 @@ func downgradePlan(installedVersion, targetVersion string) configEnvPlan {
 	return plan
 }
 
-func migrateConfigEnv(path string, plan configEnvPlan) (ConfigEnvMigration, error) {
+func migrateConfigEnv(path string, plan configEnvPlan, opts ...ConfigEnvOption) (ConfigEnvMigration, error) {
+	for _, opt := range opts {
+		opt(&plan)
+	}
+
 	if !utils.IsFileExists(path) {
 		return ConfigEnvMigration{}, nil
 	}
@@ -436,6 +471,9 @@ func migrateConfigEnv(path string, plan configEnvPlan) (ConfigEnvMigration, erro
 
 	lines, restored := applyRestores(lines, values, plan.restores)
 	changes = append(changes, restored...)
+
+	lines, stored := applyPluginsStore(lines, values, plan)
+	changes = append(changes, stored...)
 
 	if len(changes) == 0 {
 		return ConfigEnvMigration{}, nil
@@ -533,4 +571,91 @@ func applyRestores(lines []string, values map[string]string, restores []plannedR
 	}
 
 	return lines, changes
+}
+
+// applyPluginsStore points the plugin store address at a reachable GameAP
+// store. The renames before it leave the address under the name the target
+// reads, except when the installed release is unknown: a config from v4.5+
+// migrated towards an older target still says PLUGINS_STORE_URL, so the address
+// is moved to the target's name first.
+func applyPluginsStore(lines []string, values map[string]string, plan configEnvPlan) ([]string, []string) {
+	if plan.pluginsStore == nil {
+		return lines, nil
+	}
+
+	key := plan.pluginsStoreTargetKey
+	if key == "" {
+		key = configuredPluginsStoreKey(values)
+	}
+
+	changes := renamePluginsStoreKey(lines, values, key)
+
+	current, present := values[key]
+	if !present {
+		chosen := plan.pluginsStore.choose("")
+		values[key] = chosen
+
+		return configenv.Append(lines, key, chosen), append(changes, fmt.Sprintf("%s set to %s", key, chosen))
+	}
+
+	currentURL := configenv.Unquote(current)
+
+	chosen := plan.pluginsStore.choose(currentURL)
+	if chosen == currentURL {
+		return lines, changes
+	}
+
+	newValue, renamed := configenv.Rename(lines, key, key, func(string) string { return chosen })
+	if !renamed {
+		return lines, changes
+	}
+
+	values[key] = newValue
+
+	if strings.TrimSpace(currentURL) == "" {
+		return lines, append(changes, fmt.Sprintf("%s set to %s", key, chosen))
+	}
+
+	return lines, append(changes,
+		fmt.Sprintf("%s changed from %s to %s, %s is unreachable", key, currentURL, chosen, currentURL))
+}
+
+// configuredPluginsStoreKey returns the name config.env already assigns the
+// plugin store address to, preferring the current one.
+func configuredPluginsStoreKey(values map[string]string) string {
+	_, current := values[pluginsStoreKey]
+	_, legacy := values[pluginsStoreLegacyKey]
+
+	if legacy && !current {
+		return pluginsStoreLegacyKey
+	}
+
+	return pluginsStoreKey
+}
+
+// renamePluginsStoreKey moves the plugin store address to key when config.env
+// assigns it only under the other name. lines are rewritten in place.
+func renamePluginsStoreKey(lines []string, values map[string]string, key string) []string {
+	other := pluginsStoreLegacyKey
+	if key == pluginsStoreLegacyKey {
+		other = pluginsStoreKey
+	}
+
+	if _, taken := values[key]; taken {
+		return nil
+	}
+
+	if _, present := values[other]; !present {
+		return nil
+	}
+
+	newValue, renamed := configenv.Rename(lines, other, key, nil)
+	if !renamed {
+		return nil
+	}
+
+	delete(values, other)
+	values[key] = newValue
+
+	return []string{fmt.Sprintf("%s renamed to %s", other, key)}
 }

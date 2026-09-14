@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gameap/gameapctl/pkg/configenv"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	"github.com/gameap/gameapctl/pkg/oscore"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
@@ -67,6 +68,10 @@ type InstallConfig struct {
 	// Global API
 	GlobalAPIURL string
 
+	// PluginsStoreURL is the plugin store address written to config.env. Empty
+	// means probe the GameAP stores and pick a reachable one.
+	PluginsStoreURL string
+
 	// gRPC bidirectional protocol (panel >= v4.2). When enabled, GRPC_ENABLED=true
 	// and GRPC_PORT are written to config.env. GRPCPort defaults to gameap.DefaultGRPCPort.
 	GRPCEnabled bool
@@ -101,6 +106,8 @@ type ConfigEnvData struct {
 	FilesLocalBasePath string
 	LegacyPath         string
 	GlobalAPIURL       string
+	PluginsStoreURLKey string
+	PluginsStoreURL    string
 }
 
 // Configure sets up GameAP v4 configuration: creates user/group, directories, config.env,
@@ -113,6 +120,10 @@ func Configure(ctx context.Context, config InstallConfig) error {
 
 	config = applyConfigDefaults(config)
 	config = preserveExistingSecrets(config)
+
+	if config.PluginsStoreURL == "" {
+		config.PluginsStoreURL = ProbePluginsStores(ctx).choose(existingPluginsStoreURL(config))
+	}
 
 	if config.EncryptionKey == "" {
 		config.EncryptionKey, err = generateRandomKey(randomKeyLength)
@@ -173,6 +184,14 @@ func Install(ctx context.Context, config InstallConfig) (string, error) {
 		return "", err
 	}
 
+	// Resolved before Configure: config.env keys depend on the release tag.
+	if config.PreResolvedRelease == nil {
+		config.PreResolvedRelease, err = ResolveRelease(ctx, config)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	if err := Configure(ctx, config); err != nil {
 		return "", err
 	}
@@ -187,6 +206,14 @@ func Install(ctx context.Context, config InstallConfig) (string, error) {
 
 func (c InstallConfig) scope() string {
 	return gameap.ScopeOrDefault(c.Scope)
+}
+
+func (c InstallConfig) releaseTag() string {
+	if c.PreResolvedRelease != nil {
+		return c.PreResolvedRelease.Tag
+	}
+
+	return c.Tag
 }
 
 // applyScopeDefaults fills paths and ownership from the installation scope. In user
@@ -281,6 +308,8 @@ func renderConfigEnv(config InstallConfig) ([]byte, error) {
 		FilesLocalBasePath: config.FilesLocalBasePath,
 		LegacyPath:         config.LegacyPath,
 		GlobalAPIURL:       config.GlobalAPIURL,
+		PluginsStoreURLKey: pluginsStoreKeyFor(config.releaseTag()),
+		PluginsStoreURL:    config.PluginsStoreURL,
 	}
 
 	var buf bytes.Buffer
@@ -484,6 +513,25 @@ func preserveExistingSecrets(config InstallConfig) InstallConfig {
 	}
 
 	return config
+}
+
+// existingPluginsStoreURL returns the plugin store address a previous
+// installation left in config.env, under either name the panel reads it from.
+func existingPluginsStoreURL(config InstallConfig) string {
+	data, err := os.ReadFile(filepath.Join(config.ConfigDirectory, "config.env"))
+	if err != nil {
+		return ""
+	}
+
+	existing := parseConfigEnvValues(data)
+
+	for _, key := range []string{pluginsStoreKey, pluginsStoreLegacyKey} {
+		if value := configenv.Unquote(strings.TrimSpace(existing[key])); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func parseConfigEnvValues(data []byte) map[string]string {

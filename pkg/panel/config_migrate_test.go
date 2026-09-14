@@ -303,3 +303,148 @@ func TestMigrateConfigEnv_RoundTrip(t *testing.T) {
 		"PLUGIN_SSH_ENABLED":              "true",
 	}, readConfigEnvValues(t, path))
 }
+
+var onlyMirrorReachable = PluginsStoreAvailability{PluginsStoreURL: false, PluginsStoreMirrorURL: true}
+
+func TestMigrateConfigEnv_PluginsStoreAddedUnderTheKeyTheTargetReads(t *testing.T) {
+	tests := []struct {
+		target string
+		key    string
+	}{
+		{target: "v4.5.0", key: pluginsStoreKey},
+		{target: "v4.4.2", key: pluginsStoreLegacyKey},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.target, func(t *testing.T) {
+			path := writeConfigEnv(t, "HTTP_PORT=8025\n")
+
+			migration, err := MigrateConfigEnv(path, "", tt.target, WithPluginsStore(onlyMirrorReachable))
+			require.NoError(t, err)
+			require.Len(t, migration.Changes, 1)
+			assert.Equal(t, tt.key+" set to "+PluginsStoreMirrorURL, migration.Changes[0])
+
+			assert.Equal(t, map[string]string{
+				"HTTP_PORT": "8025",
+				tt.key:      PluginsStoreMirrorURL,
+			}, readConfigEnvValues(t, path))
+		})
+	}
+}
+
+func TestMigrateConfigEnv_PluginsStoreSwitchedInPlace(t *testing.T) {
+	path := writeConfigEnv(t, "# store\n"+pluginsStoreKey+"=\""+PluginsStoreURL+"\"\nHTTP_PORT=8025\n")
+
+	migration, err := MigrateConfigEnv(path, "", "v4.6.0", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+	require.Len(t, migration.Changes, 1)
+	assert.Equal(t,
+		pluginsStoreKey+" changed from "+PluginsStoreURL+" to "+PluginsStoreMirrorURL+", "+
+			PluginsStoreURL+" is unreachable",
+		migration.Changes[0],
+	)
+
+	rewritten, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "# store\n"+pluginsStoreKey+"=\""+PluginsStoreMirrorURL+"\"\nHTTP_PORT=8025\n", string(rewritten))
+}
+
+func TestMigrateConfigEnv_PluginsStoreKeepsACustomAddress(t *testing.T) {
+	path := writeConfigEnv(t, pluginsStoreKey+"=https://plugins.example.com/api\n")
+
+	migration, err := MigrateConfigEnv(path, "", "v4.6.0", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+
+	assert.Empty(t, migration.Changes)
+}
+
+func TestMigrateConfigEnv_PluginsStoreUntouchedWithoutTheOption(t *testing.T) {
+	path := writeConfigEnv(t, "HTTP_PORT=8025\n")
+
+	migration, err := MigrateConfigEnv(path, "", "v4.6.0")
+	require.NoError(t, err)
+
+	assert.Empty(t, migration.Changes)
+	assert.NotContains(t, readConfigEnvValues(t, path), pluginsStoreKey)
+}
+
+func TestMigrateConfigEnv_PluginsStoreRenamedAndSwitchedInOnePass(t *testing.T) {
+	path := writeConfigEnv(t, pluginsStoreLegacyKey+"="+PluginsStoreURL+"\n")
+
+	migration, err := MigrateConfigEnv(path, "v4.4.2", "v4.5.0", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+	require.Len(t, migration.Changes, 2)
+
+	assert.Equal(t, map[string]string{pluginsStoreKey: PluginsStoreMirrorURL}, readConfigEnvValues(t, path))
+}
+
+func TestMigrateConfigEnv_PluginsStoreUsesTheNameAlreadyInTheFile(t *testing.T) {
+	path := writeConfigEnv(t, pluginsStoreLegacyKey+"="+PluginsStoreURL+"\n")
+
+	_, err := MigrateConfigEnv(path, "", "", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]string{pluginsStoreLegacyKey: PluginsStoreMirrorURL}, readConfigEnvValues(t, path))
+}
+
+func TestMigrateConfigEnv_PluginsStoreMovedToTheNameAnOlderTargetReads(t *testing.T) {
+	body := pluginsStoreKey + "=" + PluginsStoreURL + "\n"
+
+	tests := []struct {
+		name         string
+		availability PluginsStoreAvailability
+		want         string
+		changes      int
+	}{
+		{name: "address_kept", availability: PluginsStoreAvailability{PluginsStoreURL: true}, want: PluginsStoreURL, changes: 1},
+		{name: "address_switched", availability: onlyMirrorReachable, want: PluginsStoreMirrorURL, changes: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfigEnv(t, body)
+
+			migration, err := MigrateConfigEnv(path, "", "v4.4.2", WithPluginsStore(tt.availability))
+			require.NoError(t, err)
+			require.Len(t, migration.Changes, tt.changes)
+			assert.Equal(t, pluginsStoreKey+" renamed to "+pluginsStoreLegacyKey, migration.Changes[0])
+
+			assert.Equal(t, map[string]string{pluginsStoreLegacyKey: tt.want}, readConfigEnvValues(t, path))
+
+			require.NoError(t, migration.Restore())
+
+			restored, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, body, string(restored))
+		})
+	}
+}
+
+func TestMigrateConfigEnv_PluginsStoreIsIdempotentAndRestorable(t *testing.T) {
+	const body = "HTTP_PORT=8025\n"
+
+	path := writeConfigEnv(t, body)
+
+	migration, err := MigrateConfigEnv(path, "", "v4.6.0", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+	require.NotEmpty(t, migration.Changes)
+
+	second, err := MigrateConfigEnv(path, "", "v4.6.0", WithPluginsStore(onlyMirrorReachable))
+	require.NoError(t, err)
+	assert.Empty(t, second.Changes)
+
+	require.NoError(t, migration.Restore())
+
+	restored, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, body, string(restored))
+}
+
+func TestMigrateConfigEnvToLatest_PluginsStore(t *testing.T) {
+	path := writeConfigEnv(t, "HTTP_PORT=8025\n")
+
+	_, err := MigrateConfigEnvToLatest(path, WithPluginsStore(PluginsStoreAvailability{PluginsStoreURL: true}))
+	require.NoError(t, err)
+
+	assert.Equal(t, PluginsStoreURL, readConfigEnvValues(t, path)[pluginsStoreKey])
+}
