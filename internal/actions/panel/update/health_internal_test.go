@@ -18,6 +18,7 @@ const (
 	testWaitInterval = time.Millisecond
 	testWaitTimeout  = 50 * time.Millisecond
 	testLongTimeout  = 10 * time.Second
+	testLongInterval = 10 * time.Second
 	testCancelAfter  = 50 * time.Millisecond
 	testPromptReturn = time.Second
 )
@@ -60,6 +61,14 @@ func Test_waitForHealth(t *testing.T) {
 			crashOn:      2,
 			timeout:      testLongTimeout,
 			wantError:    "GameAP stopped while starting (last health check: connection refused): service exited",
+			wantAttempts: 2,
+		},
+		{
+			name:         "answer_after_a_restart_stops_waiting",
+			readyOn:      2,
+			crashOn:      2,
+			timeout:      testLongTimeout,
+			wantError:    "GameAP stopped while starting (last health check passed): service exited",
 			wantAttempts: 2,
 		},
 	}
@@ -121,6 +130,47 @@ func Test_waitForHealth_ContextCancelled(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "waiting for GameAP to start")
+	assert.Less(t, time.Since(started), testPromptReturn)
+}
+
+func Test_waitForHealth_HangingProbe(t *testing.T) {
+	probe := func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(testLongTimeout):
+			return errTestRefused
+		}
+	}
+
+	started := time.Now()
+
+	err := waitForHealth(context.Background(), probe, noCrashDetection, testWaitTimeout, testWaitInterval)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "GameAP did not answer the health check within 50ms")
+	assert.Less(t, time.Since(started), testPromptReturn)
+}
+
+func Test_waitForHealth_TimeoutBetweenProbes(t *testing.T) {
+	attempts := 0
+	probe := func(ctx context.Context) error {
+		attempts++
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		return errTestRefused
+	}
+
+	started := time.Now()
+
+	err := waitForHealth(context.Background(), probe, noCrashDetection, testWaitTimeout, testLongInterval)
+
+	require.Error(t, err)
+	assert.Equal(t, "GameAP did not answer the health check within 50ms: connection refused", err.Error())
+	assert.Equal(t, 1, attempts)
 	assert.Less(t, time.Since(started), testPromptReturn)
 }
 

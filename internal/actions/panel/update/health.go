@@ -43,7 +43,10 @@ func noCrashDetection(context.Context) error {
 // waitForHealth polls probe until the panel answers. It gives up when the timeout
 // passes, the context ends or crashed reports that the panel process is gone, so
 // a binary that exits instead of starting is rolled back without waiting for the
-// whole timeout.
+// whole timeout. An answer is checked against crashed too: systemd starts a panel
+// that exits again, so the process answering may be the restart of one that
+// crashed. The timeout bounds the probes as well, so a panel that accepts the
+// connection and never answers cannot hold the wait past it.
 func waitForHealth(
 	ctx context.Context,
 	probe func(ctx context.Context) error,
@@ -52,11 +55,18 @@ func waitForHealth(
 ) error {
 	started := time.Now()
 
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var lastLogged time.Time
 
 	for {
-		err := probe(ctx)
+		err := probe(probeCtx)
 		if err == nil {
+			if crashErr := crashed(ctx); crashErr != nil {
+				return errors.WithMessage(crashErr, "GameAP stopped while starting (last health check passed)")
+			}
+
 			log.Println("Health check passed!")
 
 			return nil
@@ -82,8 +92,14 @@ func waitForHealth(
 		}
 
 		select {
-		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "waiting for GameAP to start")
+		case <-probeCtx.Done():
+			if ctx.Err() != nil {
+				return errors.Wrap(ctx.Err(), "waiting for GameAP to start")
+			}
+
+			// A probe started past the timeout would report the deadline rather than
+			// why the panel does not answer.
+			return errors.WithMessagef(err, "GameAP did not answer the health check within %s", timeout)
 		case <-time.After(interval):
 		}
 	}

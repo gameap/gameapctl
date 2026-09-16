@@ -252,15 +252,13 @@ func readConfigEnv(ctx context.Context, configPath string) (hosts []string, port
 // on: the health check names none of them on its own, so each failure is labelled
 // with the address that produced it.
 func checkHealth(ctx context.Context, scope string, hosts []string, port string, httpsEnabled bool) error {
-	check := func(host string) error {
-		return errors.WithMessage(
-			installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled),
-			net.JoinHostPort(host, port),
-		)
-	}
-
-	probe := func(context.Context) error {
-		return panel.ProbeEach(hosts, check)
+	probe := func(ctx context.Context) error {
+		return panel.ProbeEach(hosts, func(host string) error {
+			return errors.WithMessage(
+				installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled),
+				net.JoinHostPort(host, port),
+			)
+		})
 	}
 
 	return waitForHealth(ctx, probe, newCrashDetector(ctx, scope), healthWaitTimeout, healthWaitInterval)

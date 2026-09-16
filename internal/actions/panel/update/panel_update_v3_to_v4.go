@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	installpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
@@ -173,6 +174,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	log.Println("Running health check...")
 	if err := checkHealthV4(ctx, installConfig.HTTPHost, installConfig.HTTPPort); err != nil {
 		log.Printf("Health check failed: %v\n", err)
+		installpkg.LogStartDiagnostics(ctx, gameap.ScopeSystem)
 		log.Println("Rolling back...")
 
 		stopErr := panel.Stop(ctx)
