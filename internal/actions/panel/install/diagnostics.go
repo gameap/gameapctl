@@ -3,11 +3,8 @@ package install
 import (
 	"context"
 	"sync"
-)
 
-const (
-	diagnosticsLogLines = 50
-	diagnosticsLogBytes = 16 * 1024
+	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 )
 
 var panelDiagnosticsOnce sync.Once
@@ -17,6 +14,6 @@ var panelDiagnosticsOnce sync.Once
 // times, the diagnostics are needed only once.
 func logPanelStartDiagnosticsOnce(ctx context.Context, state panelInstallStateV4) {
 	panelDiagnosticsOnce.Do(func() {
-		logPanelStartDiagnostics(ctx, state)
+		panelpkg.LogStartDiagnostics(ctx, state.Scope)
 	})
 }

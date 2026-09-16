@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	installpkg "github.com/gameap/gameapctl/internal/pkg/panel"
@@ -25,9 +24,7 @@ import (
 )
 
 const (
-	backupSuffix       = ".backup"
-	healthCheckRetries = 5
-	healthCheckDelay   = 2 * time.Second
+	backupSuffix = ".backup"
 
 	defaultHealthCheckHost = "127.0.0.1"
 	defaultHealthCheckPort = "8025"
@@ -251,10 +248,10 @@ func readConfigEnv(ctx context.Context, configPath string) (hosts []string, port
 	return hosts, port, httpsEnabled, nil
 }
 
-// checkHealth performs health checks on the GameAP instance, at every address it
-// may answer on: the health check names none of them on its own, so each failure
-// is labelled with the address that produced it.
-func checkHealth(ctx context.Context, hosts []string, port string, httpsEnabled bool) error {
+// checkHealth waits until the GameAP instance answers at an address it may answer
+// on: the health check names none of them on its own, so each failure is labelled
+// with the address that produced it.
+func checkHealth(ctx context.Context, scope string, hosts []string, port string, httpsEnabled bool) error {
 	check := func(host string) error {
 		return errors.WithMessage(
 			installpkg.CheckInstallationV4(ctx, host, port, httpsEnabled),
@@ -262,22 +259,11 @@ func checkHealth(ctx context.Context, hosts []string, port string, httpsEnabled 
 		)
 	}
 
-	for i := 0; i < healthCheckRetries; i++ {
-		if i > 0 {
-			log.Printf("Retry %d/%d...\n", i+1, healthCheckRetries)
-			time.Sleep(healthCheckDelay)
-		}
-
-		if err := panel.ProbeEach(hosts, check); err == nil {
-			log.Println("Health check passed!")
-
-			return nil
-		} else {
-			log.Printf("Health check attempt %d failed: %v\n", i+1, err)
-		}
+	probe := func(context.Context) error {
+		return panel.ProbeEach(hosts, check)
 	}
 
-	return errors.New("health check failed after multiple retries")
+	return waitForHealth(ctx, probe, newCrashDetector(ctx, scope), healthWaitTimeout, healthWaitInterval)
 }
 
 func handleV4FromGithub(ctx context.Context, paths gameap.PanelPaths, branch string) error {
@@ -449,8 +435,9 @@ func startAndVerifyV4(
 		httpsEnabled = false
 	}
 
-	if err := checkHealth(ctx, httpHosts, httpPort, httpsEnabled); err != nil {
+	if err := checkHealth(ctx, paths.Scope, httpHosts, httpPort, httpsEnabled); err != nil {
 		log.Printf("Health check failed: %v\n", err)
+		installpkg.LogStartDiagnostics(ctx, paths.Scope)
 		log.Println("Rolling back to previous version...")
 
 		if rollbackErr := rollbackV4(ctx, paths, backupPath, migration); rollbackErr != nil {

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package install
+package panel
 
 import (
 	"context"
@@ -16,7 +16,9 @@ import (
 
 const panelServiceName = "gameap"
 
-func logPanelStartDiagnostics(ctx context.Context, state panelInstallStateV4) {
+// LogStartDiagnostics writes into the log why the panel did not answer its health
+// check: the service status and the last lines of its journal.
+func LogStartDiagnostics(ctx context.Context, scope string) {
 	log.Println("Collecting GameAP service diagnostics ...")
 
 	if _, err := exec.LookPath("systemctl"); err != nil {
@@ -26,7 +28,7 @@ func logPanelStartDiagnostics(ctx context.Context, state panelInstallStateV4) {
 	}
 
 	scopeArgs := []string{}
-	if state.Scope == gameap.ScopeUser {
+	if scope == gameap.ScopeUser {
 		scopeArgs = append(scopeArgs, "--user")
 	}
 
