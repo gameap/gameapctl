@@ -174,6 +174,56 @@ func Test_waitForHealth_TimeoutBetweenProbes(t *testing.T) {
 	assert.Less(t, time.Since(started), testPromptReturn)
 }
 
+func Test_waitForHealth_HangingCrashCheck(t *testing.T) {
+	tests := []struct {
+		name      string
+		probeErr  error
+		wantError string
+	}{
+		{
+			name: "after_an_answer",
+		},
+		{
+			name:      "after_a_refusal",
+			probeErr:  errTestRefused,
+			wantError: "GameAP did not answer the health check within 50ms: connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			probe := func(context.Context) error {
+				return tt.probeErr
+			}
+
+			// A check the deadline cuts short tells nothing, as a killed systemctl query.
+			crashed := func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(testLongTimeout):
+					return errTestCrashed
+				}
+			}
+
+			started := time.Now()
+
+			err := waitForHealth(context.Background(), probe, crashed, testWaitTimeout, testWaitInterval)
+
+			assert.Less(t, time.Since(started), testPromptReturn)
+
+			if tt.wantError == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+			assert.Equal(t, tt.wantError, err.Error())
+		})
+	}
+}
+
 func Test_parseSystemdServiceState(t *testing.T) {
 	tests := []struct {
 		name   string

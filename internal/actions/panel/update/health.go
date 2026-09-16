@@ -45,8 +45,9 @@ func noCrashDetection(context.Context) error {
 // a binary that exits instead of starting is rolled back without waiting for the
 // whole timeout. An answer is checked against crashed too: systemd starts a panel
 // that exits again, so the process answering may be the restart of one that
-// crashed. The timeout bounds the probes as well, so a panel that accepts the
-// connection and never answers cannot hold the wait past it.
+// crashed. The timeout bounds the probes and the crash checks as well, so neither
+// a panel that accepts the connection and never answers nor a crash check that
+// hangs can hold the wait past it.
 func waitForHealth(
 	ctx context.Context,
 	probe func(ctx context.Context) error,
@@ -63,7 +64,7 @@ func waitForHealth(
 	for {
 		err := probe(probeCtx)
 		if err == nil {
-			if crashErr := crashed(ctx); crashErr != nil {
+			if crashErr := crashed(probeCtx); crashErr != nil {
 				return errors.WithMessage(crashErr, "GameAP stopped while starting (last health check passed)")
 			}
 
@@ -76,7 +77,7 @@ func waitForHealth(
 			return errors.Wrap(ctx.Err(), "waiting for GameAP to start")
 		}
 
-		if crashErr := crashed(ctx); crashErr != nil {
+		if crashErr := crashed(probeCtx); crashErr != nil {
 			return errors.WithMessagef(crashErr, "GameAP stopped while starting (last health check: %v)", err)
 		}
 
