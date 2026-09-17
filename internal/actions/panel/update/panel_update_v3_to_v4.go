@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
+	installpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
 	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/panel"
@@ -173,6 +174,7 @@ func handleV3toV4(cliCtx *cli.Context) error {
 	log.Println("Running health check...")
 	if err := checkHealthV4(ctx, installConfig.HTTPHost, installConfig.HTTPPort); err != nil {
 		log.Printf("Health check failed: %v\n", err)
+		installpkg.LogStartDiagnostics(ctx, gameap.ScopeSystem)
 		log.Println("Rolling back...")
 
 		stopErr := panel.Stop(ctx)
@@ -618,39 +620,37 @@ func restoreWebServerFromBackup(ctx context.Context, webServerBackup, webServer 
 	}
 }
 
+// checkHealthV4 waits until the migrated v4 panel answers over plain HTTP.
 func checkHealthV4(ctx context.Context, host, port string) error {
-	for i := 0; i < healthCheckRetries; i++ {
-		if i > 0 {
-			log.Printf("Retry %d/%d...\n", i+1, healthCheckRetries)
-			time.Sleep(healthCheckDelay)
-		}
-
+	probe := func(ctx context.Context) error {
 		healthURL := fmt.Sprintf("http://%s:%s/health", host, port)
+
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 		if err != nil {
-			continue
+			return errors.Wrap(err, "failed to create health check request")
 		}
 
 		client := &http.Client{Timeout: healthCheckTimeout * time.Second}
+
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Printf("Health check attempt %d failed: %v\n", i+1, err)
-
-			continue
-		}
-		bodyCloseErr := resp.Body.Close()
-		if bodyCloseErr != nil {
-			log.Println(errors.WithMessage(bodyCloseErr, "failed to close response body"))
+			return errors.Wrap(err, "health check request failed")
 		}
 
-		if resp.StatusCode == http.StatusOK {
-			return nil
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Println(errors.WithMessage(closeErr, "failed to close response body"))
 		}
 
-		log.Printf("Health check attempt %d returned status %d\n", i+1, resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			return errors.WithMessagef(errUnexpectedHealthStatus, "status %d", resp.StatusCode)
+		}
+
+		return nil
 	}
 
-	return errors.New("health check failed after multiple retries")
+	return waitForHealth(
+		ctx, probe, newCrashDetector(ctx, gameap.ScopeSystem), healthWaitTimeout, healthWaitInterval,
+	)
 }
 
 func handleSQLiteMigration(v3Path string, v3Config map[string]string, installConfig *panel.InstallConfig) error {

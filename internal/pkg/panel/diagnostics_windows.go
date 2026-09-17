@@ -1,6 +1,6 @@
 //go:build windows
 
-package install
+package panel
 
 import (
 	"context"
@@ -22,7 +22,9 @@ func panelServiceLogPath() string {
 	return filepath.Join(gameap.DefaultWorkPath, "services", "logs", "gameap", panelServiceName+".log")
 }
 
-func logPanelStartDiagnostics(ctx context.Context, _ panelInstallStateV4) {
+// LogStartDiagnostics writes into the log why the panel did not answer its health
+// check: the service status and the tail of the log shawl captures.
+func LogStartDiagnostics(ctx context.Context, _ string) {
 	log.Println("Collecting GameAP service diagnostics ...")
 
 	status, err := service.QueryStatus(ctx, panelServiceName)
