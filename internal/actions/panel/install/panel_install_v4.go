@@ -271,6 +271,12 @@ func HandleV4(cliCtx *cli.Context) error {
 		return err
 	}
 
+	// On Windows the log file of this command has already created C:\gameap, so it is protected
+	// before anything else is put there.
+	if err = packagemanager.ProtectWorkPath(ctx); err != nil {
+		return errors.WithMessage(err, "failed to protect the GameAP directory")
+	}
+
 	fmt.Printf(
 		"Detected operating system as %s/%s (%s).\n",
 		state.OSInfo.Distribution,

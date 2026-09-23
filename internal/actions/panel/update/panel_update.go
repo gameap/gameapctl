@@ -10,6 +10,7 @@ import (
 	"github.com/gameap/gameapctl/internal/pkg/gameapctl"
 	panelpkg "github.com/gameap/gameapctl/internal/pkg/panel"
 	"github.com/gameap/gameapctl/pkg/gameap"
+	packagemanager "github.com/gameap/gameapctl/pkg/package_manager"
 	"github.com/gameap/gameapctl/pkg/releasefinder"
 	"github.com/gameap/gameapctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -54,6 +55,10 @@ func Handle(cliCtx *cli.Context) error {
 	currentMajorVersion, err := detectMajorVersion(ctx, paths)
 	if err != nil {
 		return errors.WithMessage(err, "failed to detect installed GameAP version")
+	}
+
+	if err = packagemanager.ProtectWorkPath(ctx); err != nil {
+		return errors.WithMessage(err, "failed to protect the GameAP directory")
 	}
 
 	state, err := gameapctl.LoadPanelInstallState(ctx)

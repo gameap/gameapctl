@@ -82,3 +82,22 @@ func GrantModify(ctx context.Context, path string, userName string) error {
 func GrantReadExecute(ctx context.Context, path string, userName string) error {
 	return Grant(ctx, path, userName, GrantFlagReadExecute)
 }
+
+// RestrictDirectoryAccess gives the directory a protected DACL and makes Administrators its
+// owner: the entries inherited from its parent are removed, SYSTEM and Administrators get full
+// control and Users get read and execute access. Explicit entries of other accounts are kept,
+// so calling it again changes nothing.
+//
+// A directory created in the root of a drive inherits the ACL of the root, which lets every
+// local user create and modify files in it.
+func RestrictDirectoryAccess(ctx context.Context, path string) error {
+	if err := ExecCommand(ctx, "icacls", restrictDirectoryAccessArgs(path)...); err != nil {
+		return errors.WithMessagef(err, "failed to restrict access to %s", path)
+	}
+
+	if err := ExecCommand(ctx, "icacls", restrictDirectoryOwnerArgs(path)...); err != nil {
+		return errors.WithMessagef(err, "failed to make Administrators the owner of %s", path)
+	}
+
+	return nil
+}

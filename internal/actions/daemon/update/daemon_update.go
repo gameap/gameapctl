@@ -24,11 +24,15 @@ import (
 
 //nolint:funlen,gocognit,gocyclo,cyclop
 func Handle(cliCtx *cli.Context) error {
+	ctx := cliCtx.Context
+
+	if err := packagemanager.ProtectWorkPath(ctx); err != nil {
+		return errors.WithMessage(err, "failed to protect the GameAP directory")
+	}
+
 	if cliCtx.Bool("switch-to-grpc") {
 		return HandleSwitchToGRPC(cliCtx)
 	}
-
-	ctx := cliCtx.Context
 
 	fmt.Println("Daemon update")
 

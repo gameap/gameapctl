@@ -246,6 +246,12 @@ func Install(ctx context.Context, opts InstallOptions) error {
 
 	state.OSInfo = contextInternal.OSInfoFromContext(ctx)
 
+	// The binary, config and certificates of the daemon live in C:\gameap on Windows whatever
+	// the work path is, so C:\gameap is protected rather than the work path.
+	if err := packagemanager.ProtectWorkPath(ctx); err != nil {
+		return errors.WithMessage(err, "failed to protect the GameAP directory")
+	}
+
 	if err := ensureDaemonDirs(state); err != nil {
 		return errors.WithMessage(err, "failed to prepare daemon directories")
 	}

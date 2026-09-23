@@ -20,6 +20,10 @@ func install(ctx context.Context, cfg InstallConfig) error {
 		return errors.WithMessage(err, "failed to load package manager")
 	}
 
+	if err = packagemanager.ProtectWorkPath(ctx); err != nil {
+		return errors.WithMessage(err, "failed to protect the GameAP directory")
+	}
+
 	if utils.IsFileExists(gameap.DefaultWorkPath) {
 		if err = oscore.GrantReadExecute(
 			ctx,

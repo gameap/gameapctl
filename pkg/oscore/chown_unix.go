@@ -41,6 +41,12 @@ func ChownRecursive(ctx context.Context, path string, userName string, groupName
 	return nil
 }
 
+// RestrictDirectoryAccess is a no-op on Linux and macOS: a new directory gets its permissions
+// from the mode it is created with, not from its parent directory.
+func RestrictDirectoryAccess(_ context.Context, _ string) error {
+	return nil
+}
+
 // ChownR recursively changes the ownership of all files and directories under path.
 // Based on https://github.com/gutengo/fil/blob/6109b2e0b5cfdefdef3a254cc1a3eaa35bc89284/file.go#L27
 func ChownR(ctx context.Context, path string, uid, gid int) error {

@@ -153,6 +153,55 @@ jobs:
           go build .
           .\gameapctl.exe --non-interactive panel install --version=4 --host=127.0.0.1 --port=3080 --database=${{ matrix.database}}
 
+      # Check that local users cannot modify C:\gameap
+      - name: Modify C:\gameap
+        shell: pwsh
+        run: |
+          $authenticatedUsers = 'S-1-5-11'
+          $administrators = 'S-1-5-32-544'
+          $users = 'S-1-5-32-545'
+          # Write, Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership, GENERIC_WRITE and GENERIC_ALL
+          $writeRights = 0x500D0156
+
+          # C:\gameap\logs is created before gameapctl restricts C:\gameap, the new ACL has to reach it as well.
+          $paths = @('C:\gameap', 'C:\gameap\logs', 'C:\gameap\web\gameap.exe', 'C:\gameap\tools\shawl\shawl.exe')
+          if (Test-Path -LiteralPath 'C:\gameap\daemon') {
+            $paths += 'C:\gameap\daemon'
+          }
+
+          $failed = $false
+
+          $rootAcl = Get-Acl -LiteralPath 'C:\gameap'
+          if (-not $rootAcl.AreAccessRulesProtected) {
+            Write-Output '::error::C:\gameap inherits access rules from C:\'
+            $failed = $true
+          }
+
+          $owner = $rootAcl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+          if ($owner -ne $administrators) {
+            Write-Output "::error::C:\gameap is owned by $owner, not by Administrators"
+            $failed = $true
+          }
+
+          foreach ($path in $paths) {
+            icacls $path
+            $rules = (Get-Acl -LiteralPath $path).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+            foreach ($rule in $rules) {
+              if ($rule.AccessControlType -ne 'Allow') {
+                continue
+              }
+              $sid = $rule.IdentityReference.Value
+              if ($sid -eq $authenticatedUsers -or ($sid -eq $users -and ([int]$rule.FileSystemRights -band $writeRights))) {
+                Write-Output "::error::$path grants $($rule.FileSystemRights) to $sid"
+                $failed = $true
+              }
+            }
+          }
+
+          if ($failed) {
+            exit 1
+          }
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         if: failure()
